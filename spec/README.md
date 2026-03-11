@@ -3,6 +3,7 @@
 这个目录用于承载项目的轻量 Spec Coding 文档。
 
 ## 文件说明
+- `SPEC-INDEX.md`：Spec 索引、阅读顺序、优先级和使用规则
 - `PRODUCT-SPEC.md`：产品规格
 - `INTERACTION-SPEC.md`：交互规格
 - `API-SPEC.md`：接口规格

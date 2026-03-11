@@ -50,6 +50,7 @@
 - `docs/tech/DEMO-PLAN.md`：Demo 实现计划
 
 #### Spec Coding 目录
+- `spec/SPEC-INDEX.md`
 - `spec/PRODUCT-SPEC.md`
 - `spec/INTERACTION-SPEC.md`
 - `spec/API-SPEC.md`
