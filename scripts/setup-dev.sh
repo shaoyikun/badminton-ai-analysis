@@ -5,12 +5,57 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$ROOT_DIR"
 
+has_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+install_with_brew() {
+  local pkg="$1"
+  if has_cmd brew; then
+    echo "Installing $pkg via Homebrew..."
+    HOMEBREW_NO_AUTO_UPDATE=1 brew install "$pkg"
+    return 0
+  fi
+  return 1
+}
+
+install_with_apt() {
+  local pkg="$1"
+  if has_cmd apt-get; then
+    echo "Installing $pkg via apt-get..."
+    sudo apt-get update
+    sudo apt-get install -y "$pkg"
+    return 0
+  fi
+  return 1
+}
+
+ensure_cmd() {
+  local cmd="$1"
+  local install_name="${2:-$1}"
+
+  if has_cmd "$cmd"; then
+    return 0
+  fi
+
+  echo "$cmd not found. Trying to install $install_name..."
+  install_with_brew "$install_name" || install_with_apt "$install_name" || {
+    echo "Failed to auto-install $install_name. Please install it manually and rerun this script."
+    exit 1
+  }
+
+  has_cmd "$cmd" || {
+    echo "$cmd is still not available after installing $install_name."
+    exit 1
+  }
+}
+
 echo "[1/4] Checking base tools..."
-command -v node >/dev/null 2>&1 || { echo "Node.js is required."; exit 1; }
-command -v npm >/dev/null 2>&1 || { echo "npm is required."; exit 1; }
-command -v python3 >/dev/null 2>&1 || { echo "python3 is required."; exit 1; }
-command -v ffmpeg >/dev/null 2>&1 || { echo "ffmpeg is required."; exit 1; }
-command -v ffprobe >/dev/null 2>&1 || { echo "ffprobe is required."; exit 1; }
+ensure_cmd node node
+ensure_cmd npm node
+ensure_cmd python3 python
+ensure_cmd ffmpeg ffmpeg
+ensure_cmd ffprobe ffmpeg
 
 echo "[2/4] Installing backend dependencies..."
 cd "$ROOT_DIR/backend"
@@ -26,4 +71,4 @@ python3 -m pip install -r requirements.txt
 
 echo
 echo "Setup complete."
-echo "Run ./scripts/start-dev.sh to start backend + frontend together."
+echo "Run ./scripts/up.sh to start the project with one command."

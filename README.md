@@ -150,6 +150,8 @@ cd badminton-ai-analysis
 ./scripts/setup-dev.sh
 ```
 
+说明：`setup-dev.sh` 现在会在检测到缺失基础工具时，优先尝试自动安装（当前优先支持 Homebrew / apt-get）。
+
 ### 一键启动前后端
 ```bash
 ./scripts/start-dev.sh

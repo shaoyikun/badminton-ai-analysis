@@ -72,6 +72,8 @@ make down
 - ffmpeg
 - ffprobe
 
+如果直接执行 `./scripts/setup-dev.sh`，脚本会在缺少基础工具时优先尝试自动安装（当前支持 Homebrew / apt-get）。
+
 ## 5. 故障排查
 
 ### 端口被占用
