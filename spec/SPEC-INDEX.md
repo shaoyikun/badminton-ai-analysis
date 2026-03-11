@@ -74,6 +74,7 @@
 - 这是一个已有 spec 的项目
 - 请先阅读 `spec/SPEC-INDEX.md` 和相关 spec 文件
 - 后续实现必须遵循 spec，不要擅自扩展范围
+- 当前前端路线以 React Web / React H5 为默认实现方向
 - 若发现 spec 与实现冲突，应先指出冲突，再建议如何更新 spec
 
 ---

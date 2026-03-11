@@ -1,0 +1,19 @@
+[
+  {
+    "taskId": "task_738e9a0e",
+    "actionType": "clear",
+    "status": "created",
+    "createdAt": "2026-03-11T08:50:12.500Z",
+    "updatedAt": "2026-03-11T08:50:12.500Z"
+  },
+  {
+    "taskId": "task_1235bab5",
+    "actionType": "clear",
+    "status": "completed",
+    "createdAt": "2026-03-11T08:50:21.862Z",
+    "updatedAt": "2026-03-11T08:50:24.451Z",
+    "fileName": "demo.mov",
+    "uploadPath": "/Users/syk/.openclaw/workspace/projects/badminton-ai-analysis/backend/uploads/task_1235bab5-demo.mov",
+    "resultPath": "/Users/syk/.openclaw/workspace/projects/badminton-ai-analysis/backend/data/task_1235bab5.result.json"
+  }
+]
