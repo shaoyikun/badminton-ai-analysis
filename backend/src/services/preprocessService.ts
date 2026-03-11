@@ -9,8 +9,8 @@ const MIN_FILE_SIZE_BYTES = 100 * 1024;
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
 const MIN_DURATION_SECONDS = 5;
 const MAX_DURATION_SECONDS = 15;
-const MIN_WIDTH = 480;
-const MIN_HEIGHT = 480;
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 320;
 const DEFAULT_FRAME_RATE = 25;
 
 function now() {
