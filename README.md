@@ -29,13 +29,19 @@
 ### 已完成
 - [x] 明确项目方向与价值主张
 - [x] 完成 MVP 范围定义
-- [x] 输出 MVP PRD 初稿
+- [x] 输出初版 PRD
+- [x] 输出 PRD V1（规范版）
+- [x] 输出交互设计 V1
+- [x] 输出技术方案 V1
 - [x] 初始化本地 Git 仓库
 - [x] 建立项目目录结构
 - [x] 将项目核心上下文沉淀到 memory
 
 ### 当前已有文档
-- `docs/prd/MVP-PRD.md`：MVP 产品需求文档
+- `docs/prd/MVP-PRD.md`：最初版 MVP PRD
+- `docs/prd/PRD-V1.md`：当前主 PRD
+- `docs/design/INTERACTION-DESIGN-V1.md`：交互设计文档
+- `docs/tech/TECH-SOLUTION-V1.md`：当前主技术方案
 
 ---
 
