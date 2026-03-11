@@ -10,6 +10,7 @@
 - `DATA-SPEC.md`：数据规格
 - `ACCEPTANCE-CRITERIA.md`：验收标准
 - `IMPLEMENTATION-PLAN.md`：实现计划
+- `POC-IMPLEMENTATION-SPEC.md`：PoC 技术实施方案
 
 ## 使用原则
 - 这里不是替代主文档，而是把“后续实现真正依赖的规格”收敛出来

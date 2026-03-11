@@ -57,6 +57,7 @@
 - `spec/DATA-SPEC.md`
 - `spec/ACCEPTANCE-CRITERIA.md`
 - `spec/IMPLEMENTATION-PLAN.md`
+- `spec/POC-IMPLEMENTATION-SPEC.md`
 
 ---
 
