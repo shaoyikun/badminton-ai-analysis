@@ -22,14 +22,34 @@ docker compose logs -f frontend
 docker compose down
 ```
 
+最省事的一键启动：
+
+```bash
+./scripts/up.sh
+```
+
+停止：
+
+```bash
+./scripts/down.sh
+```
+
+查看日志：
+
+```bash
+./scripts/logs.sh
+./scripts/logs.sh backend
+./scripts/logs.sh frontend
+```
+
 也可以用 Makefile 缩短命令：
 
 ```bash
-make compose-up
+make up
 make compose-ps
 make compose-logs-backend
 make compose-logs-frontend
-make compose-down
+make down
 ```
 
 ## 3. 本地开发模式（不用 Docker）

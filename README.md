@@ -166,10 +166,16 @@ cd badminton-ai-analysis
 docker compose up --build
 ```
 
-或者用 Makefile：
+或者直接一键启动：
 
 ```bash
-make compose-up
+./scripts/up.sh
+```
+
+也可以用 Makefile：
+
+```bash
+make up
 ```
 
 启动后默认地址：
