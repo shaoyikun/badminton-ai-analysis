@@ -435,6 +435,28 @@ select:disabled,
   font-size: 13px;
 }
 
+.coach-review-card {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+}
+
+.coach-review-card strong {
+  display: block;
+  color: #312e81;
+}
+
+.coach-review-card p {
+  margin: 8px 0 0;
+  color: #4338ca;
+}
+
+.comparison-block {
+  margin-top: 12px;
+}
+
 .log-item {
   font-size: 13px;
   line-height: 1.5;

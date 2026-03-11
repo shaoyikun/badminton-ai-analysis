@@ -118,6 +118,44 @@ export interface PoseInfo {
   };
 }
 
+export interface RetestDeltaItem {
+  name: string;
+  previousScore: number;
+  currentScore: number;
+  delta: number;
+}
+
+export interface RetestCoachReview {
+  headline: string;
+  progressNote: string;
+  regressionNote?: string;
+  nextFocus: string;
+}
+
+export interface RetestComparison {
+  previousTaskId: string;
+  previousCreatedAt?: string;
+  currentTaskId: string;
+  currentCreatedAt?: string;
+  totalScoreDelta: number;
+  improvedDimensions: RetestDeltaItem[];
+  declinedDimensions: RetestDeltaItem[];
+  unchangedDimensions: RetestDeltaItem[];
+  summaryText: string;
+  coachReview: RetestCoachReview;
+}
+
+export interface TaskHistoryItem {
+  taskId: string;
+  actionType: string;
+  status: TaskStatus;
+  createdAt: string;
+  updatedAt: string;
+  totalScore?: number;
+  summaryText?: string;
+  poseBased?: boolean;
+}
+
 export interface ReportResult {
   taskId: string;
   actionType: string;
@@ -130,6 +168,8 @@ export interface ReportResult {
   retestAdvice: string;
   createdAt?: string;
   poseBased?: boolean;
+  comparison?: RetestComparison;
+  history?: TaskHistoryItem[];
   scoringEvidence?: {
     detectedFrameCount?: number;
     frameCount?: number;
@@ -156,6 +196,7 @@ export interface TaskRecord {
   errorCode?: string;
   preprocess?: PreprocessInfo;
   pose?: PoseInfo;
+  previousCompletedTaskId?: string;
   createdAt: string;
   updatedAt: string;
 }

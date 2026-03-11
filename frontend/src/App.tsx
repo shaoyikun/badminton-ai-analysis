@@ -8,6 +8,7 @@ import {
   type PoseResult,
   type PreprocessStatus,
   type TaskStatus,
+  type TaskHistoryItem,
   useAnalysisTask,
 } from './hooks/useAnalysisTask'
 
@@ -19,6 +20,11 @@ function formatFileSize(size?: number) {
 function formatScore(value?: number | null) {
   if (value === null || value === undefined) return '—'
   return value.toFixed(2)
+}
+
+function formatTime(value?: string) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
 function buildAssetUrl(relativePath?: string) {
@@ -45,6 +51,89 @@ function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
   )
 }
 
+function HistoryCard({ history }: { history: TaskHistoryItem[] }) {
+  return (
+    <div className="result-card">
+      <h3>同动作历史记录</h3>
+      {history.length === 0 ? (
+        <p>还没有可用的历史记录，先完成第一条样本分析。</p>
+      ) : (
+        <ul>
+          {history.slice(0, 5).map((item) => (
+            <li key={item.taskId}>
+              <span>{formatTime(item.createdAt)}</span>
+              <strong>{item.totalScore ?? '—'} 分</strong>
+              <p>{item.summaryText ?? `${item.actionType} 已完成分析`}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function ComparisonCard({
+  comparison,
+}: {
+  comparison: ReturnType<typeof useAnalysisTask>['comparison']
+}) {
+  if (!comparison) {
+    return (
+      <div className="result-card">
+        <h3>复测对比</h3>
+        <p>当前还没有可对比的上一条同动作样本。等你再录一条同类型动作，就能自动看到分数变化和改善项。</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="result-card">
+      <h3>复测对比</h3>
+      <p>{comparison.summaryText}</p>
+      <ul>
+        <li><span>总分变化</span><strong>{comparison.totalScoreDelta > 0 ? `+${comparison.totalScoreDelta}` : comparison.totalScoreDelta}</strong></li>
+        <li><span>上次样本</span><strong>{formatTime(comparison.previousCreatedAt)}</strong></li>
+        <li><span>本次样本</span><strong>{formatTime(comparison.currentCreatedAt)}</strong></li>
+      </ul>
+
+      <div className="coach-review-card">
+        <strong>{comparison.coachReview.headline}</strong>
+        <p>{comparison.coachReview.progressNote}</p>
+        {comparison.coachReview.regressionNote ? <p>{comparison.coachReview.regressionNote}</p> : null}
+        <p>{comparison.coachReview.nextFocus}</p>
+      </div>
+
+      {comparison.improvedDimensions.length > 0 ? (
+        <div className="comparison-block">
+          <strong>改善项</strong>
+          <ul>
+            {comparison.improvedDimensions.map((item) => (
+              <li key={item.name}>
+                <span>{item.name}</span>
+                <strong>{item.previousScore} → {item.currentScore}（+{item.delta}）</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {comparison.declinedDimensions.length > 0 ? (
+        <div className="comparison-block">
+          <strong>待继续加强</strong>
+          <ul>
+            {comparison.declinedDimensions.map((item) => (
+              <li key={item.name}>
+                <span>{item.name}</span>
+                <strong>{item.previousScore} → {item.currentScore}（{item.delta}）</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function App() {
   const {
     actionType,
@@ -55,6 +144,8 @@ function App() {
     poseStatus,
     report,
     poseResult,
+    history,
+    comparison,
     file,
     setFile,
     log,
@@ -175,6 +266,8 @@ function App() {
                   {report.summaryText ? <p>{report.summaryText}</p> : null}
                 </div>
 
+                <ComparisonCard comparison={comparison} />
+                <HistoryCard history={history} />
                 <PoseSummaryCard poseResult={poseResult} />
 
                 {report.preprocess?.metadata ? (

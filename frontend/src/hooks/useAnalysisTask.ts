@@ -4,12 +4,51 @@ export type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | '
 export type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
 export type PoseStatus = 'idle' | 'processing' | 'completed' | 'failed'
 
+export type TaskHistoryItem = {
+  taskId: string
+  actionType: string
+  status: TaskStatus
+  createdAt: string
+  updatedAt: string
+  totalScore?: number
+  summaryText?: string
+  poseBased?: boolean
+}
+
+export type RetestDeltaItem = {
+  name: string
+  previousScore: number
+  currentScore: number
+  delta: number
+}
+
+export type RetestComparison = {
+  previousTaskId: string
+  previousCreatedAt?: string
+  currentTaskId: string
+  currentCreatedAt?: string
+  totalScoreDelta: number
+  improvedDimensions: RetestDeltaItem[]
+  declinedDimensions: RetestDeltaItem[]
+  unchangedDimensions: RetestDeltaItem[]
+  summaryText: string
+  coachReview: {
+    headline: string
+    progressNote: string
+    regressionNote?: string
+    nextFocus: string
+  }
+}
+
 export type ReportResult = {
   taskId: string
   actionType: string
   totalScore: number
   summaryText?: string
   poseBased?: boolean
+  compareSummary?: string
+  comparison?: RetestComparison
+  history?: TaskHistoryItem[]
   scoringEvidence?: {
     detectedFrameCount?: number
     frameCount?: number
@@ -145,6 +184,8 @@ export function useAnalysisTask() {
   const [poseStatus, setPoseStatus] = useState<PoseStatus>('idle')
   const [report, setReport] = useState<ReportResult | null>(null)
   const [poseResult, setPoseResult] = useState<PoseResult | null>(null)
+  const [history, setHistory] = useState<TaskHistoryItem[]>([])
+  const [comparison, setComparison] = useState<RetestComparison | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [log, setLog] = useState<string[]>([])
   const [isBusy, setIsBusy] = useState(false)
@@ -173,6 +214,30 @@ export function useAnalysisTask() {
     appendLog(`${copy.title}：${copy.message}`)
   }
 
+  async function fetchHistory(nextActionType?: string) {
+    const action = nextActionType ?? actionType
+    const res = await fetch(`${API_BASE}/api/history?actionType=${action}`)
+    const data = await res.json()
+    if (!res.ok) return []
+    setHistory(data.items ?? [])
+    return data.items as TaskHistoryItem[]
+  }
+
+  async function fetchComparison(currentTaskId?: string) {
+    const targetTaskId = currentTaskId ?? taskId
+    if (!targetTaskId) return null
+
+    const res = await fetch(`${API_BASE}/api/tasks/${targetTaskId}/comparison`)
+    const data = await res.json()
+    if (!res.ok) {
+      setComparison(null)
+      return null
+    }
+    setComparison(data.comparison ?? null)
+    if (data.history) setHistory(data.history)
+    return data.comparison as RetestComparison | null
+  }
+
   async function createTask() {
     try {
       setIsBusy(true)
@@ -194,6 +259,8 @@ export function useAnalysisTask() {
       setPoseStatus('idle')
       setReport(null)
       setPoseResult(null)
+      setComparison(null)
+      await fetchHistory(actionType)
       appendLog(`任务已创建：${data.taskId}（${selectedActionLabel}）`)
     } catch (error) {
       appendLog(`创建任务失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -224,6 +291,7 @@ export function useAnalysisTask() {
       setPreprocessStatus(data.preprocessStatus ?? 'idle')
       setPoseStatus('idle')
       setPoseResult(null)
+      setComparison(null)
       appendLog(`上传完成：${data.fileName}`)
     } catch (error) {
       appendLog(`上传失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -264,8 +332,11 @@ export function useAnalysisTask() {
     }
     setReport(data)
     setErrorState(null)
+    setComparison(data.comparison ?? null)
+    setHistory(data.history ?? [])
     if (showSuccessLog) appendLog('已自动拉取分析结果')
     await fetchPoseResult(true)
+    await fetchComparison(taskId)
     return data as ReportResult
   }
 
@@ -326,6 +397,7 @@ export function useAnalysisTask() {
       setIsBusy(true)
       setReport(null)
       setPoseResult(null)
+      setComparison(null)
       setErrorState(null)
       const res = await fetch(`${API_BASE}/api/tasks/${taskId}/analyze`, { method: 'POST' })
       const data = await res.json()
@@ -347,6 +419,10 @@ export function useAnalysisTask() {
   }
 
   useEffect(() => {
+    fetchHistory(actionType)
+  }, [actionType])
+
+  useEffect(() => {
     return () => stopPolling()
   }, [])
 
@@ -359,6 +435,8 @@ export function useAnalysisTask() {
     poseStatus,
     report,
     poseResult,
+    history,
+    comparison,
     file,
     setFile,
     log,
@@ -374,5 +452,7 @@ export function useAnalysisTask() {
     analyze,
     refreshStatus,
     fetchResult,
+    fetchHistory,
+    fetchComparison,
   }
 }

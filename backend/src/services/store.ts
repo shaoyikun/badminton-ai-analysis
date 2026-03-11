@@ -31,6 +31,13 @@ export function readResult(resultPath: string): ReportResult {
   return JSON.parse(fs.readFileSync(resultPath, 'utf8')) as ReportResult;
 }
 
+export function readResultByTaskId(taskId: string): ReportResult | undefined {
+  ensureStore();
+  const resultPath = path.join(dataDir, `${taskId}.result.json`);
+  if (!fs.existsSync(resultPath)) return undefined;
+  return readResult(resultPath);
+}
+
 export function savePoseResult(taskId: string, result: PoseAnalysisResult): string {
   ensureStore();
   const resultPath = path.join(dataDir, `${taskId}.pose.json`);

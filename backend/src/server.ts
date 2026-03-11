@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { createTask, getTask, saveUpload, startMockAnalysis } from './services/taskService';
+import { createTask, getRetestComparison, getTask, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
 import { getPreprocessSummary, runPreprocess } from './services/preprocessService';
 import { getPoseResult, getPoseSummary, runPoseAnalysis } from './services/poseService';
 import { readResult } from './services/store';
@@ -32,6 +32,13 @@ async function buildServer() {
     }
     const task = createTask(actionType);
     return { taskId: task.taskId, status: task.status };
+  });
+
+  app.get('/api/history', async (request) => {
+    const query = request.query as { actionType?: string };
+    return {
+      items: listTaskHistory(query.actionType),
+    };
   });
 
   app.post('/api/tasks/:taskId/upload', async (request, reply) => {
@@ -173,6 +180,7 @@ async function buildServer() {
       preprocessStatus: task.preprocess?.status ?? 'idle',
       poseStatus: task.pose?.status ?? 'idle',
       poseSummary: task.pose?.summary,
+      previousCompletedTaskId: task.previousCompletedTaskId,
       updatedAt: task.updatedAt,
     };
   });
@@ -187,6 +195,15 @@ async function buildServer() {
       return reply.status(409).send({ error: 'result not ready' });
     }
     return readResult(task.resultPath);
+  });
+
+  app.get('/api/tasks/:taskId/comparison', async (request, reply) => {
+    const params = request.params as { taskId: string };
+    const payload = getRetestComparison(params.taskId);
+    if (!payload) {
+      return reply.status(404).send({ error: 'task not found or comparison unavailable' });
+    }
+    return payload;
   });
 
   return app;

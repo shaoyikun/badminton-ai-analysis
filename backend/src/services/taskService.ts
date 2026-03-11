@@ -1,14 +1,145 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readTasks, writeTasks, saveResult } from './store';
-import { TaskRecord } from '../types/task';
+import { readTasks, writeTasks, saveResult, readResultByTaskId } from './store';
+import { ReportResult, RetestComparison, RetestCoachReview, TaskHistoryItem, TaskRecord } from '../types/task';
 import { runPreprocess } from './preprocessService';
 import { runPoseAnalysis } from './poseService';
 import { buildMockResult } from './reportScoringService';
 
 function now() {
   return new Date().toISOString();
+}
+
+function clampDelta(value: number) {
+  return Math.round(value);
+}
+
+function getActionLabel(actionType: string) {
+  return actionType === 'smash' ? '杀球' : '正手高远球';
+}
+
+function buildTaskHistory(actionType: string, currentTaskId?: string): TaskHistoryItem[] {
+  return readTasks()
+    .filter((task) => task.actionType === actionType && task.status === 'completed' && task.resultPath)
+    .map((task) => {
+      const result = readResultByTaskId(task.taskId);
+      return {
+        taskId: task.taskId,
+        actionType: task.actionType,
+        status: task.status,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        totalScore: result?.totalScore,
+        summaryText: result?.summaryText,
+        poseBased: result?.poseBased,
+      } satisfies TaskHistoryItem;
+    })
+    .filter((item) => item.taskId !== currentTaskId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+function buildCoachReview(actionType: string, comparison: Omit<RetestComparison, 'coachReview'>): RetestCoachReview {
+  const actionLabel = getActionLabel(actionType);
+  const topImprovement = comparison.improvedDimensions[0];
+  const topRegression = comparison.declinedDimensions[0];
+  const stableDimension = comparison.unchangedDimensions[0];
+
+  let headline = `${actionLabel}这次和上一次相比，整体还在同一训练方向上。`;
+  if (comparison.totalScoreDelta >= 6) {
+    headline = `${actionLabel}这次能看出明显进步，不只是分数抬了，动作主线也更顺了。`;
+  } else if (comparison.totalScoreDelta > 0) {
+    headline = `${actionLabel}这次是在往好的方向走，属于小幅但真实的进步。`;
+  } else if (comparison.totalScoreDelta <= -6) {
+    headline = `${actionLabel}这次有点往回掉，说明动作还没完全稳定下来。`;
+  } else if (comparison.totalScoreDelta < 0) {
+    headline = `${actionLabel}这次略有回落，但更像稳定性波动，不一定是方向走错。`;
+  }
+
+  const progressNote = topImprovement
+    ? `最值得肯定的是 ${topImprovement.name}，从 ${topImprovement.previousScore} 分提到 ${topImprovement.currentScore} 分，说明最近训练已经开始往这个环节起作用了。`
+    : stableDimension
+      ? `${stableDimension.name} 这次基本和上次持平，说明你至少把动作底子维持住了，没有明显跑偏。`
+      : '这次虽然没有特别突出的单项提升，但整体动作没有明显散掉，说明训练节奏还在。';
+
+  const regressionNote = topRegression
+    ? `${topRegression.name} 这次从 ${topRegression.previousScore} 分掉到 ${topRegression.currentScore} 分，这更像是击球节奏或准备阶段没接顺，建议先回看这一段，不要急着同时改太多点。`
+    : undefined;
+
+  const nextFocus = topRegression
+    ? `下一次复测，先优先盯 ${topRegression.name}，同时把 ${topImprovement?.name ?? stableDimension?.name ?? '动作连贯性'} 保住，目标不是一次改完，而是先把最关键的短板收回来。`
+    : topImprovement
+      ? `下一次复测，优先看 ${topImprovement.name} 能不能继续稳定复现，再顺手观察 ${comparison.improvedDimensions[1]?.name ?? '其余维度'} 有没有被一起带上来。`
+      : '下一次复测，先保持同机位和同节奏录制，重点看动作能不能稳定复现，而不是只追求单次最好效果。';
+
+  return {
+    headline,
+    progressNote,
+    regressionNote,
+    nextFocus,
+  };
+}
+
+function buildRetestComparison(actionType: string, previous: ReportResult, current: ReportResult): RetestComparison {
+  const deltas = current.dimensionScores.map((dimension) => {
+    const previousDimension = previous.dimensionScores.find((item) => item.name === dimension.name);
+    const previousScore = previousDimension?.score ?? 0;
+    return {
+      name: dimension.name,
+      previousScore,
+      currentScore: dimension.score,
+      delta: clampDelta(dimension.score - previousScore),
+    };
+  });
+
+  const improvedDimensions = deltas.filter((item) => item.delta > 0).sort((a, b) => b.delta - a.delta);
+  const declinedDimensions = deltas.filter((item) => item.delta < 0).sort((a, b) => a.delta - b.delta);
+  const unchangedDimensions = deltas.filter((item) => item.delta === 0);
+  const totalScoreDelta = clampDelta(current.totalScore - previous.totalScore);
+
+  let summaryText = '和上一次相比，这次数据整体比较接近，建议继续保持同机位复测，观察动作稳定性。';
+  if (totalScoreDelta > 0 && improvedDimensions.length > 0) {
+    const names = improvedDimensions.slice(0, 2).map((item) => item.name).join('、');
+    summaryText = `和上一次相比，这次总分提升 ${totalScoreDelta} 分，最明显的进步在 ${names}。`;
+  } else if (totalScoreDelta < 0 && declinedDimensions.length > 0) {
+    const names = declinedDimensions.slice(0, 2).map((item) => item.name).join('、');
+    summaryText = `和上一次相比，这次总分下降 ${Math.abs(totalScoreDelta)} 分，主要回落在 ${names}，建议优先回看这几个维度。`;
+  }
+
+  const comparison = {
+    previousTaskId: previous.taskId,
+    previousCreatedAt: previous.createdAt,
+    currentTaskId: current.taskId,
+    currentCreatedAt: current.createdAt,
+    totalScoreDelta,
+    improvedDimensions,
+    declinedDimensions,
+    unchangedDimensions,
+    summaryText,
+  };
+
+  return {
+    ...comparison,
+    coachReview: buildCoachReview(actionType, comparison),
+  };
+}
+
+function enrichResultWithHistory(task: TaskRecord, result: ReportResult): ReportResult {
+  const history = buildTaskHistory(task.actionType, task.taskId);
+  const previousTaskId = task.previousCompletedTaskId ?? history[0]?.taskId;
+  const previousResult = previousTaskId ? readResultByTaskId(previousTaskId) : undefined;
+
+  return {
+    ...result,
+    history,
+    comparison: previousResult ? buildRetestComparison(task.actionType, previousResult, result) : undefined,
+  };
+}
+
+function findLatestCompletedTaskId(actionType: string, excludeTaskId?: string) {
+  return readTasks()
+    .filter((task) => task.actionType === actionType && task.status === 'completed' && task.resultPath && task.taskId !== excludeTaskId)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]?.taskId;
 }
 
 export function createTask(actionType: string): TaskRecord {
@@ -23,6 +154,7 @@ export function createTask(actionType: string): TaskRecord {
     pose: {
       status: 'idle',
     },
+    previousCompletedTaskId: findLatestCompletedTaskId(actionType),
     createdAt: now(),
     updatedAt: now(),
   };
@@ -33,6 +165,52 @@ export function createTask(actionType: string): TaskRecord {
 
 export function getTask(taskId: string): TaskRecord | undefined {
   return readTasks().find((task) => task.taskId === taskId);
+}
+
+export function listTaskHistory(actionType?: string): TaskHistoryItem[] {
+  const tasks = readTasks()
+    .filter((task) => task.status === 'completed' && task.resultPath)
+    .filter((task) => !actionType || task.actionType === actionType)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return tasks.map((task) => {
+    const result = readResultByTaskId(task.taskId);
+    return {
+      taskId: task.taskId,
+      actionType: task.actionType,
+      status: task.status,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      totalScore: result?.totalScore,
+      summaryText: result?.summaryText,
+      poseBased: result?.poseBased,
+    } satisfies TaskHistoryItem;
+  });
+}
+
+export function getRetestComparison(taskId: string) {
+  const task = getTask(taskId);
+  if (!task?.resultPath) return undefined;
+  const current = readResultByTaskId(taskId);
+  if (!current) return undefined;
+
+  const previousTaskId = task.previousCompletedTaskId ?? buildTaskHistory(task.actionType, taskId)[0]?.taskId;
+  if (!previousTaskId) {
+    return {
+      current,
+      previous: undefined,
+      comparison: undefined,
+      history: buildTaskHistory(task.actionType, taskId),
+    };
+  }
+
+  const previous = readResultByTaskId(previousTaskId);
+  return {
+    current,
+    previous,
+    comparison: previous ? buildRetestComparison(task.actionType, previous, current) : undefined,
+    history: buildTaskHistory(task.actionType, taskId),
+  };
 }
 
 export function updateTask(taskId: string, patch: Partial<TaskRecord>): TaskRecord | undefined {
@@ -81,7 +259,6 @@ export function saveUpload(taskId: string, fileName: string, content?: Buffer, m
   });
 }
 
-
 export async function startMockAnalysis(taskId: string) {
   const current = getTask(taskId);
   if (!current) return undefined;
@@ -109,8 +286,9 @@ export async function startMockAnalysis(taskId: string) {
   setTimeout(() => {
     const latest = getTask(taskId);
     if (!latest) return;
-    const result = buildMockResult(latest);
-    const resultPath = saveResult(taskId, result);
+    const rawResult = buildMockResult(latest);
+    const enrichedResult = enrichResultWithHistory(latest, rawResult);
+    const resultPath = saveResult(taskId, enrichedResult);
     updateTask(taskId, { status: 'completed', resultPath });
   }, 2500);
 
