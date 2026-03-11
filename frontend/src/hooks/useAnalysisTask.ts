@@ -58,6 +58,7 @@ export type ReportResult = {
       title: string
       cue: string
       imageLabel: string
+      imagePath?: string
     }
     differences: string[]
   }

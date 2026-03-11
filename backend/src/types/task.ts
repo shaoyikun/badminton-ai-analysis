@@ -160,6 +160,7 @@ export interface StandardReferenceFrame {
   title: string;
   cue: string;
   imageLabel: string;
+  imagePath?: string;
 }
 
 export interface StandardComparison {

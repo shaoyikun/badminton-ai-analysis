@@ -1,0 +1,15 @@
+<svg width="360" height="640" viewBox="0 0 360 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="360" height="640" rx="24" fill="#F5F3FF"/>
+  <rect x="24" y="24" width="312" height="592" rx="20" fill="#EDE9FE" stroke="#C4B5FD" stroke-width="2"/>
+  <circle cx="180" cy="145" r="34" fill="#7C3AED" fill-opacity="0.16" stroke="#6D28D9" stroke-width="3"/>
+  <path d="M180 179L180 320" stroke="#6D28D9" stroke-width="6" stroke-linecap="round"/>
+  <path d="M180 215L122 270" stroke="#6D28D9" stroke-width="6" stroke-linecap="round"/>
+  <path d="M180 220L255 140" stroke="#6D28D9" stroke-width="6" stroke-linecap="round"/>
+  <path d="M180 320L138 455" stroke="#6D28D9" stroke-width="6" stroke-linecap="round"/>
+  <path d="M180 320L228 445" stroke="#6D28D9" stroke-width="6" stroke-linecap="round"/>
+  <path d="M255 140L300 82" stroke="#8B5CF6" stroke-width="6" stroke-linecap="round"/>
+  <path d="M300 82L286 132" stroke="#8B5CF6" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="306" cy="76" r="12" fill="#C4B5FD"/>
+  <text x="36" y="72" fill="#4C1D95" font-size="24" font-family="Arial, sans-serif" font-weight="700">杀球参考帧</text>
+  <text x="36" y="520" fill="#6D28D9" font-size="18" font-family="Arial, sans-serif">要点：高点准备 / 躯干联动 / 向前下压</text>
+</svg>

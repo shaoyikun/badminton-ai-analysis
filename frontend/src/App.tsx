@@ -32,6 +32,11 @@ function buildAssetUrl(relativePath?: string) {
   return `${API_BASE}/${relativePath}`
 }
 
+function buildReferenceUrl(relativePath?: string) {
+  if (!relativePath) return ''
+  return `${relativePath}`
+}
+
 function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
   if (!poseResult) return null
 
@@ -54,7 +59,9 @@ function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
 function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typeof useAnalysisTask>['report']> }) {
   if (!report.standardComparison) return null
 
-  const bestFrame = report.preprocess?.artifacts?.sampledFrames?.[0]
+  const bestFrameIndex = report.scoringEvidence?.bestFrameIndex
+  const bestFrame = report.preprocess?.artifacts?.sampledFrames?.find((item) => item.index === bestFrameIndex)
+    ?? report.preprocess?.artifacts?.sampledFrames?.[0]
 
   return (
     <div className="result-card">
@@ -64,9 +71,14 @@ function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typ
         <div className="standard-frame-placeholder">
           {bestFrame?.relativePath ? <img src={buildAssetUrl(bestFrame.relativePath)} alt={report.standardComparison.currentFrameLabel} /> : <div className="placeholder-box">当前样本</div>}
           <strong>{report.standardComparison.currentFrameLabel}</strong>
+          {bestFrame ? <span>{`选取帧 ${bestFrame.index} · ${bestFrame.timestampSeconds}s`}</span> : null}
         </div>
         <div className="standard-frame-placeholder">
-          <div className="placeholder-box">标准动作参考</div>
+          {report.standardComparison.standardReference.imagePath ? (
+            <img src={buildReferenceUrl(report.standardComparison.standardReference.imagePath)} alt={report.standardComparison.standardFrameLabel} />
+          ) : (
+            <div className="placeholder-box">标准动作参考</div>
+          )}
           <strong>{report.standardComparison.standardFrameLabel}</strong>
           <span>{report.standardComparison.standardReference.cue}</span>
         </div>
