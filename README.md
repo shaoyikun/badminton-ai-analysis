@@ -40,6 +40,7 @@
 - [x] 完成文档整理，统一为主文档制
 
 ### 当前已有文档
+#### 主文档
 - `docs/prd/PRD.md`：当前主 PRD
 - `docs/design/INTERACTION-DESIGN.md`：交互设计文档
 - `docs/design/WIREFRAMES.md`：页面线框说明
@@ -47,6 +48,14 @@
 - `docs/data/VIDEO-CAPTURE-SPEC.md`：视频拍摄规范
 - `docs/tech/TECH-SOLUTION.md`：当前主技术方案
 - `docs/tech/DEMO-PLAN.md`：Demo 实现计划
+
+#### Spec Coding 目录
+- `spec/PRODUCT-SPEC.md`
+- `spec/INTERACTION-SPEC.md`
+- `spec/API-SPEC.md`
+- `spec/DATA-SPEC.md`
+- `spec/ACCEPTANCE-CRITERIA.md`
+- `spec/IMPLEMENTATION-PLAN.md`
 
 ---
 
@@ -129,9 +138,11 @@ badminton-ai-analysis/
 
 ### 技术方向
 - [x] 已输出技术方案文档
+- [x] 已搭建轻量 Spec Coding 结构
 - [ ] 确定姿态识别与视频分析技术路线
 - [ ] 设计 MVP 动作评估指标
 - [ ] 规划标准动作模板库
+- [ ] 开始最小技术 PoC
 
 ### 研究方向
 - [ ] 做竞品分析
