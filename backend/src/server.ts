@@ -1,6 +1,8 @@
+import path from 'node:path';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 import { createTask, getTask, saveUpload, startMockAnalysis } from './services/taskService';
 import { getPreprocessSummary, runPreprocess } from './services/preprocessService';
 import { readResult } from './services/store';
@@ -13,6 +15,11 @@ async function buildServer() {
   });
 
   await app.register(multipart);
+
+  await app.register(fastifyStatic, {
+    root: path.resolve(process.cwd(), 'data'),
+    prefix: '/data/',
+  });
 
   app.get('/health', async () => ({ ok: true }));
 

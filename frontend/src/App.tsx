@@ -28,7 +28,7 @@ type ReportResult = {
         strategy: string
         targetFrameCount: number
       }
-      sampledFrames?: { index: number; timestampSeconds: number; fileName: string }[]
+      sampledFrames?: { index: number; timestampSeconds: number; fileName: string; relativePath?: string }[]
     }
   }
 }
@@ -82,6 +82,11 @@ const ERROR_COPY: Record<string, { title: string; message: string }> = {
 function formatFileSize(size?: number) {
   if (!size) return '—'
   return `${(size / 1024 / 1024).toFixed(2)} MB`
+}
+
+function buildAssetUrl(relativePath?: string) {
+  if (!relativePath) return ''
+  return `${API_BASE}/${relativePath}`
 }
 
 function getErrorCopy(errorCode?: string, fallback?: string) {
@@ -408,6 +413,23 @@ function App() {
                       <li><span>目标帧数</span><strong>{report.preprocess.artifacts.framePlan.targetFrameCount}</strong></li>
                       <li><span>实际帧清单</span><strong>{report.preprocess.artifacts.sampledFrames?.length ?? 0} 个</strong></li>
                     </ul>
+                  </div>
+                ) : null}
+
+                {report.preprocess?.artifacts?.sampledFrames?.length ? (
+                  <div className="result-card">
+                    <h3>关键帧调试视图</h3>
+                    <div className="frame-grid">
+                      {report.preprocess.artifacts.sampledFrames.map((frame) => (
+                        <div key={frame.fileName} className="frame-card">
+                          <img src={buildAssetUrl(frame.relativePath)} alt={`关键帧 ${frame.index}`} />
+                          <div className="frame-meta">
+                            <strong>帧 {frame.index}</strong>
+                            <span>{frame.timestampSeconds}s</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
 

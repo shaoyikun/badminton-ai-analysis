@@ -343,6 +343,40 @@ select:disabled,
   list-style: none;
 }
 
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.frame-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.frame-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  background: #e5e7eb;
+}
+
+.frame-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.frame-meta span {
+  color: #667085;
+}
+
 .result-card li,
 .log-item {
   background: #f8fafc;
