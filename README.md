@@ -29,22 +29,22 @@
 ### 已完成
 - [x] 明确项目方向与价值主张
 - [x] 完成 MVP 范围定义
-- [x] 输出初版 PRD
-- [x] 输出 PRD V1（规范版）
-- [x] 输出交互设计 V1
-- [x] 输出技术方案 V1
+- [x] 输出主 PRD
+- [x] 输出交互设计
+- [x] 输出技术方案
 - [x] 初始化本地 Git 仓库
 - [x] 建立项目目录结构
 - [x] 将项目核心上下文沉淀到 memory
+- [x] 完成文档整理，统一为主文档制
 
 ### 当前已有文档
-- `docs/prd/MVP-PRD.md`：最初版 MVP PRD
-- `docs/prd/PRD-V1.md`：当前主 PRD
-- `docs/design/INTERACTION-DESIGN-V1.md`：交互设计文档
-- `docs/design/WIREFRAMES-V1.md`：页面线框说明
-- `docs/design/REPORT-TEMPLATE-V1.md`：报告模板文档
-- `docs/data/VIDEO-CAPTURE-SPEC-V1.md`：视频拍摄规范
-- `docs/tech/TECH-SOLUTION-V1.md`：当前主技术方案
+- `docs/prd/PRD.md`：当前主 PRD
+- `docs/design/INTERACTION-DESIGN.md`：交互设计文档
+- `docs/design/WIREFRAMES.md`：页面线框说明
+- `docs/design/REPORT-TEMPLATE.md`：报告模板文档
+- `docs/data/VIDEO-CAPTURE-SPEC.md`：视频拍摄规范
+- `docs/tech/TECH-SOLUTION.md`：当前主技术方案
+- `docs/tech/DEMO-PLAN.md`：Demo 实现计划
 
 ---
 
@@ -121,12 +121,12 @@ badminton-ai-analysis/
 ## 7. Next Steps
 
 ### 产品方向
-- [ ] 补充正式版 PRD（增加优先级、页面字段、交互说明）
-- [ ] 输出拍摄规范说明
-- [ ] 设计分析报告模板
+- [x] 已补充主 PRD（包含优先级、页面字段、交互说明）
+- [x] 已输出拍摄规范说明
+- [x] 已完成分析报告模板
 
 ### 技术方向
-- [ ] 输出技术方案文档
+- [x] 已输出技术方案文档
 - [ ] 确定姿态识别与视频分析技术路线
 - [ ] 设计 MVP 动作评估指标
 - [ ] 规划标准动作模板库

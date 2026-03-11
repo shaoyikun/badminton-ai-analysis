@@ -6,8 +6,8 @@
 ---
 
 ## 2. 对应关系
-- 产品文档：`docs/prd/PRD-V1.md`
-- 交互设计：`docs/design/INTERACTION-DESIGN-V1.md`
+- 产品文档：`docs/prd/PRD.md`
+- 交互设计：`docs/design/INTERACTION-DESIGN.md`
 - 可预览原型：`prototype/`
 
 ---

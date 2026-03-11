@@ -1,7 +1,7 @@
 # 羽毛球 AI 动作分析项目技术方案 V1
 
 ## 1. 文档定位
-本技术方案以 `docs/prd/PRD-V1.md` 和 `docs/design/INTERACTION-DESIGN-V1.md` 为输入，目标是支撑 MVP 阶段的产品实现。
+本技术方案以 `docs/prd/PRD.md` 和 `docs/design/INTERACTION-DESIGN.md` 为输入，目标是支撑 MVP 阶段的产品实现。
 
 ---
 
