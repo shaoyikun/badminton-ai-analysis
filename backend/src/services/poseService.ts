@@ -36,7 +36,8 @@ export async function runPoseAnalysis(taskId: string) {
     const analysisEntry = path.join(repoRoot, 'analysis-service', 'app.py');
     const taskDir = path.join(process.cwd(), task.preprocess.artifacts.artifactsDir);
 
-    const output = execFileSync('/usr/bin/python3', [analysisEntry, taskDir], {
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+    const output = execFileSync(pythonBin, [analysisEntry, taskDir], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();

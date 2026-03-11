@@ -134,7 +134,42 @@ badminton-ai-analysis/
 
 ---
 
-## 7. Next Steps
+## 7. 在其他电脑上启动项目
+
+### 环境要求
+- Node.js 22+（建议）
+- npm
+- Python 3
+- ffmpeg
+- ffprobe
+
+### 首次初始化
+```bash
+git clone https://github.com/shaoyikun/badminton-ai-analysis.git
+cd badminton-ai-analysis
+./scripts/setup-dev.sh
+```
+
+### 一键启动前后端
+```bash
+./scripts/start-dev.sh
+```
+
+启动后默认地址：
+- Frontend: `http://127.0.0.1:5173`
+- Backend: `http://127.0.0.1:8787`
+
+### 说明
+- `scripts/setup-dev.sh` 会安装 backend / frontend 的 npm 依赖，以及 `analysis-service/requirements.txt` 中的 Python 依赖。
+- `scripts/start-dev.sh` 会同时启动 backend 和 frontend，并自动把 `python3` 路径注入给后端使用。
+- 如果目标机器上的 Python 不叫 `python3`，可以手动指定：
+```bash
+PYTHON_BIN=/path/to/python ./scripts/start-dev.sh
+```
+
+---
+
+## 8. Next Steps
 
 ### 技术方向
 - [x] 已输出技术方案文档
