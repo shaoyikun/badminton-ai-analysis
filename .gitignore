@@ -38,3 +38,5 @@ frontend/dist/
 # Media / temp outputs
 *.tmp
 *.temp
+samples/**
+!samples/README.md
