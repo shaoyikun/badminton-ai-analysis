@@ -59,6 +59,7 @@ export function saveUpload(taskId: string, fileName: string, content?: Buffer, m
       status: 'idle',
       startedAt: undefined,
       completedAt: undefined,
+      errorCode: undefined,
       metadata: undefined,
       artifacts: undefined,
       errorMessage: undefined,

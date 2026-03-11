@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed'
+type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
 
 type ReportResult = {
   taskId: string
@@ -11,6 +12,25 @@ type ReportResult = {
   issues: { title: string; description: string; impact: string }[]
   suggestions: { title: string; description: string }[]
   retestAdvice: string
+  preprocess?: {
+    metadata?: {
+      fileName: string
+      fileSizeBytes: number
+      durationSeconds?: number
+      estimatedFrames?: number
+      width?: number
+      height?: number
+      frameRate?: number
+      metadataSource?: string
+    }
+    artifacts?: {
+      framePlan?: {
+        strategy: string
+        targetFrameCount: number
+      }
+      sampledFrames?: { index: number; timestampSeconds: number; fileName: string }[]
+    }
+  }
 }
 
 const API_BASE = 'http://127.0.0.1:8787'
@@ -21,11 +41,24 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   completed: '已完成',
   failed: '失败',
 }
+const PREPROCESS_LABELS: Record<PreprocessStatus, string> = {
+  idle: '未开始',
+  queued: '排队中',
+  processing: '预处理中',
+  completed: '预处理完成',
+  failed: '预处理失败',
+}
+
+function formatFileSize(size?: number) {
+  if (!size) return '—'
+  return `${(size / 1024 / 1024).toFixed(2)} MB`
+}
 
 function App() {
   const [actionType, setActionType] = useState('clear')
   const [taskId, setTaskId] = useState('')
   const [status, setStatus] = useState<TaskStatus | ''>('')
+  const [preprocessStatus, setPreprocessStatus] = useState<PreprocessStatus>('idle')
   const [report, setReport] = useState<ReportResult | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [log, setLog] = useState<string[]>([])
@@ -67,6 +100,7 @@ function App() {
       }
       setTaskId(data.taskId)
       setStatus(data.status)
+      setPreprocessStatus('idle')
       setReport(null)
       appendLog(`任务已创建：${data.taskId}（${selectedActionLabel}）`)
     } catch (error) {
@@ -94,6 +128,7 @@ function App() {
         return
       }
       setStatus(data.status)
+      setPreprocessStatus(data.preprocessStatus ?? 'idle')
       appendLog(`上传完成：${data.fileName}`)
     } catch (error) {
       appendLog(`上传失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -132,6 +167,7 @@ function App() {
       return null
     }
 
+    setPreprocessStatus(data.preprocessStatus ?? 'idle')
     setStatus((prev) => {
       if (prev !== data.status && !options?.silent) {
         appendLog(`状态更新：${STATUS_LABELS[data.status as TaskStatus] ?? data.status}`)
@@ -175,6 +211,7 @@ function App() {
         return
       }
       setStatus(data.status)
+      setPreprocessStatus(data.preprocessStatus ?? 'idle')
       appendLog('已启动分析')
       startPolling()
     } catch (error) {
@@ -201,7 +238,7 @@ function App() {
             <p className="eyebrow">羽毛球动作分析 · React H5 PoC</p>
             <h1>上传视频后，自动跑完整条分析链路</h1>
             <p className="subtitle">
-              现在主流程已经收口成：创建任务 → 上传视频 → 启动分析 → 自动轮询 → 自动展示结果。
+              现在主流程已经收口成：创建任务 → 上传视频 → 预处理 → 启动分析 → 自动轮询 → 自动展示结果。
             </p>
           </header>
 
@@ -242,7 +279,7 @@ function App() {
             <label className="upload-box">
               <input type="file" accept="video/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={isBusy || isPolling} />
               <span className="upload-title">{file ? file.name : '点击选择视频文件'}</span>
-              <span className="upload-subtitle">建议先用 5~15 秒短视频做联调验证</span>
+              <span className="upload-subtitle">建议先用 5~15 秒、单人、固定机位视频做联调验证</span>
             </label>
 
             <div className="button-group">
@@ -261,6 +298,11 @@ function App() {
               <button className="ghost-button" onClick={() => fetchResult()} disabled={!canFetchResult || isBusy}>
                 手动取结果
               </button>
+            </div>
+
+            <div className="preprocess-strip">
+              <span className={`status-pill ${preprocessStatus}`}>{PREPROCESS_LABELS[preprocessStatus]}</span>
+              <span className="panel-tip">预处理会先做基础校验和抽帧计划生成</span>
             </div>
           </section>
 
@@ -282,6 +324,31 @@ function App() {
                   <strong>{report.totalScore}</strong>
                   <p>{report.actionType === 'smash' ? '杀球动作' : '正手高远球'} · 模拟结构化报告</p>
                 </div>
+
+                {report.preprocess?.metadata ? (
+                  <div className="result-card">
+                    <h3>预处理摘要</h3>
+                    <ul>
+                      <li><span>文件名</span><strong>{report.preprocess.metadata.fileName}</strong></li>
+                      <li><span>文件大小</span><strong>{formatFileSize(report.preprocess.metadata.fileSizeBytes)}</strong></li>
+                      <li><span>估算时长</span><strong>{report.preprocess.metadata.durationSeconds ?? '—'} 秒</strong></li>
+                      <li><span>估算帧数</span><strong>{report.preprocess.metadata.estimatedFrames ?? '—'}</strong></li>
+                      <li><span>分辨率</span><strong>{report.preprocess.metadata.width} × {report.preprocess.metadata.height}</strong></li>
+                      <li><span>元数据来源</span><strong>{report.preprocess.metadata.metadataSource ?? '—'}</strong></li>
+                    </ul>
+                  </div>
+                ) : null}
+
+                {report.preprocess?.artifacts?.framePlan ? (
+                  <div className="result-card">
+                    <h3>抽帧计划</h3>
+                    <ul>
+                      <li><span>策略</span><strong>{report.preprocess.artifacts.framePlan.strategy}</strong></li>
+                      <li><span>目标帧数</span><strong>{report.preprocess.artifacts.framePlan.targetFrameCount}</strong></li>
+                      <li><span>占位帧清单</span><strong>{report.preprocess.artifacts.sampledFrames?.length ?? 0} 个</strong></li>
+                    </ul>
+                  </div>
+                ) : null}
 
                 <div className="result-card">
                   <h3>维度分数</h3>

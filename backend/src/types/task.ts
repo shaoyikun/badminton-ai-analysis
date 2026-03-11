@@ -21,26 +21,40 @@ export interface VideoMetadata {
   fileName: string;
   fileSizeBytes: number;
   mimeType?: string;
+  extension?: string;
   durationSeconds?: number;
   estimatedFrames?: number;
   width?: number;
   height?: number;
+  frameRate?: number;
+  metadataSource?: 'mock-estimate' | 'ffprobe' | 'manual';
+}
+
+export interface PreprocessFrameItem {
+  index: number;
+  timestampSeconds: number;
+  fileName: string;
+  relativePath: string;
 }
 
 export interface PreprocessArtifacts {
   normalizedFileName: string;
   metadataExtractedAt: string;
+  artifactsDir: string;
+  manifestPath: string;
   framePlan: {
     strategy: string;
     targetFrameCount: number;
     sampleTimestamps: number[];
   };
+  sampledFrames: PreprocessFrameItem[];
 }
 
 export interface PreprocessInfo {
   status: PreprocessStatus;
   startedAt?: string;
   completedAt?: string;
+  errorCode?: string;
   errorMessage?: string;
   metadata?: VideoMetadata;
   artifacts?: PreprocessArtifacts;
