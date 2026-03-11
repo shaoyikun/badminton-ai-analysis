@@ -166,6 +166,12 @@ cd badminton-ai-analysis
 docker compose up --build
 ```
 
+或者用 Makefile：
+
+```bash
+make compose-up
+```
+
 启动后默认地址：
 - Frontend: `http://127.0.0.1:5173`
 - Backend: `http://127.0.0.1:8787`
@@ -179,12 +185,22 @@ docker compose logs -f frontend
 docker compose ps
 ```
 
+对应 Makefile 快捷命令：
+```bash
+make compose-up
+make compose-ps
+make compose-logs-backend
+make compose-logs-frontend
+make compose-down
+```
+
 ### Compose 版本当前特性
 - backend / frontend 都带 healthcheck
 - frontend 改为 **Vite build + nginx 静态托管**，不再直接跑 dev server
 - frontend 通过 nginx 反向代理 `/api`、`/data`、`/health` 到 backend
 - backend 改为容器内直接跑构建产物（`npm start`），更接近发布态
 - backend 的 `data/`、`uploads/` 用 Docker volume 持久化
+- backend Dockerfile 支持通过 `APT_MIRROR` 切换 apt 镜像源，默认在 compose 中使用更快的镜像站以减少首次 build 耗时
 
 ### 说明
 - `scripts/setup-dev.sh` 会安装 backend / frontend 的 npm 依赖，以及 `analysis-service/requirements.txt` 中的 Python 依赖。

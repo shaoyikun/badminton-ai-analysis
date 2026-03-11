@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        APT_MIRROR: mirrors.aliyun.com
     environment:
       PYTHON_BIN: python3
     ports:
