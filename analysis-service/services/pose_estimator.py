@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, List, Optional
+from urllib.request import urlretrieve
 
 import cv2
 import mediapipe as mp
@@ -16,8 +17,13 @@ POSE_LANDMARK_NAMES = [
     'right_ankle', 'left_heel', 'right_heel', 'left_foot_index', 'right_foot_index'
 ]
 
+POSE_LANDMARKER_MODEL_URL = (
+    'https://storage.googleapis.com/mediapipe-models/pose_landmarker/'
+    'pose_landmarker_lite/float16/latest/pose_landmarker_lite.task'
+)
 
-def _extract_keypoints(results: Any) -> List[Dict[str, Any]]:
+
+def _extract_keypoints_from_legacy(results: Any) -> List[Dict[str, Any]]:
     if not results.pose_landmarks:
         return []
 
@@ -28,7 +34,25 @@ def _extract_keypoints(results: Any) -> List[Dict[str, Any]]:
             'x': round(float(landmark.x), 4),
             'y': round(float(landmark.y), 4),
             'z': round(float(landmark.z), 4),
-            'visibility': round(float(landmark.visibility), 4),
+            'visibility': round(float(getattr(landmark, 'visibility', 0.0)), 4),
+        })
+    return keypoints
+
+
+def _extract_keypoints_from_tasks(result: Any) -> List[Dict[str, Any]]:
+    pose_landmarks_list = getattr(result, 'pose_landmarks', None) or []
+    if not pose_landmarks_list:
+        return []
+
+    landmarks = pose_landmarks_list[0]
+    keypoints: List[Dict[str, Any]] = []
+    for index, landmark in enumerate(landmarks):
+        keypoints.append({
+            'name': POSE_LANDMARK_NAMES[index] if index < len(POSE_LANDMARK_NAMES) else f'landmark_{index}',
+            'x': round(float(landmark.x), 4),
+            'y': round(float(landmark.y), 4),
+            'z': round(float(landmark.z), 4),
+            'visibility': round(float(getattr(landmark, 'visibility', getattr(landmark, 'presence', 0.0))), 4),
         })
     return keypoints
 
@@ -123,7 +147,16 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
     }
 
 
-def estimate_pose_for_frames(frame_paths: List[Path]) -> Dict[str, Any]:
+def _ensure_pose_landmarker_model() -> Path:
+    model_dir = Path(__file__).resolve().parent.parent / 'models'
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model_path = model_dir / 'pose_landmarker_lite.task'
+    if not model_path.exists():
+        urlretrieve(POSE_LANDMARKER_MODEL_URL, model_path)
+    return model_path
+
+
+def _estimate_with_legacy_solutions(frame_paths: List[Path]) -> Dict[str, Any]:
     frames = []
     detected_count = 0
 
@@ -147,7 +180,7 @@ def estimate_pose_for_frames(frame_paths: List[Path]) -> Dict[str, Any]:
 
             rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             results = pose.process(rgb)
-            keypoints = _extract_keypoints(results)
+            keypoints = _extract_keypoints_from_legacy(results)
             metrics = _compute_frame_metrics(keypoints) if keypoints else None
             if keypoints:
                 detected_count += 1
@@ -167,3 +200,61 @@ def estimate_pose_for_frames(frame_paths: List[Path]) -> Dict[str, Any]:
         'summary': _build_overall_summary(frames, detected_count),
         'frames': frames,
     }
+
+
+def _estimate_with_tasks_api(frame_paths: List[Path]) -> Dict[str, Any]:
+    from mediapipe.tasks import python
+    from mediapipe.tasks.python import vision
+
+    model_path = _ensure_pose_landmarker_model()
+    frames = []
+    detected_count = 0
+
+    options = vision.PoseLandmarkerOptions(
+        base_options=python.BaseOptions(model_asset_path=str(model_path)),
+        running_mode=vision.RunningMode.IMAGE,
+        num_poses=1,
+    )
+
+    with vision.PoseLandmarker.create_from_options(options) as detector:
+        for index, frame_path in enumerate(frame_paths, start=1):
+            image = cv2.imread(str(frame_path))
+            if image is None:
+                frames.append({
+                    'frameIndex': index,
+                    'fileName': frame_path.name,
+                    'status': 'read_failed',
+                    'keypoints': [],
+                    'metrics': None,
+                })
+                continue
+
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            result = detector.detect(mp_image)
+            keypoints = _extract_keypoints_from_tasks(result)
+            metrics = _compute_frame_metrics(keypoints) if keypoints else None
+            if keypoints:
+                detected_count += 1
+
+            frames.append({
+                'frameIndex': index,
+                'fileName': frame_path.name,
+                'status': 'detected' if keypoints else 'not_detected',
+                'keypoints': keypoints,
+                'metrics': metrics,
+            })
+
+    return {
+        'engine': 'mediapipe-tasks-pose-landmarker',
+        'frameCount': len(frame_paths),
+        'detectedFrameCount': detected_count,
+        'summary': _build_overall_summary(frames, detected_count),
+        'frames': frames,
+    }
+
+
+def estimate_pose_for_frames(frame_paths: List[Path]) -> Dict[str, Any]:
+    if hasattr(mp, 'solutions'):
+        return _estimate_with_legacy_solutions(frame_paths)
+    return _estimate_with_tasks_api(frame_paths)
