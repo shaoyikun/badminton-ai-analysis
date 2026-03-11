@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readTasks, writeTasks, saveResult } from './store';
 import { ReportResult, TaskRecord } from '../types/task';
 import { runPreprocess } from './preprocessService';
+import { runPoseAnalysis } from './poseService';
 
 function now() {
   return new Date().toISOString();
@@ -16,6 +17,9 @@ export function createTask(actionType: string): TaskRecord {
     actionType,
     status: 'created',
     preprocess: {
+      status: 'idle',
+    },
+    pose: {
       status: 'idle',
     },
     createdAt: now(),
@@ -38,6 +42,7 @@ export function updateTask(taskId: string, patch: Partial<TaskRecord>): TaskReco
     ...tasks[index],
     ...patch,
     preprocess: patch.preprocess ? { ...(tasks[index].preprocess ?? { status: 'idle' }), ...patch.preprocess } : tasks[index].preprocess,
+    pose: patch.pose ? { ...(tasks[index].pose ?? { status: 'idle' }), ...patch.pose } : tasks[index].pose,
     updatedAt: now(),
   };
   writeTasks(tasks);
@@ -63,6 +68,14 @@ export function saveUpload(taskId: string, fileName: string, content?: Buffer, m
       metadata: undefined,
       artifacts: undefined,
       errorMessage: undefined,
+    },
+    pose: {
+      status: 'idle',
+      startedAt: undefined,
+      completedAt: undefined,
+      errorMessage: undefined,
+      resultPath: undefined,
+      summary: undefined,
     },
   });
 }
@@ -113,6 +126,13 @@ export async function startMockAnalysis(taskId: string) {
       return updateTask(taskId, { status: 'failed', errorCode: 'preprocess_failed' });
     }
     task = preprocessed;
+  }
+
+  if (task.pose?.status !== 'completed') {
+    const posed = await runPoseAnalysis(taskId);
+    if (posed) {
+      task = posed;
+    }
   }
 
   const processingTask = updateTask(taskId, { status: 'processing', errorCode: undefined });

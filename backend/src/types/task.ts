@@ -1,5 +1,6 @@
 export type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed';
 export type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed';
+export type PoseStatus = 'idle' | 'processing' | 'completed' | 'failed';
 
 export interface DimensionScore {
   name: string;
@@ -60,6 +61,39 @@ export interface PreprocessInfo {
   artifacts?: PreprocessArtifacts;
 }
 
+export interface PoseFrameResult {
+  frameIndex: number;
+  fileName: string;
+  status: string;
+  keypoints: Array<{
+    name: string;
+    x: number;
+    y: number;
+    z: number;
+    visibility: number;
+  }>;
+}
+
+export interface PoseAnalysisResult {
+  engine: string;
+  frameCount: number;
+  detectedFrameCount: number;
+  frames: PoseFrameResult[];
+}
+
+export interface PoseInfo {
+  status: PoseStatus;
+  startedAt?: string;
+  completedAt?: string;
+  errorMessage?: string;
+  resultPath?: string;
+  summary?: {
+    engine: string;
+    frameCount: number;
+    detectedFrameCount: number;
+  };
+}
+
 export interface ReportResult {
   taskId: string;
   actionType: string;
@@ -86,6 +120,7 @@ export interface TaskRecord {
   resultPath?: string;
   errorCode?: string;
   preprocess?: PreprocessInfo;
+  pose?: PoseInfo;
   createdAt: string;
   updatedAt: string;
 }

@@ -5,6 +5,7 @@ import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { createTask, getTask, saveUpload, startMockAnalysis } from './services/taskService';
 import { getPreprocessSummary, runPreprocess } from './services/preprocessService';
+import { getPoseResult, getPoseSummary, runPoseAnalysis } from './services/poseService';
 import { readResult } from './services/store';
 
 async function buildServer() {
@@ -88,6 +89,49 @@ async function buildServer() {
     return summary;
   });
 
+  app.post('/api/tasks/:taskId/pose', async (request, reply) => {
+    const params = request.params as { taskId: string };
+    const task = getTask(params.taskId);
+    if (!task) {
+      return reply.status(404).send({ error: 'task not found' });
+    }
+    if (!task.preprocess?.artifacts?.artifactsDir) {
+      return reply.status(409).send({ error: 'preprocess required before pose analysis' });
+    }
+    const updated = await runPoseAnalysis(params.taskId);
+    if (!updated) {
+      return reply.status(500).send({ error: 'failed to start pose analysis' });
+    }
+    if (updated.pose?.status === 'failed') {
+      return reply.status(422).send({
+        error: updated.pose.errorMessage ?? 'pose analysis failed',
+        poseStatus: updated.pose.status,
+      });
+    }
+    return {
+      taskId: updated.taskId,
+      pose: updated.pose,
+    };
+  });
+
+  app.get('/api/tasks/:taskId/pose', async (request, reply) => {
+    const params = request.params as { taskId: string };
+    const result = getPoseResult(params.taskId);
+    if (!result) {
+      return reply.status(404).send({ error: 'pose result not found' });
+    }
+    return result;
+  });
+
+  app.get('/api/tasks/:taskId/pose-summary', async (request, reply) => {
+    const params = request.params as { taskId: string };
+    const summary = getPoseSummary(params.taskId);
+    if (!summary) {
+      return reply.status(404).send({ error: 'task not found' });
+    }
+    return summary;
+  });
+
   app.post('/api/tasks/:taskId/analyze', async (request, reply) => {
     const params = request.params as { taskId: string };
     const task = getTask(params.taskId);
@@ -127,6 +171,8 @@ async function buildServer() {
       errorCode: task.errorCode,
       errorMessage: task.preprocess?.errorMessage,
       preprocessStatus: task.preprocess?.status ?? 'idle',
+      poseStatus: task.pose?.status ?? 'idle',
+      poseSummary: task.pose?.summary,
       updatedAt: task.updatedAt,
     };
   });

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { TaskRecord, ReportResult } from '../types/task';
+import { TaskRecord, ReportResult, PoseAnalysisResult } from '../types/task';
 
 const dataDir = path.resolve(process.cwd(), 'data');
 const tasksFile = path.join(dataDir, 'tasks.json');
@@ -29,4 +29,15 @@ export function saveResult(taskId: string, result: ReportResult): string {
 
 export function readResult(resultPath: string): ReportResult {
   return JSON.parse(fs.readFileSync(resultPath, 'utf8')) as ReportResult;
+}
+
+export function savePoseResult(taskId: string, result: PoseAnalysisResult): string {
+  ensureStore();
+  const resultPath = path.join(dataDir, `${taskId}.pose.json`);
+  fs.writeFileSync(resultPath, JSON.stringify(result, null, 2), 'utf8');
+  return resultPath;
+}
+
+export function readPoseResult(resultPath: string): PoseAnalysisResult {
+  return JSON.parse(fs.readFileSync(resultPath, 'utf8')) as PoseAnalysisResult;
 }
