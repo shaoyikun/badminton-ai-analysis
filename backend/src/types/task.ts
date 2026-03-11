@@ -161,6 +161,7 @@ export interface StandardReferenceFrame {
   cue: string;
   imageLabel: string;
   imagePath?: string;
+  sourceType?: 'illustration' | 'real-sample';
 }
 
 export interface StandardComparison {

@@ -55,6 +55,7 @@
   - cue
   - image_label
   - image_path（可选，本地静态资源路径或后续的真实素材 URL）
+  - source_type（可选：illustration / real-sample）
 - differences
 
 说明：

@@ -49,6 +49,7 @@ type ActionConfig = {
     cue: string;
     imageLabel: string;
     imagePath: string;
+    sourceType: 'illustration' | 'real-sample';
     summaryPrefix: string;
   };
 };
@@ -140,6 +141,7 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
       cue: '标准动作更强调侧身打开、非持拍侧带开以及高点击球空间。',
       imageLabel: '标准高远球参考帧',
       imagePath: '/standard-references/clear-reference.svg',
+      sourceType: 'illustration',
       summaryPrefix: '和标准高远球相比，当前更值得优先看的差异是',
     },
   },
@@ -219,7 +221,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
       title: '杀球标准参考帧',
       cue: '标准杀球更强调高点准备、躯干联动和明显的向前下压感。',
       imageLabel: '标准杀球参考帧',
-      imagePath: '/standard-references/smash-reference.svg',
+      imagePath: '/standard-references/smash-reference-real.jpg',
+      sourceType: 'real-sample',
       summaryPrefix: '和标准杀球相比，当前更值得优先看的差异是',
     },
   },

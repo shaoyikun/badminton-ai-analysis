@@ -81,6 +81,7 @@ function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typ
           )}
           <strong>{report.standardComparison.standardFrameLabel}</strong>
           <span>{report.standardComparison.standardReference.cue}</span>
+          <span>{report.standardComparison.standardReference.sourceType === 'real-sample' ? '素材类型：真人参考帧' : '素材类型：结构示意图'}</span>
         </div>
       </div>
       <ul>
