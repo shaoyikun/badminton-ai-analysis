@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup dev up down logs compose-up compose-logs compose-logs-backend compose-logs-frontend compose-down compose-ps build
+.PHONY: setup dev up up-build down logs compose-up compose-logs compose-logs-backend compose-logs-frontend compose-down compose-ps build
 
 setup:
 	./scripts/setup-dev.sh
@@ -10,6 +10,9 @@ dev:
 
 up:
 	./scripts/up.sh
+
+up-build:
+	./scripts/up.sh --build
 
 down:
 	./scripts/down.sh

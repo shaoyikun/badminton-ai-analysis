@@ -28,6 +28,12 @@ docker compose down
 ./scripts/up.sh
 ```
 
+如果刚拉了新代码，或需要强制重建镜像：
+
+```bash
+./scripts/up.sh --build
+```
+
 停止：
 
 ```bash
@@ -46,6 +52,7 @@ docker compose down
 
 ```bash
 make up
+make up-build
 make compose-ps
 make compose-logs-backend
 make compose-logs-frontend

@@ -174,10 +174,17 @@ docker compose up --build
 ./scripts/up.sh
 ```
 
+如果你刚 pull 了新代码，或者我改了 Docker / 后端 / Python 分析逻辑，建议用带重建的版本：
+
+```bash
+./scripts/up.sh --build
+```
+
 也可以用 Makefile：
 
 ```bash
 make up
+make up-build
 ```
 
 启动后默认地址：
