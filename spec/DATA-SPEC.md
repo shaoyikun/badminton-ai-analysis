@@ -56,10 +56,16 @@
   - image_label
   - image_path（可选，本地静态资源路径或后续的真实素材 URL）
   - source_type（可选：illustration / real-sample）
+- phase_frames（可选）
+  - phase
+  - title
+  - image_path
+  - cue
 - differences
 
 说明：
 - MVP 第一版允许先返回“本地静态参考素材 + 差异说明文案”，不强制要求一开始就接真人标准图片库
+- 若已有可用素材，可以进一步返回阶段性关键帧（如准备 / 引拍 / 击球）
 - 后续可再把 `image_path` 升级为真实素材 URL / token / 媒体资源引用
 
 ## 5. 对比模式约束

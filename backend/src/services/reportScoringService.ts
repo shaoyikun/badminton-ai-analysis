@@ -52,6 +52,12 @@ type ActionConfig = {
     sourceType: 'illustration' | 'real-sample';
     summaryPrefix: string;
   };
+  phaseFrames?: Array<{
+    phase: string;
+    title: string;
+    imagePath: string;
+    cue: string;
+  }>;
 };
 
 type MetricScores = Record<MetricKey, number>;
@@ -225,6 +231,26 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
       sourceType: 'real-sample',
       summaryPrefix: '和标准杀球相比，当前更值得优先看的差异是',
     },
+    phaseFrames: [
+      {
+        phase: '准备',
+        title: '杀球准备阶段',
+        imagePath: '/standard-references/smash-phase-prep.jpg',
+        cue: '先站稳并完成来球判断，准备把重心和起跳节奏接上。',
+      },
+      {
+        phase: '引拍',
+        title: '杀球引拍 / 起跳加载阶段',
+        imagePath: '/standard-references/smash-phase-load.jpg',
+        cue: '把身体打开并完成起跳加载，让高点准备和躯干联动先建立起来。',
+      },
+      {
+        phase: '击球',
+        title: '杀球击球阶段',
+        imagePath: '/standard-references/smash-phase-contact.jpg',
+        cue: '在最高点击球，并把力量沿着向前下压方向送出去。',
+      },
+    ],
   },
 };
 
@@ -297,6 +323,7 @@ function buildStandardComparison(config: ActionConfig, rankedIssues: RankedIssue
     currentFrameLabel: '当前样本最佳关键帧占位',
     standardFrameLabel: config.standardReference.imageLabel,
     standardReference: config.standardReference,
+    phaseFrames: config.phaseFrames,
     differences,
   };
 }

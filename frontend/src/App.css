@@ -512,6 +512,41 @@ select:disabled,
   color: #667085;
 }
 
+.standard-phase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.standard-phase-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.standard-phase-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #e5e7eb;
+}
+
+.standard-phase-card strong {
+  color: #101828;
+  font-size: 13px;
+}
+
+.standard-phase-card span {
+  font-size: 12px;
+  color: #667085;
+  line-height: 1.5;
+}
+
 .comparison-block {
   margin-top: 12px;
 }

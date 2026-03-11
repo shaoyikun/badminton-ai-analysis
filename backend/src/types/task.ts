@@ -164,12 +164,20 @@ export interface StandardReferenceFrame {
   sourceType?: 'illustration' | 'real-sample';
 }
 
+export interface StandardPhaseFrame {
+  phase: string;
+  title: string;
+  imagePath: string;
+  cue: string;
+}
+
 export interface StandardComparison {
   sectionTitle: string;
   summaryText: string;
   currentFrameLabel: string;
   standardFrameLabel: string;
   standardReference: StandardReferenceFrame;
+  phaseFrames?: StandardPhaseFrame[];
   differences: string[];
 }
 

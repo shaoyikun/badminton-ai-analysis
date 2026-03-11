@@ -11,8 +11,11 @@
 当前文件：
 - `clear-reference.svg`：正手高远球示意参考图
 - `smash-reference.svg`：杀球示意参考图
-- `smash-reference-real.jpg`：从当前样本视频中截出的第一版真人杀球参考帧
+- `smash-reference-real.jpg`：第一版真人杀球参考帧（单帧）
+- `smash-phase-prep.jpg`：杀球阶段参考帧 - 准备
+- `smash-phase-load.jpg`：杀球阶段参考帧 - 引拍 / 起跳加载
+- `smash-phase-contact.jpg`：杀球阶段参考帧 - 击球
 
 后续建议：
-- 为每个动作建立至少 3 张真人标准关键帧（准备 / 引拍 / 击球）
+- 为高远球也建立至少 2~3 张真人标准关键帧
 - 最终把单帧参考升级成“小型标准动作素材库”

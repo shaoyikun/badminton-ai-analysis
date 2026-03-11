@@ -84,6 +84,17 @@ function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typ
           <span>{report.standardComparison.standardReference.sourceType === 'real-sample' ? '素材类型：真人参考帧' : '素材类型：结构示意图'}</span>
         </div>
       </div>
+      {report.standardComparison.phaseFrames?.length ? (
+        <div className="standard-phase-grid">
+          {report.standardComparison.phaseFrames.map((item) => (
+            <div key={item.phase} className="standard-phase-card">
+              <img src={buildReferenceUrl(item.imagePath)} alt={item.title} />
+              <strong>{item.phase}</strong>
+              <span>{item.cue}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <ul>
         {report.standardComparison.differences.map((item) => (
           <li key={item}>

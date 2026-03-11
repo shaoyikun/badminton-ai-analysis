@@ -61,6 +61,12 @@ export type ReportResult = {
       imagePath?: string
       sourceType?: 'illustration' | 'real-sample'
     }
+    phaseFrames?: {
+      phase: string
+      title: string
+      imagePath: string
+      cue: string
+    }[]
     differences: string[]
   }
   scoringEvidence?: {
