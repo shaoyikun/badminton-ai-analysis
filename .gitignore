@@ -26,6 +26,7 @@ backend/data/
 # Env
 .env
 .env.*
+!.env.example
 
 # Build / cache
 dist/

@@ -159,9 +159,30 @@ cd badminton-ai-analysis
 - Frontend: `http://127.0.0.1:5173`
 - Backend: `http://127.0.0.1:8787`
 
+### Docker Compose 启动
+如果目标机器已经装了 Docker / Docker Compose，也可以直接：
+
+```bash
+docker compose up --build
+```
+
+启动后默认地址同样是：
+- Frontend: `http://127.0.0.1:5173`
+- Backend: `http://127.0.0.1:8787`
+
+常用命令：
+```bash
+docker compose up --build
+docker compose down
+docker compose logs -f backend
+docker compose logs -f frontend
+```
+
 ### 说明
 - `scripts/setup-dev.sh` 会安装 backend / frontend 的 npm 依赖，以及 `analysis-service/requirements.txt` 中的 Python 依赖。
 - `scripts/start-dev.sh` 会同时启动 backend 和 frontend，并自动把 `python3` 路径注入给后端使用。
+- `docker-compose.yml` 提供了跨机器更稳定的开发启动方式，backend 容器里已经包含 `python3`、`pip`、`ffmpeg`。
+- 前端现在支持通过 `VITE_API_BASE` 配置后端地址，默认仍是 `http://127.0.0.1:8787`。
 - 如果目标机器上的 Python 不叫 `python3`，可以手动指定：
 ```bash
 PYTHON_BIN=/path/to/python ./scripts/start-dev.sh
