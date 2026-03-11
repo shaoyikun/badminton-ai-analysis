@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { createTask, getRetestComparison, getTask, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
+import { createTask, getCustomRetestComparison, getRetestComparison, getTask, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
 import { getPreprocessSummary, runPreprocess } from './services/preprocessService';
 import { getPoseResult, getPoseSummary, runPoseAnalysis } from './services/poseService';
 import { readResult } from './services/store';
@@ -199,6 +199,19 @@ async function buildServer() {
 
   app.get('/api/tasks/:taskId/comparison', async (request, reply) => {
     const params = request.params as { taskId: string };
+    const query = request.query as { previousTaskId?: string };
+
+    if (query.previousTaskId) {
+      const payload = getCustomRetestComparison(params.taskId, query.previousTaskId);
+      if (payload === null) {
+        return reply.status(409).send({ error: 'tasks must share the same action type' });
+      }
+      if (!payload) {
+        return reply.status(404).send({ error: 'task not found or comparison unavailable' });
+      }
+      return payload;
+    }
+
     const payload = getRetestComparison(params.taskId);
     if (!payload) {
       return reply.status(404).send({ error: 'task not found or comparison unavailable' });

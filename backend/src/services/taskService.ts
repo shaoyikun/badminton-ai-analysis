@@ -45,7 +45,7 @@ function buildCoachReview(actionType: string, comparison: Omit<RetestComparison,
   const topRegression = comparison.declinedDimensions[0];
   const stableDimension = comparison.unchangedDimensions[0];
 
-  let headline = `${actionLabel}这次和上一次相比，整体还在同一训练方向上。`;
+  let headline = `${actionLabel}这次和对比样本相比，整体还在同一训练方向上。`;
   if (comparison.totalScoreDelta >= 6) {
     headline = `${actionLabel}这次能看出明显进步，不只是分数抬了，动作主线也更顺了。`;
   } else if (comparison.totalScoreDelta > 0) {
@@ -59,7 +59,7 @@ function buildCoachReview(actionType: string, comparison: Omit<RetestComparison,
   const progressNote = topImprovement
     ? `最值得肯定的是 ${topImprovement.name}，从 ${topImprovement.previousScore} 分提到 ${topImprovement.currentScore} 分，说明最近训练已经开始往这个环节起作用了。`
     : stableDimension
-      ? `${stableDimension.name} 这次基本和上次持平，说明你至少把动作底子维持住了，没有明显跑偏。`
+      ? `${stableDimension.name} 这次基本和对比样本持平，说明你至少把动作底子维持住了，没有明显跑偏。`
       : '这次虽然没有特别突出的单项提升，但整体动作没有明显散掉，说明训练节奏还在。';
 
   const regressionNote = topRegression
@@ -97,13 +97,13 @@ function buildRetestComparison(actionType: string, previous: ReportResult, curre
   const unchangedDimensions = deltas.filter((item) => item.delta === 0);
   const totalScoreDelta = clampDelta(current.totalScore - previous.totalScore);
 
-  let summaryText = '和上一次相比，这次数据整体比较接近，建议继续保持同机位复测，观察动作稳定性。';
+  let summaryText = '和对比样本相比，这次数据整体比较接近，建议继续保持同机位复测，观察动作稳定性。';
   if (totalScoreDelta > 0 && improvedDimensions.length > 0) {
     const names = improvedDimensions.slice(0, 2).map((item) => item.name).join('、');
-    summaryText = `和上一次相比，这次总分提升 ${totalScoreDelta} 分，最明显的进步在 ${names}。`;
+    summaryText = `和对比样本相比，这次总分提升 ${totalScoreDelta} 分，最明显的进步在 ${names}。`;
   } else if (totalScoreDelta < 0 && declinedDimensions.length > 0) {
     const names = declinedDimensions.slice(0, 2).map((item) => item.name).join('、');
-    summaryText = `和上一次相比，这次总分下降 ${Math.abs(totalScoreDelta)} 分，主要回落在 ${names}，建议优先回看这几个维度。`;
+    summaryText = `和对比样本相比，这次总分下降 ${Math.abs(totalScoreDelta)} 分，主要回落在 ${names}，建议优先回看这几个维度。`;
   }
 
   const comparison = {
@@ -140,6 +140,13 @@ function findLatestCompletedTaskId(actionType: string, excludeTaskId?: string) {
   return readTasks()
     .filter((task) => task.actionType === actionType && task.status === 'completed' && task.resultPath && task.taskId !== excludeTaskId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]?.taskId;
+}
+
+function getComparableResult(taskId: string) {
+  const task = getTask(taskId);
+  const result = readResultByTaskId(taskId);
+  if (!task || !result) return undefined;
+  return { task, result };
 }
 
 export function createTask(actionType: string): TaskRecord {
@@ -210,6 +217,20 @@ export function getRetestComparison(taskId: string) {
     previous,
     comparison: previous ? buildRetestComparison(task.actionType, previous, current) : undefined,
     history: buildTaskHistory(task.actionType, taskId),
+  };
+}
+
+export function getCustomRetestComparison(currentTaskId: string, previousTaskId: string) {
+  const currentPayload = getComparableResult(currentTaskId);
+  const previousPayload = getComparableResult(previousTaskId);
+  if (!currentPayload || !previousPayload) return undefined;
+  if (currentPayload.task.actionType !== previousPayload.task.actionType) return null;
+
+  return {
+    current: currentPayload.result,
+    previous: previousPayload.result,
+    comparison: buildRetestComparison(currentPayload.task.actionType, previousPayload.result, currentPayload.result),
+    history: buildTaskHistory(currentPayload.task.actionType),
   };
 }
 

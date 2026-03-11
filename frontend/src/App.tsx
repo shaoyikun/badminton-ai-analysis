@@ -51,22 +51,45 @@ function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
   )
 }
 
-function HistoryCard({ history }: { history: TaskHistoryItem[] }) {
+function HistoryCard({
+  history,
+  selectedCompareTaskId,
+  onSelectCompare,
+  disabled,
+}: {
+  history: TaskHistoryItem[]
+  selectedCompareTaskId: string
+  onSelectCompare: (taskId: string) => void
+  disabled?: boolean
+}) {
   return (
     <div className="result-card">
       <h3>同动作历史记录</h3>
       {history.length === 0 ? (
         <p>还没有可用的历史记录，先完成第一条样本分析。</p>
       ) : (
-        <ul>
-          {history.slice(0, 5).map((item) => (
-            <li key={item.taskId}>
-              <span>{formatTime(item.createdAt)}</span>
-              <strong>{item.totalScore ?? '—'} 分</strong>
-              <p>{item.summaryText ?? `${item.actionType} 已完成分析`}</p>
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="compare-selector">
+            <label>选择一个历史样本做对比</label>
+            <select value={selectedCompareTaskId} onChange={(e) => onSelectCompare(e.target.value)} disabled={disabled}>
+              <option value="">请选择历史样本</option>
+              {history.slice(0, 10).map((item) => (
+                <option key={item.taskId} value={item.taskId}>
+                  {formatTime(item.createdAt)} · {item.totalScore ?? '—'} 分
+                </option>
+              ))}
+            </select>
+          </div>
+          <ul>
+            {history.slice(0, 5).map((item) => (
+              <li key={item.taskId}>
+                <span>{formatTime(item.createdAt)}</span>
+                <strong>{item.totalScore ?? '—'} 分</strong>
+                <p>{item.summaryText ?? `${item.actionType} 已完成分析`}</p>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   )
@@ -81,7 +104,7 @@ function ComparisonCard({
     return (
       <div className="result-card">
         <h3>复测对比</h3>
-        <p>当前还没有可对比的上一条同动作样本。等你再录一条同类型动作，就能自动看到分数变化和改善项。</p>
+        <p>当前还没有可对比的同动作样本。等你再录一条，或者从历史记录里手动选一条样本后，就能看到分数变化和改善项。</p>
       </div>
     )
   }
@@ -92,8 +115,8 @@ function ComparisonCard({
       <p>{comparison.summaryText}</p>
       <ul>
         <li><span>总分变化</span><strong>{comparison.totalScoreDelta > 0 ? `+${comparison.totalScoreDelta}` : comparison.totalScoreDelta}</strong></li>
-        <li><span>上次样本</span><strong>{formatTime(comparison.previousCreatedAt)}</strong></li>
-        <li><span>本次样本</span><strong>{formatTime(comparison.currentCreatedAt)}</strong></li>
+        <li><span>对比样本</span><strong>{formatTime(comparison.previousCreatedAt)}</strong></li>
+        <li><span>当前样本</span><strong>{formatTime(comparison.currentCreatedAt)}</strong></li>
       </ul>
 
       <div className="coach-review-card">
@@ -124,8 +147,7 @@ function ComparisonCard({
             {comparison.declinedDimensions.map((item) => (
               <li key={item.name}>
                 <span>{item.name}</span>
-                <strong>{item.previousScore} → {item.currentScore}（{item.delta}）</strong>
-              </li>
+                <strong>{item.previousScore} → {item.currentScore}（{item.delta}）</strong></li>
             ))}
           </ul>
         </div>
@@ -146,6 +168,7 @@ function App() {
     poseResult,
     history,
     comparison,
+    selectedCompareTaskId,
     file,
     setFile,
     log,
@@ -161,6 +184,7 @@ function App() {
     analyze,
     refreshStatus,
     fetchResult,
+    applyCustomComparison,
   } = useAnalysisTask()
 
   return (
@@ -267,7 +291,12 @@ function App() {
                 </div>
 
                 <ComparisonCard comparison={comparison} />
-                <HistoryCard history={history} />
+                <HistoryCard
+                  history={history}
+                  selectedCompareTaskId={selectedCompareTaskId}
+                  onSelectCompare={applyCustomComparison}
+                  disabled={isBusy || isPolling || !taskId}
+                />
                 <PoseSummaryCard poseResult={poseResult} />
 
                 {report.preprocess?.metadata ? (

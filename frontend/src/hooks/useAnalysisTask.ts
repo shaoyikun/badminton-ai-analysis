@@ -186,6 +186,7 @@ export function useAnalysisTask() {
   const [poseResult, setPoseResult] = useState<PoseResult | null>(null)
   const [history, setHistory] = useState<TaskHistoryItem[]>([])
   const [comparison, setComparison] = useState<RetestComparison | null>(null)
+  const [selectedCompareTaskId, setSelectedCompareTaskId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [log, setLog] = useState<string[]>([])
   const [isBusy, setIsBusy] = useState(false)
@@ -219,23 +220,37 @@ export function useAnalysisTask() {
     const res = await fetch(`${API_BASE}/api/history?actionType=${action}`)
     const data = await res.json()
     if (!res.ok) return []
-    setHistory(data.items ?? [])
-    return data.items as TaskHistoryItem[]
+    const items = data.items ?? []
+    setHistory(items)
+    return items as TaskHistoryItem[]
   }
 
-  async function fetchComparison(currentTaskId?: string) {
+  async function fetchComparison(currentTaskId?: string, previousTaskId?: string) {
     const targetTaskId = currentTaskId ?? taskId
     if (!targetTaskId) return null
 
-    const res = await fetch(`${API_BASE}/api/tasks/${targetTaskId}/comparison`)
+    const url = previousTaskId
+      ? `${API_BASE}/api/tasks/${targetTaskId}/comparison?previousTaskId=${previousTaskId}`
+      : `${API_BASE}/api/tasks/${targetTaskId}/comparison`
+
+    const res = await fetch(url)
     const data = await res.json()
     if (!res.ok) {
       setComparison(null)
+      if (previousTaskId) appendLog(`自定义对比失败：${data.error ?? '未知错误'}`)
       return null
     }
     setComparison(data.comparison ?? null)
     if (data.history) setHistory(data.history)
+    if (data.comparison?.previousTaskId) setSelectedCompareTaskId(data.comparison.previousTaskId)
     return data.comparison as RetestComparison | null
+  }
+
+  async function applyCustomComparison(previousTaskId: string) {
+    if (!taskId || !previousTaskId) return
+    setSelectedCompareTaskId(previousTaskId)
+    await fetchComparison(taskId, previousTaskId)
+    appendLog('已切换到自定义历史样本对比')
   }
 
   async function createTask() {
@@ -260,6 +275,7 @@ export function useAnalysisTask() {
       setReport(null)
       setPoseResult(null)
       setComparison(null)
+      setSelectedCompareTaskId('')
       await fetchHistory(actionType)
       appendLog(`任务已创建：${data.taskId}（${selectedActionLabel}）`)
     } catch (error) {
@@ -292,6 +308,7 @@ export function useAnalysisTask() {
       setPoseStatus('idle')
       setPoseResult(null)
       setComparison(null)
+      setSelectedCompareTaskId('')
       appendLog(`上传完成：${data.fileName}`)
     } catch (error) {
       appendLog(`上传失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -334,9 +351,10 @@ export function useAnalysisTask() {
     setErrorState(null)
     setComparison(data.comparison ?? null)
     setHistory(data.history ?? [])
+    setSelectedCompareTaskId(data.comparison?.previousTaskId ?? '')
     if (showSuccessLog) appendLog('已自动拉取分析结果')
     await fetchPoseResult(true)
-    await fetchComparison(taskId)
+    await fetchComparison(taskId, data.comparison?.previousTaskId)
     return data as ReportResult
   }
 
@@ -398,6 +416,7 @@ export function useAnalysisTask() {
       setReport(null)
       setPoseResult(null)
       setComparison(null)
+      setSelectedCompareTaskId('')
       setErrorState(null)
       const res = await fetch(`${API_BASE}/api/tasks/${taskId}/analyze`, { method: 'POST' })
       const data = await res.json()
@@ -437,6 +456,8 @@ export function useAnalysisTask() {
     poseResult,
     history,
     comparison,
+    selectedCompareTaskId,
+    setSelectedCompareTaskId,
     file,
     setFile,
     log,
@@ -454,5 +475,6 @@ export function useAnalysisTask() {
     fetchResult,
     fetchHistory,
     fetchComparison,
+    applyCustomComparison,
   }
 }

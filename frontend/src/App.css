@@ -453,6 +453,22 @@ select:disabled,
   color: #4338ca;
 }
 
+.compare-selector {
+  margin-top: 12px;
+}
+
+.compare-selector label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+
+.compare-selector select {
+  margin-bottom: 0;
+}
+
 .comparison-block {
   margin-top: 12px;
 }
