@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readTasks, writeTasks, saveResult } from './store';
 import { ReportResult, TaskRecord } from '../types/task';
+import { runPreprocess } from './preprocessService';
 
 function now() {
   return new Date().toISOString();
@@ -14,6 +15,9 @@ export function createTask(actionType: string): TaskRecord {
     taskId: `task_${randomUUID().slice(0, 8)}`,
     actionType,
     status: 'created',
+    preprocess: {
+      status: 'idle',
+    },
     createdAt: now(),
     updatedAt: now(),
   };
@@ -30,18 +34,36 @@ export function updateTask(taskId: string, patch: Partial<TaskRecord>): TaskReco
   const tasks = readTasks();
   const index = tasks.findIndex((task) => task.taskId === taskId);
   if (index === -1) return undefined;
-  tasks[index] = { ...tasks[index], ...patch, updatedAt: now() };
+  tasks[index] = {
+    ...tasks[index],
+    ...patch,
+    preprocess: patch.preprocess ? { ...(tasks[index].preprocess ?? { status: 'idle' }), ...patch.preprocess } : tasks[index].preprocess,
+    updatedAt: now(),
+  };
   writeTasks(tasks);
   return tasks[index];
 }
 
-export function saveUpload(taskId: string, fileName: string, contentBase64?: string) {
+export function saveUpload(taskId: string, fileName: string, content?: Buffer, mimeType?: string) {
   const uploadsDir = path.resolve(process.cwd(), 'uploads');
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   const safeName = `${taskId}-${fileName}`;
   const uploadPath = path.join(uploadsDir, safeName);
-  fs.writeFileSync(uploadPath, contentBase64 ? Buffer.from(contentBase64, 'base64') : Buffer.from('demo'), undefined);
-  return updateTask(taskId, { fileName, uploadPath, status: 'uploaded' });
+  fs.writeFileSync(uploadPath, content ?? Buffer.from('demo'));
+  return updateTask(taskId, {
+    fileName,
+    mimeType,
+    uploadPath,
+    status: 'uploaded',
+    preprocess: {
+      status: 'idle',
+      startedAt: undefined,
+      completedAt: undefined,
+      metadata: undefined,
+      artifacts: undefined,
+      errorMessage: undefined,
+    },
+  });
 }
 
 function buildMockResult(task: TaskRecord): ReportResult {
@@ -68,19 +90,40 @@ function buildMockResult(task: TaskRecord): ReportResult {
         description: '每天 3 组，每组 15 次。',
       },
     ],
+    compareSummary: '当前 PoC 阶段暂未接入真实复测对比，先返回结构占位字段。',
     retestAdvice: '建议 3~7 天后保持同一机位复测。',
+    createdAt: now(),
+    preprocess: {
+      metadata: task.preprocess?.metadata,
+      artifacts: task.preprocess?.artifacts,
+    },
   };
 }
 
 export async function startMockAnalysis(taskId: string) {
-  const task = updateTask(taskId, { status: 'processing' });
-  if (!task) return undefined;
+  const current = getTask(taskId);
+  if (!current) return undefined;
+  if (!current.uploadPath) return undefined;
+
+  let task = current;
+  if (task.preprocess?.status !== 'completed') {
+    const preprocessed = await runPreprocess(taskId);
+    if (!preprocessed || preprocessed.preprocess?.status !== 'completed') {
+      return updateTask(taskId, { status: 'failed', errorCode: 'preprocess_failed' });
+    }
+    task = preprocessed;
+  }
+
+  const processingTask = updateTask(taskId, { status: 'processing', errorCode: undefined });
+  if (!processingTask) return undefined;
+
   setTimeout(() => {
-    const current = getTask(taskId);
-    if (!current) return;
-    const result = buildMockResult(current);
+    const latest = getTask(taskId);
+    if (!latest) return;
+    const result = buildMockResult(latest);
     const resultPath = saveResult(taskId, result);
     updateTask(taskId, { status: 'completed', resultPath });
   }, 2500);
-  return task;
+
+  return processingTask;
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed'
@@ -14,140 +14,331 @@ type ReportResult = {
 }
 
 const API_BASE = 'http://127.0.0.1:8787'
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  created: '已创建',
+  uploaded: '已上传',
+  processing: '分析中',
+  completed: '已完成',
+  failed: '失败',
+}
 
 function App() {
   const [actionType, setActionType] = useState('clear')
   const [taskId, setTaskId] = useState('')
   const [status, setStatus] = useState<TaskStatus | ''>('')
   const [report, setReport] = useState<ReportResult | null>(null)
+  const [file, setFile] = useState<File | null>(null)
   const [log, setLog] = useState<string[]>([])
+  const [isBusy, setIsBusy] = useState(false)
+  const [isPolling, setIsPolling] = useState(false)
+  const pollingRef = useRef<number | null>(null)
 
-  const appendLog = (text: string) => setLog((prev) => [text, ...prev])
+  const canUpload = Boolean(taskId && file && (status === 'created' || status === 'uploaded'))
+  const canAnalyze = Boolean(taskId && status === 'uploaded')
+  const canFetchResult = Boolean(taskId && status === 'completed')
 
-  async function createTask() {
-    const res = await fetch(`${API_BASE}/api/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actionType }),
-    })
-    const data = await res.json()
-    setTaskId(data.taskId)
-    setStatus(data.status)
-    appendLog(`任务已创建：${data.taskId}`)
+  const selectedActionLabel = useMemo(() => {
+    return actionType === 'smash' ? '杀球' : '正手高远球'
+  }, [actionType])
+
+  const appendLog = (text: string) => setLog((prev) => [`${new Date().toLocaleTimeString('zh-CN', { hour12: false })} · ${text}`, ...prev])
+
+  function stopPolling() {
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+    setIsPolling(false)
   }
 
-  async function uploadMockVideo() {
+  async function createTask() {
+    try {
+      setIsBusy(true)
+      stopPolling()
+      const res = await fetch(`${API_BASE}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionType }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        appendLog(`创建任务失败：${data.error ?? '未知错误'}`)
+        return
+      }
+      setTaskId(data.taskId)
+      setStatus(data.status)
+      setReport(null)
+      appendLog(`任务已创建：${data.taskId}（${selectedActionLabel}）`)
+    } catch (error) {
+      appendLog(`创建任务失败：${error instanceof Error ? error.message : '网络异常'}`)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function uploadVideo() {
     if (!taskId) return appendLog('请先创建任务')
-    const res = await fetch(`${API_BASE}/api/tasks/${taskId}/upload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: 'demo.mov', contentBase64: btoa('demo') }),
-    })
+    if (!file) return appendLog('请先选择视频文件')
+
+    try {
+      setIsBusy(true)
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`${API_BASE}/api/tasks/${taskId}/upload`, {
+        method: 'POST',
+        body: form,
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        appendLog(`上传失败：${data.error ?? '未知错误'}`)
+        return
+      }
+      setStatus(data.status)
+      appendLog(`上传完成：${data.fileName}`)
+    } catch (error) {
+      appendLog(`上传失败：${error instanceof Error ? error.message : '网络异常'}`)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function fetchResult(showSuccessLog = true) {
+    if (!taskId) {
+      appendLog('请先创建任务')
+      return null
+    }
+
+    const res = await fetch(`${API_BASE}/api/tasks/${taskId}/result`)
     const data = await res.json()
-    setStatus(data.status)
-    appendLog(`上传完成：${data.fileName}`)
+    if (!res.ok) {
+      appendLog(`结果未就绪：${data.error ?? '未知错误'}`)
+      return null
+    }
+    setReport(data)
+    if (showSuccessLog) appendLog('已自动拉取分析结果')
+    return data as ReportResult
+  }
+
+  async function refreshStatus(options?: { silent?: boolean }) {
+    if (!taskId) {
+      if (!options?.silent) appendLog('请先创建任务')
+      return null
+    }
+
+    const res = await fetch(`${API_BASE}/api/tasks/${taskId}`)
+    const data = await res.json()
+    if (!res.ok) {
+      if (!options?.silent) appendLog(`查询状态失败：${data.error ?? '未知错误'}`)
+      return null
+    }
+
+    setStatus((prev) => {
+      if (prev !== data.status && !options?.silent) {
+        appendLog(`状态更新：${STATUS_LABELS[data.status as TaskStatus] ?? data.status}`)
+      }
+      return data.status
+    })
+
+    return data.status as TaskStatus
+  }
+
+  function startPolling() {
+    stopPolling()
+    setIsPolling(true)
+    appendLog('开始自动轮询任务状态')
+
+    pollingRef.current = window.setInterval(async () => {
+      const nextStatus = await refreshStatus({ silent: true })
+      if (nextStatus === 'completed') {
+        stopPolling()
+        appendLog('分析已完成，正在自动获取结果')
+        await fetchResult(false)
+      }
+      if (nextStatus === 'failed') {
+        stopPolling()
+        appendLog('分析失败，请检查后端日志或重试')
+      }
+    }, 1500)
   }
 
   async function analyze() {
     if (!taskId) return appendLog('请先创建任务')
-    const res = await fetch(`${API_BASE}/api/tasks/${taskId}/analyze`, { method: 'POST' })
-    const data = await res.json()
-    setStatus(data.status)
-    appendLog('已启动分析')
-  }
+    if (status !== 'uploaded') return appendLog('请先上传视频后再启动分析')
 
-  async function refreshStatus() {
-    if (!taskId) return appendLog('请先创建任务')
-    const res = await fetch(`${API_BASE}/api/tasks/${taskId}`)
-    const data = await res.json()
-    setStatus(data.status)
-    appendLog(`当前状态：${data.status}`)
-  }
-
-  async function fetchResult() {
-    if (!taskId) return appendLog('请先创建任务')
-    const res = await fetch(`${API_BASE}/api/tasks/${taskId}/result`)
-    const data = await res.json()
-    if (!res.ok) {
-      appendLog(`结果未就绪：${data.error}`)
-      return
+    try {
+      setIsBusy(true)
+      setReport(null)
+      const res = await fetch(`${API_BASE}/api/tasks/${taskId}/analyze`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        appendLog(`启动分析失败：${data.error ?? '未知错误'}`)
+        return
+      }
+      setStatus(data.status)
+      appendLog('已启动分析')
+      startPolling()
+    } catch (error) {
+      appendLog(`启动分析失败：${error instanceof Error ? error.message : '网络异常'}`)
+    } finally {
+      setIsBusy(false)
     }
-    setReport(data)
-    appendLog('已获取分析结果')
   }
+
+  useEffect(() => {
+    return () => stopPolling()
+  }, [])
 
   return (
     <div className="app">
-      <div className="container">
-        <h1>Badminton AI PoC</h1>
-        <p className="subtitle">React 前端 + Fastify 后端的最小可运行 PoC。当前结果为 mock 分析结果。</p>
+      <div className="phone-shell">
+        <div className="phone-status-bar">
+          <span>Badminton AI PoC</span>
+          <span>{isPolling ? '自动轮询中' : '本地联调'}</span>
+        </div>
 
-        <section className="panel">
-          <h2>1. 创建任务</h2>
-          <div className="row">
-            <select value={actionType} onChange={(e) => setActionType(e.target.value)}>
+        <div className="screen">
+          <header className="hero-card">
+            <p className="eyebrow">羽毛球动作分析 · React H5 PoC</p>
+            <h1>上传视频后，自动跑完整条分析链路</h1>
+            <p className="subtitle">
+              现在主流程已经收口成：创建任务 → 上传视频 → 启动分析 → 自动轮询 → 自动展示结果。
+            </p>
+          </header>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2>1. 创建任务</h2>
+              <span className={`status-pill ${status || 'idle'}`}>{status ? STATUS_LABELS[status as TaskStatus] : '未开始'}</span>
+            </div>
+
+            <label className="field-label">动作类型</label>
+            <select value={actionType} onChange={(e) => setActionType(e.target.value)} disabled={isBusy || isPolling}>
               <option value="clear">正手高远球</option>
               <option value="smash">杀球</option>
             </select>
-            <button onClick={createTask}>创建任务</button>
-          </div>
-          <p>Task ID：{taskId || '未创建'}</p>
-          <p>Status：{status || '未开始'}</p>
-        </section>
 
-        <section className="panel">
-          <h2>2. 执行流程</h2>
-          <div className="actions">
-            <button onClick={uploadMockVideo}>上传 mock 视频</button>
-            <button onClick={analyze}>启动分析</button>
-            <button onClick={refreshStatus}>查询状态</button>
-            <button onClick={fetchResult}>获取结果</button>
-          </div>
-        </section>
+            <button className="primary-button" onClick={createTask} disabled={isBusy || isPolling}>
+              {taskId ? '重新创建任务' : '创建任务'}
+            </button>
 
-        <section className="panel">
-          <h2>3. 分析结果</h2>
-          {!report ? (
-            <p className="muted">还没有结果，先走完上面的流程。</p>
-          ) : (
-            <div>
-              <p><strong>动作类型：</strong>{report.actionType}</p>
-              <p><strong>总分：</strong>{report.totalScore}</p>
+            <div className="meta-card">
               <div>
-                <strong>维度分数：</strong>
-                <ul>
-                  {report.dimensionScores.map((item) => (
-                    <li key={item.name}>{item.name}：{item.score}</li>
-                  ))}
-                </ul>
+                <span className="meta-label">Task ID</span>
+                <strong>{taskId || '未创建'}</strong>
               </div>
               <div>
-                <strong>问题：</strong>
-                <ul>
-                  {report.issues.map((item) => (
-                    <li key={item.title}>{item.title}：{item.impact}</li>
-                  ))}
-                </ul>
+                <span className="meta-label">当前动作</span>
+                <strong>{selectedActionLabel}</strong>
               </div>
-              <div>
-                <strong>建议：</strong>
-                <ul>
-                  {report.suggestions.map((item) => (
-                    <li key={item.title}>{item.title}：{item.description}</li>
-                  ))}
-                </ul>
-              </div>
-              <p><strong>复测建议：</strong>{report.retestAdvice}</p>
             </div>
-          )}
-        </section>
+          </section>
 
-        <section className="panel">
-          <h2>4. 操作日志</h2>
-          <div className="log">
-            {log.length === 0 ? <p className="muted">还没有操作记录。</p> : log.map((item, idx) => <div key={idx}>{item}</div>)}
-          </div>
-        </section>
+          <section className="panel">
+            <div className="panel-header">
+              <h2>2. 上传视频</h2>
+              <span className="panel-tip">支持本地真实文件</span>
+            </div>
+
+            <label className="upload-box">
+              <input type="file" accept="video/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={isBusy || isPolling} />
+              <span className="upload-title">{file ? file.name : '点击选择视频文件'}</span>
+              <span className="upload-subtitle">建议先用 5~15 秒短视频做联调验证</span>
+            </label>
+
+            <div className="button-group">
+              <button className="primary-button" onClick={uploadVideo} disabled={!canUpload || isBusy || isPolling}>
+                上传视频
+              </button>
+              <button className="primary-button secondary" onClick={analyze} disabled={!canAnalyze || isBusy || isPolling}>
+                启动分析
+              </button>
+            </div>
+
+            <div className="button-group compact">
+              <button className="ghost-button" onClick={() => refreshStatus()} disabled={!taskId || isBusy}>
+                手动查状态
+              </button>
+              <button className="ghost-button" onClick={() => fetchResult()} disabled={!canFetchResult || isBusy}>
+                手动取结果
+              </button>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2>3. 分析结果</h2>
+              <span className="panel-tip">完成后自动展示</span>
+            </div>
+
+            {!report ? (
+              <div className="empty-state">
+                <strong>{isPolling ? '系统正在自动轮询状态…' : '还没有结果'}</strong>
+                <p>{isPolling ? '分析完成后会自动拉取结果，不用手动刷新。' : '先完成创建、上传、启动分析这三步。'}</p>
+              </div>
+            ) : (
+              <div className="result-stack">
+                <div className="score-card">
+                  <span className="meta-label">总分</span>
+                  <strong>{report.totalScore}</strong>
+                  <p>{report.actionType === 'smash' ? '杀球动作' : '正手高远球'} · 模拟结构化报告</p>
+                </div>
+
+                <div className="result-card">
+                  <h3>维度分数</h3>
+                  <ul>
+                    {report.dimensionScores.map((item) => (
+                      <li key={item.name}>
+                        <span>{item.name}</span>
+                        <strong>{item.score}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="result-card">
+                  <h3>核心问题</h3>
+                  <ul>
+                    {report.issues.map((item) => (
+                      <li key={item.title}>
+                        <strong>{item.title}</strong>
+                        <p>{item.description}</p>
+                        <span>{item.impact}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="result-card">
+                  <h3>训练建议</h3>
+                  <ul>
+                    {report.suggestions.map((item) => (
+                      <li key={item.title}>
+                        <strong>{item.title}</strong>
+                        <p>{item.description}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="retest-card">
+                  <span className="meta-label">复测建议</span>
+                  <p>{report.retestAdvice}</p>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <h2>4. 操作日志</h2>
+              <span className="panel-tip">方便联调</span>
+            </div>
+
+            <div className="log">
+              {log.length === 0 ? <p className="muted">还没有操作记录。</p> : log.map((item, idx) => <div key={idx} className="log-item">{item}</div>)}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   )
