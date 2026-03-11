@@ -3,6 +3,7 @@ import './App.css'
 
 type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed'
 type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
+type PoseStatus = 'idle' | 'processing' | 'completed' | 'failed'
 
 type ReportResult = {
   taskId: string
@@ -33,6 +34,31 @@ type ReportResult = {
   }
 }
 
+type PoseResult = {
+  engine: string
+  frameCount: number
+  detectedFrameCount: number
+  summary: {
+    bestFrameIndex: number | null
+    stableFrameCount: number
+    avgStabilityScore: number
+    avgBodyTurnScore: number
+    avgRacketArmLiftScore: number
+    humanSummary: string
+  }
+  frames: {
+    frameIndex: number
+    fileName: string
+    status: string
+    metrics: {
+      stabilityScore: number
+      bodyTurnScore: number | null
+      racketArmLiftScore: number | null
+      summaryText: string
+    } | null
+  }[]
+}
+
 const API_BASE = 'http://127.0.0.1:8787'
 const STATUS_LABELS: Record<TaskStatus, string> = {
   created: '已创建',
@@ -47,6 +73,12 @@ const PREPROCESS_LABELS: Record<PreprocessStatus, string> = {
   processing: '预处理中',
   completed: '预处理完成',
   failed: '预处理失败',
+}
+const POSE_LABELS: Record<PoseStatus, string> = {
+  idle: '未开始',
+  processing: '识别中',
+  completed: '已完成',
+  failed: '失败',
 }
 const ERROR_COPY: Record<string, { title: string; message: string }> = {
   upload_failed: {
@@ -84,6 +116,11 @@ function formatFileSize(size?: number) {
   return `${(size / 1024 / 1024).toFixed(2)} MB`
 }
 
+function formatScore(value?: number | null) {
+  if (value === null || value === undefined) return '—'
+  return value.toFixed(2)
+}
+
 function buildAssetUrl(relativePath?: string) {
   if (!relativePath) return ''
   return `${API_BASE}/${relativePath}`
@@ -102,7 +139,9 @@ function App() {
   const [taskId, setTaskId] = useState('')
   const [status, setStatus] = useState<TaskStatus | ''>('')
   const [preprocessStatus, setPreprocessStatus] = useState<PreprocessStatus>('idle')
+  const [poseStatus, setPoseStatus] = useState<PoseStatus>('idle')
   const [report, setReport] = useState<ReportResult | null>(null)
+  const [poseResult, setPoseResult] = useState<PoseResult | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [log, setLog] = useState<string[]>([])
   const [isBusy, setIsBusy] = useState(false)
@@ -152,7 +191,9 @@ function App() {
       setTaskId(data.taskId)
       setStatus(data.status)
       setPreprocessStatus('idle')
+      setPoseStatus('idle')
       setReport(null)
+      setPoseResult(null)
       appendLog(`任务已创建：${data.taskId}（${selectedActionLabel}）`)
     } catch (error) {
       appendLog(`创建任务失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -181,12 +222,28 @@ function App() {
       }
       setStatus(data.status)
       setPreprocessStatus(data.preprocessStatus ?? 'idle')
+      setPoseStatus('idle')
+      setPoseResult(null)
       appendLog(`上传完成：${data.fileName}`)
     } catch (error) {
       appendLog(`上传失败：${error instanceof Error ? error.message : '网络异常'}`)
     } finally {
       setIsBusy(false)
     }
+  }
+
+  async function fetchPoseResult(silent = false) {
+    if (!taskId) return null
+    const res = await fetch(`${API_BASE}/api/tasks/${taskId}/pose`)
+    const data = await res.json()
+    if (!res.ok) {
+      if (!silent) appendLog(`姿态结果未就绪：${data.error ?? '未知错误'}`)
+      return null
+    }
+    setPoseResult(data)
+    setPoseStatus('completed')
+    if (!silent) appendLog('已获取姿态摘要结果')
+    return data as PoseResult
   }
 
   async function fetchResult(showSuccessLog = true) {
@@ -204,6 +261,7 @@ function App() {
     setReport(data)
     setErrorState(null)
     if (showSuccessLog) appendLog('已自动拉取分析结果')
+    await fetchPoseResult(true)
     return data as ReportResult
   }
 
@@ -221,6 +279,7 @@ function App() {
     }
 
     setPreprocessStatus(data.preprocessStatus ?? 'idle')
+    setPoseStatus(data.poseStatus ?? 'idle')
     if (data.status === 'failed' && data.errorCode) {
       setFriendlyError(data.errorCode, data.errorMessage)
     }
@@ -259,6 +318,7 @@ function App() {
     try {
       setIsBusy(true)
       setReport(null)
+      setPoseResult(null)
       setErrorState(null)
       const res = await fetch(`${API_BASE}/api/tasks/${taskId}/analyze`, { method: 'POST' })
       const data = await res.json()
@@ -360,7 +420,7 @@ function App() {
 
             <div className="preprocess-strip">
               <span className={`status-pill ${preprocessStatus}`}>{PREPROCESS_LABELS[preprocessStatus]}</span>
-              <span className="panel-tip">预处理会先做基础校验和抽帧生成</span>
+              <span className={`status-pill ${poseStatus}`}>{POSE_LABELS[poseStatus]}</span>
             </div>
           </section>
 
@@ -391,6 +451,21 @@ function App() {
                   <p>{report.actionType === 'smash' ? '杀球动作' : '正手高远球'} · 模拟结构化报告</p>
                 </div>
 
+                {poseResult ? (
+                  <div className="result-card pose-summary-card">
+                    <h3>姿态摘要</h3>
+                    <p>{poseResult.summary.humanSummary}</p>
+                    <div className="pose-metrics-grid">
+                      <div className="pose-metric-item"><span>识别引擎</span><strong>{poseResult.engine}</strong></div>
+                      <div className="pose-metric-item"><span>命中帧数</span><strong>{poseResult.detectedFrameCount} / {poseResult.frameCount}</strong></div>
+                      <div className="pose-metric-item"><span>最佳帧</span><strong>{poseResult.summary.bestFrameIndex ?? '—'}</strong></div>
+                      <div className="pose-metric-item"><span>稳定度均值</span><strong>{formatScore(poseResult.summary.avgStabilityScore)}</strong></div>
+                      <div className="pose-metric-item"><span>侧身展开</span><strong>{formatScore(poseResult.summary.avgBodyTurnScore)}</strong></div>
+                      <div className="pose-metric-item"><span>挥拍臂抬举</span><strong>{formatScore(poseResult.summary.avgRacketArmLiftScore)}</strong></div>
+                    </div>
+                  </div>
+                ) : null}
+
                 {report.preprocess?.metadata ? (
                   <div className="result-card">
                     <h3>预处理摘要</h3>
@@ -420,15 +495,23 @@ function App() {
                   <div className="result-card">
                     <h3>关键帧调试视图</h3>
                     <div className="frame-grid">
-                      {report.preprocess.artifacts.sampledFrames.map((frame) => (
-                        <div key={frame.fileName} className="frame-card">
-                          <img src={buildAssetUrl(frame.relativePath)} alt={`关键帧 ${frame.index}`} />
-                          <div className="frame-meta">
-                            <strong>帧 {frame.index}</strong>
-                            <span>{frame.timestampSeconds}s</span>
+                      {report.preprocess.artifacts.sampledFrames.map((frame) => {
+                        const poseFrame = poseResult?.frames.find((item) => item.frameIndex === frame.index)
+                        return (
+                          <div key={frame.fileName} className="frame-card">
+                            <img src={buildAssetUrl(frame.relativePath)} alt={`关键帧 ${frame.index}`} />
+                            <div className="frame-meta">
+                              <strong>帧 {frame.index}</strong>
+                              <span>{frame.timestampSeconds}s</span>
+                            </div>
+                            {poseFrame?.metrics ? (
+                              <div className="frame-metrics">
+                                <span>{poseFrame.metrics.summaryText}</span>
+                              </div>
+                            ) : null}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 ) : null}

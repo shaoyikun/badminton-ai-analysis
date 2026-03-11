@@ -377,6 +377,47 @@ select:disabled,
   color: #667085;
 }
 
+.frame-metrics {
+  padding: 0 12px 12px;
+}
+
+.frame-metrics span {
+  display: block;
+  font-size: 12px;
+  color: #475467;
+  line-height: 1.5;
+}
+
+.pose-summary-card p {
+  margin-top: 10px;
+}
+
+.pose-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.pose-metric-item {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.pose-metric-item span {
+  display: block;
+  font-size: 12px;
+  color: #667085;
+  margin-bottom: 6px;
+}
+
+.pose-metric-item strong {
+  color: #101828;
+  font-size: 15px;
+}
+
 .result-card li,
 .log-item {
   background: #f8fafc;
