@@ -164,7 +164,8 @@ select:disabled,
 .meta-card,
 .score-card,
 .retest-card,
-.empty-state {
+.empty-state,
+.error-state-card {
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
@@ -299,18 +300,27 @@ select:disabled,
 }
 
 .empty-state strong,
-.result-card strong {
+.result-card strong,
+.error-state-card strong {
   color: #101828;
 }
 
 .empty-state p,
 .score-card p,
 .result-card p,
-.result-card span,
-.retest-card p {
+.retest-card p,
+.error-state-card p,
+.error-state-card span,
+.result-card span {
   margin: 6px 0 0;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.error-state-card {
+  border-color: #fecaca;
+  background: #fef2f2;
+  margin-bottom: 12px;
 }
 
 .result-stack {

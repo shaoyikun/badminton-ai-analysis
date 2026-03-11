@@ -58,6 +58,13 @@ async function buildServer() {
     if (!updated) {
       return reply.status(500).send({ error: 'preprocess failed to start' });
     }
+    if (updated.preprocess?.status === 'failed') {
+      return reply.status(422).send({
+        error: updated.preprocess.errorMessage ?? 'preprocess failed',
+        errorCode: updated.preprocess.errorCode ?? updated.errorCode ?? 'upload_failed',
+        preprocess: updated.preprocess,
+      });
+    }
     return {
       taskId: updated.taskId,
       status: updated.status,
@@ -87,6 +94,13 @@ async function buildServer() {
     if (!updated) {
       return reply.status(500).send({ error: 'failed to start analysis' });
     }
+    if (updated.status === 'failed') {
+      return reply.status(422).send({
+        error: updated.preprocess?.errorMessage ?? 'analysis blocked by preprocess validation',
+        errorCode: updated.preprocess?.errorCode ?? updated.errorCode ?? 'upload_failed',
+        preprocessStatus: updated.preprocess?.status ?? 'failed',
+      });
+    }
     return {
       taskId: updated.taskId,
       status: updated.status,
@@ -103,6 +117,8 @@ async function buildServer() {
     return {
       taskId: task.taskId,
       status: task.status,
+      errorCode: task.errorCode,
+      errorMessage: task.preprocess?.errorMessage,
       preprocessStatus: task.preprocess?.status ?? 'idle',
       updatedAt: task.updatedAt,
     };
