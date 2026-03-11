@@ -41,6 +41,9 @@
 - `docs/prd/MVP-PRD.md`：最初版 MVP PRD
 - `docs/prd/PRD-V1.md`：当前主 PRD
 - `docs/design/INTERACTION-DESIGN-V1.md`：交互设计文档
+- `docs/design/WIREFRAMES-V1.md`：页面线框说明
+- `docs/design/REPORT-TEMPLATE-V1.md`：报告模板文档
+- `docs/data/VIDEO-CAPTURE-SPEC-V1.md`：视频拍摄规范
 - `docs/tech/TECH-SOLUTION-V1.md`：当前主技术方案
 
 ---
