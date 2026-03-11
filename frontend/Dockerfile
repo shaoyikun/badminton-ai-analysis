@@ -1,12 +1,20 @@
-FROM node:22-bookworm
-
-WORKDIR /app
-
-COPY frontend/package*.json /app/frontend/
-RUN cd /app/frontend && npm install
+FROM node:22-bookworm AS builder
 
 WORKDIR /app/frontend
 
-EXPOSE 5173
+COPY frontend/package*.json ./
+RUN npm install
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+COPY frontend/ ./
+ARG VITE_API_BASE=
+ENV VITE_API_BASE=${VITE_API_BASE}
+RUN npm run build
+
+FROM nginx:1.27-alpine
+
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/frontend/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -3,32 +3,40 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    working_dir: /app/backend
     environment:
       PYTHON_BIN: python3
     ports:
       - "8787:8787"
     volumes:
-      - .:/app
-      - backend_node_modules:/app/backend/node_modules
-    command: npm run dev
+      - backend_data:/app/backend/data
+      - backend_uploads:/app/backend/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    working_dir: /app/frontend
-    environment:
-      VITE_API_BASE: http://127.0.0.1:8787
+      args:
+        VITE_API_BASE: ""
     ports:
-      - "5173:5173"
-    volumes:
-      - .:/app
-      - frontend_node_modules:/app/frontend/node_modules
+      - "5173:80"
     depends_on:
-      - backend
-    command: npm run dev -- --host 0.0.0.0 --port 5173
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
-  backend_node_modules:
-  frontend_node_modules:
+  backend_data:
+  backend_uploads:
