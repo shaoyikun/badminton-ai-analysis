@@ -41,7 +41,7 @@ export async function runPoseAnalysis(taskId: string) {
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
 
-    const parsed = JSON.parse(output) as { result: { engine: string; frameCount: number; detectedFrameCount: number; frames: any[] } };
+    const parsed = JSON.parse(output) as { result: { engine: string; frameCount: number; detectedFrameCount: number; summary?: { bestFrameIndex?: number | null; humanSummary?: string }; frames: any[] } };
     const resultPath = savePoseResult(taskId, parsed.result);
 
     return updateTask(taskId, {
@@ -54,6 +54,8 @@ export async function runPoseAnalysis(taskId: string) {
           engine: parsed.result.engine,
           frameCount: parsed.result.frameCount,
           detectedFrameCount: parsed.result.detectedFrameCount,
+          bestFrameIndex: parsed.result.summary?.bestFrameIndex,
+          humanSummary: parsed.result.summary?.humanSummary,
         },
       },
     });

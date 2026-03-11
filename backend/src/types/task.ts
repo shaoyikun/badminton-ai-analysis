@@ -61,23 +61,45 @@ export interface PreprocessInfo {
   artifacts?: PreprocessArtifacts;
 }
 
+export interface PoseKeypoint {
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  visibility: number;
+}
+
+export interface PoseFrameMetrics {
+  stabilityScore: number;
+  shoulderSpan: number | null;
+  hipSpan: number | null;
+  bodyTurnScore: number | null;
+  racketArmLiftScore: number | null;
+  summaryText: string;
+}
+
 export interface PoseFrameResult {
   frameIndex: number;
   fileName: string;
   status: string;
-  keypoints: Array<{
-    name: string;
-    x: number;
-    y: number;
-    z: number;
-    visibility: number;
-  }>;
+  keypoints: PoseKeypoint[];
+  metrics: PoseFrameMetrics | null;
+}
+
+export interface PoseOverallSummary {
+  bestFrameIndex: number | null;
+  stableFrameCount: number;
+  avgStabilityScore: number;
+  avgBodyTurnScore: number;
+  avgRacketArmLiftScore: number;
+  humanSummary: string;
 }
 
 export interface PoseAnalysisResult {
   engine: string;
   frameCount: number;
   detectedFrameCount: number;
+  summary: PoseOverallSummary;
   frames: PoseFrameResult[];
 }
 
@@ -91,6 +113,8 @@ export interface PoseInfo {
     engine: string;
     frameCount: number;
     detectedFrameCount: number;
+    bestFrameIndex?: number | null;
+    humanSummary?: string;
   };
 }
 
