@@ -18,10 +18,22 @@ for arg in "$@"; do
   esac
 done
 
-if command -v docker >/dev/null 2>&1 && command -v colima >/dev/null 2>&1; then
-  if ! colima status >/dev/null 2>&1; then
-    echo "[1/3] Starting colima..."
-    colima start
+has_docker=0
+if command -v docker >/dev/null 2>&1; then
+  has_docker=1
+fi
+
+if [[ "$has_docker" -eq 1 ]]; then
+  if ! docker info >/dev/null 2>&1; then
+    if command -v colima >/dev/null 2>&1; then
+      echo "[1/3] Starting colima..."
+      colima start
+    else
+      echo "Docker CLI found, but Docker daemon is not available."
+      echo "If you use Docker Desktop, please start Docker Desktop first."
+      echo "If you use colima, install/start colima first."
+      exit 1
+    fi
   fi
 
   if [[ "$WITH_BUILD" -eq 1 ]]; then
@@ -48,7 +60,7 @@ if command -v docker >/dev/null 2>&1 && command -v colima >/dev/null 2>&1; then
 fi
 
 if [[ -x "$ROOT_DIR/scripts/start-dev.sh" ]]; then
-  echo "Docker / colima not found. Falling back to local dev mode..."
+  echo "Docker not found. Falling back to local dev mode..."
   exec "$ROOT_DIR/scripts/start-dev.sh"
 fi
 

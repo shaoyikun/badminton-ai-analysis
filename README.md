@@ -174,6 +174,8 @@ docker compose up --build
 ./scripts/up.sh
 ```
 
+说明：`up.sh` 现在同时兼容 Docker Desktop 和 colima 两种环境；如果检测到 Docker daemon 不可用，且本机装了 colima，才会尝试自动启动 colima。
+
 如果你刚 pull 了新代码，或者我改了 Docker / 后端 / Python 分析逻辑，建议用带重建的版本：
 
 ```bash

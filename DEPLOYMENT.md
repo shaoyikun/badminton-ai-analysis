@@ -28,6 +28,8 @@ docker compose down
 ./scripts/up.sh
 ```
 
+该脚本同时兼容 Docker Desktop 和 colima；如果 Docker daemon 当前不可用，且本机装了 colima，脚本会尝试自动拉起 colima。
+
 如果刚拉了新代码，或需要强制重建镜像：
 
 ```bash
