@@ -122,12 +122,23 @@ export interface ReportResult {
   taskId: string;
   actionType: string;
   totalScore: number;
+  summaryText?: string;
   dimensionScores: DimensionScore[];
   issues: IssueItem[];
   suggestions: SuggestionItem[];
   compareSummary?: string;
   retestAdvice: string;
   createdAt?: string;
+  poseBased?: boolean;
+  scoringEvidence?: {
+    detectedFrameCount?: number;
+    frameCount?: number;
+    avgStabilityScore?: number;
+    avgBodyTurnScore?: number;
+    avgRacketArmLiftScore?: number;
+    bestFrameIndex?: number | null;
+    humanSummary?: string;
+  };
   preprocess?: {
     metadata?: VideoMetadata;
     artifacts?: PreprocessArtifacts;

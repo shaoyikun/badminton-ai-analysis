@@ -41,7 +41,7 @@ export async function runPoseAnalysis(taskId: string) {
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
 
-    const parsed = JSON.parse(output) as { result: { engine: string; frameCount: number; detectedFrameCount: number; summary?: { bestFrameIndex?: number | null; humanSummary?: string }; frames: any[] } };
+    const parsed = JSON.parse(output) as { result: import('../types/task').PoseAnalysisResult };
     const resultPath = savePoseResult(taskId, parsed.result);
 
     return updateTask(taskId, {

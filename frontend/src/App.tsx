@@ -9,6 +9,17 @@ type ReportResult = {
   taskId: string
   actionType: string
   totalScore: number
+  summaryText?: string
+  poseBased?: boolean
+  scoringEvidence?: {
+    detectedFrameCount?: number
+    frameCount?: number
+    avgStabilityScore?: number
+    avgBodyTurnScore?: number
+    avgRacketArmLiftScore?: number
+    bestFrameIndex?: number | null
+    humanSummary?: string
+  }
   dimensionScores: { name: string; score: number }[]
   issues: { title: string; description: string; impact: string }[]
   suggestions: { title: string; description: string }[]
@@ -448,7 +459,8 @@ function App() {
                 <div className="score-card">
                   <span className="meta-label">总分</span>
                   <strong>{report.totalScore}</strong>
-                  <p>{report.actionType === 'smash' ? '杀球动作' : '正手高远球'} · 模拟结构化报告</p>
+                  <p>{report.actionType === 'smash' ? '杀球动作' : '正手高远球'} · {report.poseBased ? '已接入 pose 规则映射' : '模拟结构化报告'}</p>
+                  {report.summaryText ? <p>{report.summaryText}</p> : null}
                 </div>
 
                 {poseResult ? (
