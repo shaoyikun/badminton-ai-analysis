@@ -49,6 +49,18 @@ export type ReportResult = {
   compareSummary?: string
   comparison?: RetestComparison
   history?: TaskHistoryItem[]
+  standardComparison?: {
+    sectionTitle: string
+    summaryText: string
+    currentFrameLabel: string
+    standardFrameLabel: string
+    standardReference: {
+      title: string
+      cue: string
+      imageLabel: string
+    }
+    differences: string[]
+  }
   scoringEvidence?: {
     detectedFrameCount?: number
     frameCount?: number

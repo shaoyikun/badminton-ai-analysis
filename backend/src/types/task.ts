@@ -156,6 +156,21 @@ export interface TaskHistoryItem {
   poseBased?: boolean;
 }
 
+export interface StandardReferenceFrame {
+  title: string;
+  cue: string;
+  imageLabel: string;
+}
+
+export interface StandardComparison {
+  sectionTitle: string;
+  summaryText: string;
+  currentFrameLabel: string;
+  standardFrameLabel: string;
+  standardReference: StandardReferenceFrame;
+  differences: string[];
+}
+
 export interface ReportResult {
   taskId: string;
   actionType: string;
@@ -170,6 +185,7 @@ export interface ReportResult {
   poseBased?: boolean;
   comparison?: RetestComparison;
   history?: TaskHistoryItem[];
+  standardComparison?: StandardComparison;
   scoringEvidence?: {
     detectedFrameCount?: number;
     frameCount?: number;

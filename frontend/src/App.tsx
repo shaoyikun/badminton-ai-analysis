@@ -51,6 +51,38 @@ function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
   )
 }
 
+function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typeof useAnalysisTask>['report']> }) {
+  if (!report.standardComparison) return null
+
+  const bestFrame = report.preprocess?.artifacts?.sampledFrames?.[0]
+
+  return (
+    <div className="result-card">
+      <h3>{report.standardComparison.sectionTitle}</h3>
+      <p>{report.standardComparison.summaryText}</p>
+      <div className="standard-compare-grid">
+        <div className="standard-frame-placeholder">
+          {bestFrame?.relativePath ? <img src={buildAssetUrl(bestFrame.relativePath)} alt={report.standardComparison.currentFrameLabel} /> : <div className="placeholder-box">当前样本</div>}
+          <strong>{report.standardComparison.currentFrameLabel}</strong>
+        </div>
+        <div className="standard-frame-placeholder">
+          <div className="placeholder-box">标准动作参考</div>
+          <strong>{report.standardComparison.standardFrameLabel}</strong>
+          <span>{report.standardComparison.standardReference.cue}</span>
+        </div>
+      </div>
+      <ul>
+        {report.standardComparison.differences.map((item) => (
+          <li key={item}>
+            <span>差异点</span>
+            <strong>{item}</strong>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function HistoryCard({
   history,
   selectedCompareTaskId,
@@ -291,6 +323,7 @@ function App() {
                 </div>
 
                 <ComparisonCard comparison={comparison} />
+                <StandardComparisonCard report={report} />
                 <HistoryCard
                   history={history}
                   selectedCompareTaskId={selectedCompareTaskId}

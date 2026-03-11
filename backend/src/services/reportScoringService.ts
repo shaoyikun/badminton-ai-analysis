@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { PoseAnalysisResult, ReportResult, SuggestionItem, TaskRecord } from '../types/task';
+import { PoseAnalysisResult, ReportResult, StandardComparison, SuggestionItem, TaskRecord } from '../types/task';
 import { readPoseResult } from './store';
 
 function now() {
@@ -44,6 +44,12 @@ type ActionConfig = {
     impact: string;
   };
   goodSuggestion: SuggestionItem;
+  standardReference: {
+    title: string;
+    cue: string;
+    imageLabel: string;
+    summaryPrefix: string;
+  };
 };
 
 type MetricScores = Record<MetricKey, number>;
@@ -128,6 +134,12 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
       title: '同机位连续复测 3 组',
       description: '保持同一角度，每组连续打 5~8 个高远球，重点看动作是否能稳定复现，而不是只盯单次最好球。',
     },
+    standardReference: {
+      title: '正手高远球标准参考帧',
+      cue: '标准动作更强调侧身打开、非持拍侧带开以及高点击球空间。',
+      imageLabel: '标准高远球参考帧占位',
+      summaryPrefix: '和标准高远球相比，当前更值得优先看的差异是',
+    },
   },
   smash: {
     actionLabel: '杀球',
@@ -201,6 +213,12 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
       title: '连续杀球节奏复测',
       description: '保持同一机位，连续录 3 条杀球样本，重点观察每次能否都把击球点顶高、把身体联动带出来。',
     },
+    standardReference: {
+      title: '杀球标准参考帧',
+      cue: '标准杀球更强调高点准备、躯干联动和明显的向前下压感。',
+      imageLabel: '标准杀球参考帧占位',
+      summaryPrefix: '和标准杀球相比，当前更值得优先看的差异是',
+    },
   },
 };
 
@@ -236,7 +254,7 @@ function buildRankedIssues(config: ActionConfig, metricScores: MetricScores): Ra
       if (gap <= 0) return null;
 
       const severity = gap * definition.severityWeight;
-      const evidence = `${config.dimensionNames[definition.metricKey]} ${metricScore} 分，低于建议线 ${definition.threshold} 分`; 
+      const evidence = `${config.dimensionNames[definition.metricKey]} ${metricScore} 分，低于建议线 ${definition.threshold} 分`;
 
       return {
         title: definition.title,
@@ -260,6 +278,21 @@ function buildDimensionScores(config: ActionConfig, metricScores: MetricScores) 
     name: config.dimensionNames[key],
     score: metricScores[key],
   }));
+}
+
+function buildStandardComparison(config: ActionConfig, rankedIssues: RankedIssue[]): StandardComparison {
+  const differences = rankedIssues.length > 0
+    ? rankedIssues.slice(0, 3).map((issue) => issue.title)
+    : ['当前动作主框架已经接近标准参考，下一步更适合继续做稳定性复现。'];
+
+  return {
+    sectionTitle: '标准动作对比',
+    summaryText: `${config.standardReference.summaryPrefix}${differences.join('、')}。`,
+    currentFrameLabel: '当前样本最佳关键帧占位',
+    standardFrameLabel: config.standardReference.imageLabel,
+    standardReference: config.standardReference,
+    differences,
+  };
 }
 
 export function getPoseResultForTask(task: TaskRecord): PoseAnalysisResult | undefined {
@@ -305,6 +338,7 @@ export function buildRuleBasedResult(task: TaskRecord, poseResult: PoseAnalysisR
     retestAdvice: `建议 3~7 天后保持同一机位复测，下次重点看 ${config.retestFocus.join('、')} 这几个维度有没有继续抬上来。`,
     createdAt: now(),
     poseBased: true,
+    standardComparison: buildStandardComparison(config, rankedIssues),
     scoringEvidence: {
       detectedFrameCount: poseResult.detectedFrameCount,
       frameCount: poseResult.frameCount,
@@ -365,6 +399,14 @@ export function buildMockResult(task: TaskRecord): ReportResult {
       retestAdvice: '建议 3~7 天后保持同一机位复测，下次重点看身体联动、杀球准备充分度和挥拍臂抬举。',
       createdAt: now(),
       poseBased: false,
+      standardComparison: {
+        sectionTitle: '标准动作对比',
+        summaryText: '和标准杀球相比，当前更值得优先看的差异是高点准备、身体联动和向前下压感。',
+        currentFrameLabel: '当前样本关键帧占位',
+        standardFrameLabel: '标准杀球参考帧占位',
+        standardReference: ACTION_CONFIG.smash.standardReference,
+        differences: ['高点准备不够顶', '身体联动发力偏弱', '下压感不够明显'],
+      },
       preprocess: {
         metadata: task.preprocess?.metadata,
         artifacts: task.preprocess?.artifacts,
@@ -409,6 +451,14 @@ export function buildMockResult(task: TaskRecord): ReportResult {
     retestAdvice: '建议 3~7 天后保持同一机位复测，下次重点看转体/转髋、击球准备充分度和挥拍臂抬举。',
     createdAt: now(),
     poseBased: false,
+    standardComparison: {
+      sectionTitle: '标准动作对比',
+      summaryText: '和标准高远球相比，当前更值得优先看的差异是转体展开、高点击球空间和准备到击球的连贯性。',
+      currentFrameLabel: '当前样本关键帧占位',
+      standardFrameLabel: '标准高远球参考帧占位',
+      standardReference: ACTION_CONFIG.clear.standardReference,
+      differences: ['转体展开不足', '高点击球空间不够', '准备到击球衔接不够完整'],
+    },
     preprocess: {
       metadata: task.preprocess?.metadata,
       artifacts: task.preprocess?.artifacts,
