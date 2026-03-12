@@ -69,6 +69,12 @@ type RankedIssue = ReportResult['issues'][number] & {
   suggestion: SuggestionItem;
 };
 
+function joinCoachStyle(items: string[]) {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]}，${items[1]}`;
+  return `${items.slice(0, -1).join('，')}，以及${items[items.length - 1]}`;
+}
+
 const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
   clear: {
     actionLabel: '正手高远球',
@@ -144,12 +150,32 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
     },
     standardReference: {
       title: '正手高远球标准参考帧',
-      cue: '标准动作更强调侧身打开、非持拍侧带开以及高点击球空间。',
-      imageLabel: '标准高远球参考帧',
-      imagePath: '/standard-references/clear-reference.svg',
-      sourceType: 'illustration',
-      summaryPrefix: '和标准高远球相比，当前更值得优先看的差异是',
+      cue: '标准高远球更强调侧身打开、击球点抬高，以及击球后能自然把动作送出去。',
+      imageLabel: '标准高远球真人参考帧',
+      imagePath: '/standard-references/clear-reference-real.jpg',
+      sourceType: 'real-sample',
+      summaryPrefix: '和标准高远球相比，当前更值得优先盯住的差异是',
     },
+    phaseFrames: [
+      {
+        phase: '准备',
+        title: '高远球准备阶段',
+        imagePath: '/standard-references/clear-phase-prep.jpg',
+        cue: '先把站位和来球判断接好，让身体有足够空间转开。',
+      },
+      {
+        phase: '击球',
+        title: '高远球击球阶段',
+        imagePath: '/standard-references/clear-phase-contact.jpg',
+        cue: '在更高的击球点把球送出去，击球前身体和挥拍臂都要打开。',
+      },
+      {
+        phase: '收拍',
+        title: '高远球收拍阶段',
+        imagePath: '/standard-references/clear-phase-follow.jpg',
+        cue: '击球后顺势把动作送完，说明发力链条没有在出手前断掉。',
+      },
+    ],
   },
   smash: {
     actionLabel: '杀球',
@@ -312,15 +338,45 @@ function buildDimensionScores(config: ActionConfig, metricScores: MetricScores) 
   }));
 }
 
+function buildCoachDifference(config: ActionConfig, issue: RankedIssue) {
+  if (config.actionLabel === '正手高远球') {
+    switch (issue.metricKey) {
+      case 'turn':
+        return '和标准高远球比，你现在更像是来球到了再出手，侧身和转髋打开得还不够，所以球更难被轻松送到后场深区。';
+      case 'lift':
+        return '和标准高远球比，你的挥拍臂抬举还不够早也不够高，击球空间没有完全撑开，高点击球的感觉还没立住。';
+      case 'contact':
+        return '和标准高远球比，准备到击球这一段衔接还不够完整，身体带手的顺序略断，出球更容易只有动作、没有穿透。';
+      case 'ready':
+        return '和标准高远球比，你前段准备节奏还不够稳，导致后面的转体、上举和击球点不容易每次都复现到同一个位置。';
+    }
+  }
+
+  switch (issue.metricKey) {
+    case 'turn':
+      return '和标准杀球比，你现在更多还是在用手臂把球打出去，身体联动送力量的感觉还不够，所以杀球压迫感会差一截。';
+    case 'lift':
+      return '和标准杀球比，你的上举空间还没完全顶起来，击球点偏保守，导致球速和下压角度都还不够狠。';
+    case 'contact':
+      return '和标准杀球比，你进入击球前的准备还不够顶，高点没有先站住，整个杀球更像快打，而不是把力量真正砸下去。';
+    case 'ready':
+      return '和标准杀球比，你的起手准备节奏略赶，前半段没先稳住，后面的起跳、联动和出手质量就会跟着波动。';
+  }
+}
+
 function buildStandardComparison(config: ActionConfig, rankedIssues: RankedIssue[]): StandardComparison {
   const differences = rankedIssues.length > 0
-    ? rankedIssues.slice(0, 3).map((issue) => issue.title)
-    : ['当前动作主框架已经接近标准参考，下一步更适合继续做稳定性复现。'];
+    ? rankedIssues.slice(0, 3).map((issue) => buildCoachDifference(config, issue))
+    : ['当前动作主框架已经接近标准参考，下一步更适合继续做稳定性复现，把偶尔做对练成连续都能做对。'];
+
+  const summaryText = rankedIssues.length > 0
+    ? `${config.standardReference.summaryPrefix}${joinCoachStyle(rankedIssues.slice(0, 3).map((issue) => config.dimensionNames[issue.metricKey]))}。`
+    : `${config.standardReference.summaryPrefix}动作主框架已经比较接近，可以把重点转到稳定性、击球质量和连续复现。`;
 
   return {
     sectionTitle: '标准动作对比',
-    summaryText: `${config.standardReference.summaryPrefix}${differences.join('、')}。`,
-    currentFrameLabel: '当前样本最佳关键帧占位',
+    summaryText,
+    currentFrameLabel: '当前样本最佳关键帧',
     standardFrameLabel: config.standardReference.imageLabel,
     standardReference: config.standardReference,
     phaseFrames: config.phaseFrames,

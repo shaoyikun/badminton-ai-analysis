@@ -64,16 +64,28 @@ function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typ
     ?? report.preprocess?.artifacts?.sampledFrames?.[0]
 
   return (
-    <div className="result-card">
-      <h3>{report.standardComparison.sectionTitle}</h3>
-      <p>{report.standardComparison.summaryText}</p>
+    <div className="result-card standard-review-card">
+      <div className="panel-header standard-review-header">
+        <div>
+          <h3>{report.standardComparison.sectionTitle}</h3>
+          <p className="standard-review-subtitle">这一块不只是看像不像，而是看当前动作离目标动作还差在哪。</p>
+        </div>
+      </div>
+
+      <div className="coach-review-card standard-summary-card">
+        <strong>教练会先看什么</strong>
+        <p>{report.standardComparison.summaryText}</p>
+      </div>
+
       <div className="standard-compare-grid">
         <div className="standard-frame-placeholder">
+          <span className="frame-badge">你的当前样本</span>
           {bestFrame?.relativePath ? <img src={buildAssetUrl(bestFrame.relativePath)} alt={report.standardComparison.currentFrameLabel} /> : <div className="placeholder-box">当前样本</div>}
           <strong>{report.standardComparison.currentFrameLabel}</strong>
-          {bestFrame ? <span>{`选取帧 ${bestFrame.index} · ${bestFrame.timestampSeconds}s`}</span> : null}
+          {bestFrame ? <span>{`选取帧 ${bestFrame.index} · ${bestFrame.timestampSeconds}s`}</span> : <span>当前还没有可展示的最佳关键帧</span>}
         </div>
         <div className="standard-frame-placeholder">
+          <span className="frame-badge">目标参考动作</span>
           {report.standardComparison.standardReference.imagePath ? (
             <img src={buildReferenceUrl(report.standardComparison.standardReference.imagePath)} alt={report.standardComparison.standardFrameLabel} />
           ) : (
@@ -81,28 +93,36 @@ function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typ
           )}
           <strong>{report.standardComparison.standardFrameLabel}</strong>
           <span>{report.standardComparison.standardReference.cue}</span>
-          <span>{report.standardComparison.standardReference.sourceType === 'real-sample' ? '素材类型：真人参考帧' : '素材类型：结构示意图'}</span>
+          <span>{report.standardComparison.standardReference.sourceType === 'real-sample' ? '参考素材：真人关键帧' : '参考素材：结构示意图'}</span>
         </div>
       </div>
+
       {report.standardComparison.phaseFrames?.length ? (
-        <div className="standard-phase-grid">
-          {report.standardComparison.phaseFrames.map((item) => (
-            <div key={item.phase} className="standard-phase-card">
-              <img src={buildReferenceUrl(item.imagePath)} alt={item.title} />
-              <strong>{item.phase}</strong>
-              <span>{item.cue}</span>
-            </div>
-          ))}
+        <div className="standard-phase-section">
+          <strong>标准动作拆开看</strong>
+          <div className="standard-phase-grid">
+            {report.standardComparison.phaseFrames.map((item) => (
+              <div key={item.phase} className="standard-phase-card">
+                <img src={buildReferenceUrl(item.imagePath)} alt={item.title} />
+                <strong>{item.phase}</strong>
+                <span>{item.cue}</span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
-      <ul>
-        {report.standardComparison.differences.map((item) => (
-          <li key={item}>
-            <span>差异点</span>
-            <strong>{item}</strong>
-          </li>
-        ))}
-      </ul>
+
+      <div className="comparison-block standard-difference-block">
+        <strong>这次最该先改的地方</strong>
+        <ul>
+          {report.standardComparison.differences.map((item, index) => (
+            <li key={item}>
+              <span>{`观察点 ${index + 1}`}</span>
+              <strong>{item}</strong>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }
