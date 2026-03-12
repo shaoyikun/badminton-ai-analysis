@@ -1,18 +1,19 @@
 # Spec 目录说明
 
-这个目录用于承载项目的轻量 Spec Coding 文档。
+这个目录保留少量“实现前先读一遍”的摘要规格，帮助快速理解项目边界、交互重点和核心数据结构。
 
-## 文件说明
-- `SPEC-INDEX.md`：Spec 索引、阅读顺序、优先级和使用规则
-- `PRODUCT-SPEC.md`：产品规格
-- `INTERACTION-SPEC.md`：交互规格
-- `API-SPEC.md`：接口规格
-- `DATA-SPEC.md`：数据规格
-- `ACCEPTANCE-CRITERIA.md`：验收标准
-- `IMPLEMENTATION-PLAN.md`：实现计划
-- `POC-IMPLEMENTATION-SPEC.md`：PoC 技术实施方案
+## 当前保留文件
+- `PRODUCT-SPEC.md`：产品定位、MVP 范围、主流程和异常流程摘要
+- `INTERACTION-SPEC.md`：移动端页面重点、信息层级和关键交互要求摘要
+- `DATA-SPEC.md`：报告、历史记录、复测对比和标准动作对比的数据结构摘要
+
+## 推荐阅读顺序
+1. `PRODUCT-SPEC.md`
+2. `INTERACTION-SPEC.md`
+3. `DATA-SPEC.md`
 
 ## 使用原则
-- 这里不是替代主文档，而是把“后续实现真正依赖的规格”收敛出来
-- 后续 PoC、开发、任务拆解优先参考这里
-- 当主文档有关键变化时，需要同步更新这里
+- `docs/` 仍是主文档区，`spec/` 不是平行维护的一整套副本
+- `spec/` 只保留当前仍会被开发和协作反复引用的摘要信息
+- 当主文档中的产品边界、交互结构或结果数据发生关键变化时，同步更新这里
+- 如果某份 spec 只是阶段性计划、PoC 历史或与当前实现冲突，应优先合并到主文档或直接删除

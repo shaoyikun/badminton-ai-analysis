@@ -52,14 +52,10 @@
 - `docs/tech/DEMO-PLAN.md`：Demo 实现计划
 
 #### Spec Coding 目录
-- `spec/SPEC-INDEX.md`
 - `spec/PRODUCT-SPEC.md`
 - `spec/INTERACTION-SPEC.md`
-- `spec/API-SPEC.md`
 - `spec/DATA-SPEC.md`
-- `spec/ACCEPTANCE-CRITERIA.md`
-- `spec/IMPLEMENTATION-PLAN.md`
-- `spec/POC-IMPLEMENTATION-SPEC.md`
+- `spec/README.md`
 
 ---
 
@@ -109,7 +105,7 @@ badminton-ai-analysis/
 │   ├── research/
 │   ├── design/
 │   └── data/
-└── spec/                    # 后续实现与协作的规格依据
+└── spec/                    # 面向实现协作的精简摘要规格
 ```
 
 ---
