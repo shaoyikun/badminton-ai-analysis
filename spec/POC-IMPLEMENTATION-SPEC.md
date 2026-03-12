@@ -193,8 +193,8 @@ backend/
   ],
   "suggestions": [
     {
-      "title": "高点击球定点练习",
-      "description": "每天 3 组，每组 15 次。"
+      "title": "下次重点看击球点有没有继续抬高",
+      "description": "下次复测时，优先确认击球点是不是比这次更高、更靠前。"
     }
   ],
   "retestAdvice": "建议 3~7 天后保持同一机位复测。"

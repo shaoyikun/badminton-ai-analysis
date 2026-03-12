@@ -99,8 +99,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 1.2,
         description: '从这次样本看，击球前身体侧身和转髋展开还不够，更多像在正对来球时直接把手抡出去。',
         impact: '高远球最怕这个：力量传递会断，球容易打不深，后场压制感会明显变弱。',
-        suggestionTitle: '侧身转髋分解挥拍',
-        suggestionDescription: '先不拿球，做“侧身准备—转髋带肩—再挥拍”的分解动作。每天 3 组，每组 12 次，先把身体带动手的感觉练出来。',
+        suggestionTitle: '下次继续看转体有没有真正打开',
+        suggestionDescription: '下次复测保持同机位，优先观察击球前身体是否比这次更早完成侧身和转髋，而不是等来球到了才仓促出手。',
       },
       {
         key: 'clear_lift',
@@ -110,8 +110,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 1.05,
         description: '你的挥拍臂有抬起来，但还不够早也不够高，导致击球准备姿态没有完全打开。',
         impact: '会直接压缩击球空间，击球点容易掉下来，高远球就不容易又高又深。',
-        suggestionTitle: '最高点击球定点练习',
-        suggestionDescription: '先做无球举拍定点，固定“最高点击球”位置，再加轻挥拍。每天 3 组，每组 15 次，重点感受上举后的舒展感。',
+        suggestionTitle: '下次重点看击球空间有没有继续抬高',
+        suggestionDescription: '下次复测时，优先对比挥拍臂是不是抬得更早、更高，确认击球点有没有继续往上走，而不是仍然缩在身体附近。',
       },
       {
         key: 'clear_ready',
@@ -121,8 +121,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 0.95,
         description: '这段视频里能稳定识别到的有效准备动作还不算多，说明你的起手准备和节奏还不够稳。',
         impact: '准备不稳定时，后面的转体、引拍和击球点都会跟着飘，复测时也更难看出真实进步。',
-        suggestionTitle: '固定机位重复录制 3 条',
-        suggestionDescription: '保持同一机位，连续录 3 条高远球视频，先只追求准备—击球—收拍流程完整，再看动作细节。',
+        suggestionTitle: '下次先确认准备节奏有没有更稳',
+        suggestionDescription: '下次复测保持同机位和相近节奏，先看准备—击球—收拍这条线能不能比这次更完整、更稳定地复现。',
       },
       {
         key: 'clear_contact',
@@ -132,8 +132,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 1.1,
         description: '从准备到真正进入击球动作的衔接还不够顺，身体和挥拍臂没有完全连起来。',
         impact: '会让高远球看起来“有动作但没把力打出去”，出球弧线和深度都会受影响。',
-        suggestionTitle: '引拍到击球一拍成型练习',
-        suggestionDescription: '做慢速连贯挥拍：准备、引拍、上举、击球动作一口气完成。每天 3 组，每组 10 次，先练连贯，再练发力。',
+        suggestionTitle: '下次重点看准备到击球有没有更连贯',
+        suggestionDescription: '下次复测时，优先观察准备、上举和真正进入击球动作是不是接得更顺，确认身体和挥拍臂有没有比这次更像一整条线。',
       },
     ],
     compareSummary: '当前先按正手高远球的动作逻辑生成单次报告：更看重转体展开、击球准备和击球空间是否打开。',
@@ -145,8 +145,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
       impact: '接下来更适合做稳定性打磨，把“偶尔做对”练成“连续都能做对”。',
     },
     goodSuggestion: {
-      title: '同机位连续复测 3 组',
-      description: '保持同一角度，每组连续打 5~8 个高远球，重点看动作是否能稳定复现，而不是只盯单次最好球。',
+      title: '下次继续确认动作是否稳定复现',
+      description: '保持同一角度再次上传，重点不是追单次最好球，而是确认准备、转体和击球点能不能连续落在相近位置。',
     },
     standardReference: {
       title: '正手高远球标准参考帧',
@@ -200,8 +200,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 1.2,
         description: '这次样本里，进入杀球动作前的准备还不够充分，整体更像“赶着打出去”，没有把点顶到最好位置。',
         impact: '杀球一旦准备不够，球速、下压角度和压迫感都会掉，容易变成一记普通快球。',
-        suggestionTitle: '最高点击球 + 下压挥拍练习',
-        suggestionDescription: '先固定最高点击球位置，再做向前下压的轻挥拍。每天 3 组，每组 12 次，先把“高点出手”建立起来。',
+        suggestionTitle: '下次继续看高点准备有没有站住',
+        suggestionDescription: '下次复测时，优先确认进入击球前的高点准备是不是比这次更充分，别再出现“赶着把球打出去”的感觉。',
       },
       {
         key: 'smash_turn',
@@ -211,8 +211,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 1.15,
         description: '身体转动和挥拍动作目前衔接得还不够顺，更多是在用手臂单独发力。',
         impact: '这样杀球会比较吃手，力量上不去，连续几拍后也更容易累。',
-        suggestionTitle: '转髋带肩杀球分解',
-        suggestionDescription: '做“转髋—带肩—挥拍”分解练习，先慢动作找身体带手的顺序。每天 3 组，每组 10 次。',
+        suggestionTitle: '下次重点看身体联动有没有更顺',
+        suggestionDescription: '下次复测时，重点观察杀球是不是还主要靠手臂打出去，还是身体转动已经能更自然地把力量送出来。',
       },
       {
         key: 'smash_lift',
@@ -222,8 +222,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 1.05,
         description: '挥拍臂虽然有抬举，但还没完全把击球点托起来，顶点空间不够明显。',
         impact: '会让杀球点偏低，击球更平，球速和下压都会打折。',
-        suggestionTitle: '举拍上顶定点练习',
-        suggestionDescription: '无球状态下先把举拍顶到最高点停 1 秒，再完成挥拍。每天 3 组，每组 15 次，找“高点停住”的感觉。',
+        suggestionTitle: '下次确认击球点有没有继续抬高',
+        suggestionDescription: '下次复测时，优先确认挥拍臂上举空间是不是比这次更明显，看看击球点有没有继续往更高的位置走。',
       },
       {
         key: 'smash_ready',
@@ -233,8 +233,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
         severityWeight: 0.9,
         description: '从视频看，起手准备和进入杀球动作的节奏还不够稳定，动作前段略显仓促。',
         impact: '会让后续发力顺序不稳定，杀球质量时好时坏，不利于复测对比。',
-        suggestionTitle: '固定节奏起手练习',
-        suggestionDescription: '先按固定节奏完成准备—上举—挥拍，宁可慢一点，也要把前半段节奏做稳。每天 3 组，每组 8 次。',
+        suggestionTitle: '下次先看起手节奏有没有更稳',
+        suggestionDescription: '下次复测时，先观察准备到上举这段是不是比这次更从容，避免前半段一乱，后面的起跳、联动和出手质量一起波动。',
       },
     ],
     compareSummary: '当前先按杀球的动作逻辑生成单次报告：比起高远球，会更看重击球准备是否顶得高、身体联动是否把力量送出来。',
@@ -246,8 +246,8 @@ const ACTION_CONFIG: Record<ActionKey, ActionConfig> = {
       impact: '接下来如果继续打磨发力顺序，杀球质量还有进一步往上走的空间。',
     },
     goodSuggestion: {
-      title: '连续杀球节奏复测',
-      description: '保持同一机位，连续录 3 条杀球样本，重点观察每次能否都把击球点顶高、把身体联动带出来。',
+      title: '下次继续确认杀球主框架是否稳定',
+      description: '保持同一机位再次上传，重点确认高点准备、身体联动和下压感能不能连续复现，而不是只出现一次好的出手。',
     },
     standardReference: {
       title: '杀球标准参考帧',
@@ -476,12 +476,12 @@ export function buildMockResult(task: TaskRecord): ReportResult {
       ],
       suggestions: [
         {
-          title: '最高点击球 + 下压挥拍练习',
-          description: '先固定高点击球位置，再做向前下压挥拍。每天 3 组，每组 12 次。',
+          title: '下次继续看高点准备有没有站住',
+          description: '下次复测时，优先确认进入击球前的高点准备是不是比这次更充分，别再出现“赶着把球打出去”的感觉。',
         },
         {
-          title: '转髋带肩杀球分解',
-          description: '先慢动作练顺序，再逐步提速。每天 3 组，每组 10 次。',
+          title: '下次重点看身体联动有没有更顺',
+          description: '下次复测时，重点观察杀球是不是还主要靠手臂打出去，还是身体转动已经能更自然地把力量送出来。',
         },
       ],
       compareSummary: '当前 PoC 阶段暂未接入真实复测对比，先按杀球的动作逻辑返回单次报告。',
@@ -528,12 +528,12 @@ export function buildMockResult(task: TaskRecord): ReportResult {
     ],
     suggestions: [
       {
-        title: '侧身转髋分解挥拍',
-        description: '每天 3 组，每组 12 次，先把身体带手的顺序做出来。',
+        title: '下次继续看转体有没有真正打开',
+        description: '下次复测保持同机位，优先观察击球前身体是否比这次更早完成侧身和转髋，而不是等来球到了才仓促出手。',
       },
       {
-        title: '最高点击球定点练习',
-        description: '每天 3 组，每组 15 次，优先建立高点击球的空间感。',
+        title: '下次重点看击球空间有没有继续抬高',
+        description: '下次复测时，优先对比挥拍臂是不是抬得更早、更高，确认击球点有没有继续往上走，而不是仍然缩在身体附近。',
       },
     ],
     compareSummary: '当前 PoC 阶段暂未接入真实复测对比，先按正手高远球的动作逻辑返回单次报告。',

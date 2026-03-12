@@ -56,6 +56,24 @@ function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
   )
 }
 
+function PrimaryIssueCard({ report }: { report: NonNullable<ReturnType<typeof useAnalysisTask>['report']> }) {
+  const primaryIssue = report.issues[0]
+
+  if (!primaryIssue) return null
+
+  return (
+    <div className="primary-issue-card">
+      <span className="meta-label">这次最该先看的问题</span>
+      <strong>{primaryIssue.title}</strong>
+      <p>{primaryIssue.description}</p>
+      <div className="primary-issue-impact">
+        <span>为什么这件事要先改</span>
+        <p>{primaryIssue.impact}</p>
+      </div>
+    </div>
+  )
+}
+
 function StandardComparisonCard({ report }: { report: NonNullable<ReturnType<typeof useAnalysisTask>['report']> }) {
   if (!report.standardComparison) return null
 
@@ -180,54 +198,57 @@ function ComparisonCard({
     return (
       <div className="result-card">
         <h3>复测对比</h3>
-        <p>当前还没有可对比的同动作样本。等你再录一条，或者从历史记录里手动选一条样本后，就能看到分数变化和改善项。</p>
+        <p>当前还没有可对比的同动作样本。等你再录一条，或者从历史记录里手动选一条样本后，就能看到变化结论。</p>
       </div>
     )
   }
 
-  return (
-    <div className="result-card">
-      <h3>复测对比</h3>
-      <p>{comparison.summaryText}</p>
-      <ul>
-        <li><span>总分变化</span><strong>{comparison.totalScoreDelta > 0 ? `+${comparison.totalScoreDelta}` : comparison.totalScoreDelta}</strong></li>
-        <li><span>对比样本</span><strong>{formatTime(comparison.previousCreatedAt)}</strong></li>
-        <li><span>当前样本</span><strong>{formatTime(comparison.currentCreatedAt)}</strong></li>
-      </ul>
+  const trendLabel = comparison.totalScoreDelta > 0 ? '这次整体在变好' : comparison.totalScoreDelta < 0 ? '这次有一点回落' : '这次整体基本持平'
+  const topImprovement = comparison.improvedDimensions[0]
+  const topRegression = comparison.declinedDimensions[0]
 
-      <div className="coach-review-card">
-        <strong>{comparison.coachReview.headline}</strong>
-        <p>{comparison.coachReview.progressNote}</p>
-        {comparison.coachReview.regressionNote ? <p>{comparison.coachReview.regressionNote}</p> : null}
-        <p>{comparison.coachReview.nextFocus}</p>
+  return (
+    <div className="result-card comparison-summary-card">
+      <h3>复测对比</h3>
+      <div className="comparison-headline-card">
+        <span className="meta-label">先看结论</span>
+        <strong>{trendLabel}</strong>
+        <p>{comparison.coachReview.headline}</p>
       </div>
 
-      {comparison.improvedDimensions.length > 0 ? (
-        <div className="comparison-block">
-          <strong>改善项</strong>
-          <ul>
-            {comparison.improvedDimensions.map((item) => (
-              <li key={item.name}>
-                <span>{item.name}</span>
-                <strong>{item.previousScore} → {item.currentScore}（+{item.delta}）</strong>
-              </li>
-            ))}
-          </ul>
+      <div className="comparison-key-points">
+        <div className="comparison-point-card">
+          <span>这次最明显的变化</span>
+          <strong>{topImprovement ? `${topImprovement.name} 在变好` : '暂时没有明显单项提升'}</strong>
+          <p>{comparison.coachReview.progressNote}</p>
         </div>
-      ) : null}
+        <div className="comparison-point-card">
+          <span>这次最该防止继续掉的点</span>
+          <strong>{topRegression ? topRegression.name : '当前没有明显回落项'}</strong>
+          <p>{comparison.coachReview.regressionNote ?? comparison.coachReview.keepDoing ?? '这次没有明显回落项，先把已经稳定住的部分继续保住。'}</p>
+        </div>
+      </div>
 
-      {comparison.declinedDimensions.length > 0 ? (
-        <div className="comparison-block">
-          <strong>待继续加强</strong>
-          <ul>
-            {comparison.declinedDimensions.map((item) => (
-              <li key={item.name}>
-                <span>{item.name}</span>
-                <strong>{item.previousScore} → {item.currentScore}（{item.delta}）</strong></li>
-            ))}
-          </ul>
+      <div className="coach-review-card">
+        <strong>下次复测只先盯这个</strong>
+        <p>{comparison.coachReview.nextFocus}</p>
+        <p>{comparison.coachReview.nextCheck}</p>
+      </div>
+
+      <div className="comparison-meta-strip">
+        <div>
+          <span>对比样本</span>
+          <strong>{formatTime(comparison.previousCreatedAt)}</strong>
         </div>
-      ) : null}
+        <div>
+          <span>当前样本</span>
+          <strong>{formatTime(comparison.currentCreatedAt)}</strong>
+        </div>
+        <div>
+          <span>参考分数变化</span>
+          <strong>{comparison.totalScoreDelta > 0 ? `+${comparison.totalScoreDelta}` : comparison.totalScoreDelta}</strong>
+        </div>
+      </div>
     </div>
   )
 }
@@ -359,13 +380,18 @@ function App() {
               </div>
             ) : (
               <div className="result-stack">
-                <div className="score-card">
-                  <span className="meta-label">总分</span>
-                  <strong>{report.totalScore}</strong>
-                  <p>{report.actionType === 'smash' ? '杀球动作' : '正手高远球'} · {report.poseBased ? '已接入 pose 规则映射' : '模拟结构化报告'}</p>
+                <div className="score-card diagnostic-summary-card">
+                  <span className="meta-label">本次诊断摘要</span>
+                  <strong>{report.actionType === 'smash' ? '杀球动作' : '正手高远球'}</strong>
+                  <p>{report.poseBased ? '当前结果已接入 pose 规则映射，下面优先看动作问题本身，不先看分数。' : '当前为模拟结构化报告，下面优先看动作问题本身，不先看分数。'}</p>
                   {report.summaryText ? <p>{report.summaryText}</p> : null}
+                  <div className="summary-score-inline">
+                    <span>参考分数</span>
+                    <strong>{report.totalScore}</strong>
+                  </div>
                 </div>
 
+                <PrimaryIssueCard report={report} />
                 <ComparisonCard comparison={comparison} />
                 <StandardComparisonCard report={report} />
                 <HistoryCard
@@ -439,15 +465,21 @@ function App() {
                 </div>
 
                 <div className="result-card">
-                  <h3>核心问题</h3>
+                  <h3>其余需要继续看的问题</h3>
                   <ul>
-                    {report.issues.map((item) => (
+                    {report.issues.slice(1).length > 0 ? report.issues.slice(1).map((item) => (
                       <li key={item.title}>
                         <strong>{item.title}</strong>
                         <p>{item.description}</p>
                         <span>{item.impact}</span>
                       </li>
-                    ))}
+                    )) : (
+                      <li>
+                        <strong>当前没有第二优先级问题</strong>
+                        <p>这次报告里最值得先盯的是上面那一个核心问题，先别同时改太多点。</p>
+                        <span>先把最大短板收住，再看其他维度是否被一起带上来。</span>
+                      </li>
+                    )}
                   </ul>
                 </div>
 

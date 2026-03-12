@@ -165,7 +165,8 @@ select:disabled,
 .score-card,
 .retest-card,
 .empty-state,
-.error-state-card {
+.error-state-card,
+.primary-issue-card {
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
@@ -329,9 +330,67 @@ select:disabled,
 }
 
 .score-card strong {
-  font-size: 40px;
-  line-height: 1;
+  font-size: 28px;
+  line-height: 1.2;
   color: #4338ca;
+}
+
+.diagnostic-summary-card {
+  background: linear-gradient(180deg, #eef2ff 0%, #ffffff 100%);
+  border-color: #c7d2fe;
+}
+
+.summary-score-inline {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #dbe4ff;
+}
+
+.summary-score-inline span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.summary-score-inline strong {
+  margin: 0;
+  font-size: 18px;
+  color: #4338ca;
+}
+
+.primary-issue-card {
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+  border-color: #fed7aa;
+}
+
+.primary-issue-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 1.35;
+  color: #9a3412;
+}
+
+.primary-issue-card p {
+  margin: 8px 0 0;
+  color: #7c2d12;
+}
+
+.primary-issue-impact {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #fdba74;
+}
+
+.primary-issue-impact span {
+  display: block;
+  font-size: 12px;
+  color: #9a3412;
+  font-weight: 700;
 }
 
 .result-card ul,
@@ -604,6 +663,77 @@ select:disabled,
 
 .comparison-block {
   margin-top: 12px;
+}
+
+.comparison-summary-card {
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.comparison-headline-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: #eef6ff;
+  border: 1px solid #cfe3ff;
+}
+
+.comparison-headline-card strong {
+  display: block;
+  margin-top: 6px;
+  color: #1d4ed8;
+  font-size: 20px;
+}
+
+.comparison-key-points {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.comparison-point-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+}
+
+.comparison-point-card span {
+  display: block;
+  font-size: 12px;
+  color: #667085;
+}
+
+.comparison-point-card strong {
+  display: block;
+  margin-top: 6px;
+  color: #101828;
+  font-size: 16px;
+}
+
+.comparison-meta-strip {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.comparison-meta-strip div {
+  padding: 10px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+}
+
+.comparison-meta-strip span {
+  display: block;
+  font-size: 12px;
+  color: #667085;
+}
+
+.comparison-meta-strip strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #101828;
 }
 
 .log-item {

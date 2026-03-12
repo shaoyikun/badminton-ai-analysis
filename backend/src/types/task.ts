@@ -128,8 +128,10 @@ export interface RetestDeltaItem {
 export interface RetestCoachReview {
   headline: string;
   progressNote: string;
+  keepDoing?: string;
   regressionNote?: string;
   nextFocus: string;
+  nextCheck: string;
 }
 
 export interface RetestComparison {

@@ -6,7 +6,7 @@
 - total_score
 - dimension_scores
 - top_issues
-- suggestions
+- suggestions（短期语义收口为复测关注点 / 后续观察建议）
 - compare_summary
 - retest_advice
 - created_at
@@ -41,8 +41,10 @@
 - coach_review
   - headline
   - progress_note
+  - keep_doing（可选）
   - regression_note（可选）
   - next_focus
+  - next_check
 
 ## 4. 标准动作对比结构
 ### standard_comparison
@@ -81,6 +83,8 @@
 - 报告输出必须符合报告模板
 - 历史记录和复测对比必须基于已完成样本生成，不能读取未完成任务作为对比基线
 - 标准动作对比文案必须能落到具体差异点，不能只给抽象评价
+- 短期产品边界：报告聚焦“用户当前存在哪些动作问题、这些问题会带来什么影响、下次复测该重点看什么”，暂不输出结构化训练计划
+- `suggestions` 字段短期只承载“复测关注点 / 后续观察建议”，不承载具体训练动作、组数或训练方案
 
 ## 7. 相关主文档
 - `docs/design/REPORT-TEMPLATE.md`

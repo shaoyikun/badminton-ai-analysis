@@ -35,8 +35,10 @@ export type RetestComparison = {
   coachReview: {
     headline: string
     progressNote: string
+    keepDoing?: string
     regressionNote?: string
     nextFocus: string
+    nextCheck: string
   }
 }
 

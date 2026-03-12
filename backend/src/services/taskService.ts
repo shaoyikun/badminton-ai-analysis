@@ -62,6 +62,12 @@ function buildCoachReview(actionType: string, comparison: Omit<RetestComparison,
       ? `${stableDimension.name} 这次基本和对比样本持平，说明你至少把动作底子维持住了，没有明显跑偏。`
       : '这次虽然没有特别突出的单项提升，但整体动作没有明显散掉，说明训练节奏还在。';
 
+  const keepDoing = topImprovement
+    ? `${topImprovement.name} 这一项已经开始抬上来了，这一轮先别换太多练法，优先把现在有效的训练节奏继续保住。`
+    : stableDimension
+      ? `${stableDimension.name} 这一项基本稳住了，说明当前动作主线没有散，后面继续沿着这个节奏练就行。`
+      : undefined;
+
   const regressionNote = topRegression
     ? `${topRegression.name} 这次从 ${topRegression.previousScore} 分掉到 ${topRegression.currentScore} 分，这更像是击球节奏或准备阶段没接顺，建议先回看这一段，不要急着同时改太多点。`
     : undefined;
@@ -72,11 +78,19 @@ function buildCoachReview(actionType: string, comparison: Omit<RetestComparison,
       ? `下一次复测，优先看 ${topImprovement.name} 能不能继续稳定复现，再顺手观察 ${comparison.improvedDimensions[1]?.name ?? '其余维度'} 有没有被一起带上来。`
       : '下一次复测，先保持同机位和同节奏录制，重点看动作能不能稳定复现，而不是只追求单次最好效果。';
 
+  const nextCheck = topRegression
+    ? `下次录制时，先看 ${topRegression.name} 有没有止跌回稳，再确认 ${topImprovement?.name ?? stableDimension?.name ?? '主动作框架'} 有没有被一起保住。`
+    : topImprovement
+      ? `下次录制时，先确认 ${topImprovement.name} 不是偶尔做对，而是能连续复现。`
+      : '下次录制时，重点确认动作节奏、机位和击球过程是否都还能稳定复现。';
+
   return {
     headline,
     progressNote,
+    keepDoing,
     regressionNote,
     nextFocus,
+    nextCheck,
   };
 }
 
