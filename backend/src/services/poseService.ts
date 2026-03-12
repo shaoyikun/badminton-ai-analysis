@@ -1,7 +1,10 @@
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { getTask, updateTask } from './taskService';
 import { readPoseResult, savePoseResult } from './store';
+
+const execFileAsync = promisify(execFile);
 
 function now() {
   return new Date().toISOString();
@@ -37,10 +40,10 @@ export async function runPoseAnalysis(taskId: string) {
     const taskDir = path.join(process.cwd(), task.preprocess.artifacts.artifactsDir);
 
     const pythonBin = process.env.PYTHON_BIN || 'python3';
-    const output = execFileSync(pythonBin, [analysisEntry, taskDir], {
+    const { stdout } = await execFileAsync(pythonBin, [analysisEntry, taskDir], {
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
+    });
+    const output = stdout.trim();
 
     const parsed = JSON.parse(output) as { result: import('../types/task').PoseAnalysisResult };
     const resultPath = savePoseResult(taskId, parsed.result);

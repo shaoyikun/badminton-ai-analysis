@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
 cd "$ROOT_DIR"
 
 WITH_BUILD=0
@@ -49,10 +51,12 @@ if [[ "$has_docker" -eq 1 ]]; then
 
   echo
   echo "Done."
-  echo "- Frontend: http://127.0.0.1:5173"
-  echo "- Backend:  http://127.0.0.1:8787"
+  echo "- Frontend: http://127.0.0.1:$FRONTEND_PORT"
+  echo "- Backend:  http://127.0.0.1:$BACKEND_PORT"
   echo
   echo "Useful commands:"
+  echo "- make run                # start services"
+  echo "- make verify             # lint + test + build"
   echo "- ./scripts/up.sh --build   # rebuild images and start"
   echo "- ./scripts/logs.sh"
   echo "- ./scripts/down.sh"

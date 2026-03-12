@@ -1,5 +1,6 @@
 import type { ReportResult, TaskHistoryItem } from '../../hooks/useAnalysisTask'
-import { formatFileSize, HistoryCard } from './shared'
+import { HistoryCard } from './shared'
+import { formatFileSize } from './utils'
 
 export function HistoryView({ report, history, selectedCompareTaskId, selectedHistoryReport, onSelectCompare, onOpenHistoryDetail, onUseAsComparisonBaseline, disabled }: { report: ReportResult; history: TaskHistoryItem[]; selectedCompareTaskId: string; selectedHistoryReport: ReportResult | null; onSelectCompare: (taskId: string) => void; onOpenHistoryDetail: (taskId: string) => void; onUseAsComparisonBaseline: (taskId: string) => void; disabled?: boolean }) {
   return (

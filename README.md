@@ -147,12 +147,20 @@ badminton-ai-analysis/
 ```bash
 git clone https://github.com/shaoyikun/badminton-ai-analysis.git
 cd badminton-ai-analysis
+cp .env.example .env
 ./scripts/setup-dev.sh
 ```
 
 说明：`setup-dev.sh` 现在会在检测到缺失基础工具时，优先尝试自动安装（当前优先支持 Homebrew / apt-get）。
 
-### 一键启动前后端
+### 一条稳定启动命令
+```bash
+make run
+```
+
+默认会优先走 Docker Compose；如果本机没有 Docker，则回退到本地开发模式。
+
+### 本地开发模式
 ```bash
 ./scripts/start-dev.sh
 ```
@@ -204,6 +212,7 @@ docker compose ps
 
 对应 Makefile 快捷命令：
 ```bash
+make run
 make compose-up
 make compose-ps
 make compose-logs-backend
@@ -218,6 +227,65 @@ make compose-down
 - backend 改为容器内直接跑构建产物（`npm start`），更接近发布态
 - backend 的 `data/`、`uploads/` 用 Docker volume 持久化
 - backend Dockerfile 支持通过 `APT_MIRROR` 切换 apt 镜像源，默认在 compose 中使用更快的镜像站以减少首次 build 耗时
+
+---
+
+## 8. 自动化维护命令
+
+为了让 Codex 和人工协作都走同一套入口，当前仓库统一使用下面四条命令：
+
+```bash
+make run
+make test
+make build
+make verify
+```
+
+它们分别表示：
+- `make run`：启动仓库，优先 Docker，兜底本地开发模式
+- `make test`：跑后端自动化测试和 Python 轻量测试
+- `make build`：构建 backend、frontend，并编译 Python 源文件
+- `make verify`：跑前端 lint、全部测试和全部构建，作为交付前检查
+
+如果你不想用 Makefile，也可以直接调用：
+
+```bash
+./scripts/up.sh
+./scripts/test.sh
+./scripts/build.sh
+./scripts/verify.sh
+```
+
+---
+
+## 9. 当前测试 / 构建 / 部署现状
+
+### 测试
+- backend：使用 Node 内置 test runner 做轻量 API smoke test
+- analysis-service：使用 `unittest` 做轻量文件级测试
+- frontend：当前还没有独立组件测试，先通过 `eslint` 和生产构建兜底
+
+### 构建
+- backend：`npm run build`
+- frontend：`npm run build`
+- analysis-service：通过 `py_compile` 做语法级构建校验
+
+### 部署
+- 当前稳定部署方式仍是 Docker Compose
+- 本地开发可直接跑 Node + Python + ffmpeg 工具链
+- GitHub Actions 已接入仓库级验证，默认执行 `make verify`
+
+---
+
+## 10. Definition of Done
+
+一项改动在当前仓库内算完成，至少要满足：
+- 相关代码改动保持小而可 review
+- `make test` 通过
+- `make build` 通过
+- 交付前能跑通 `make verify`
+- 如果改了命令、环境变量或开发流程，需要同步更新 `README.md`、`.env.example`、`AGENTS.md` 和相关脚本
+- 如果有剩余风险、跳过检查或已知限制，需要在交付说明里明确写出
 
 ### 说明
 - `scripts/setup-dev.sh` 会安装 backend / frontend 的 npm 依赖，以及 `analysis-service/requirements.txt` 中的 Python 依赖。

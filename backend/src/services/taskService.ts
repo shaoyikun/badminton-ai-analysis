@@ -11,8 +11,60 @@ function now() {
   return new Date().toISOString();
 }
 
+const activeAnalysisTasks = new Map<string, Promise<void>>();
+
+type AnalysisWorker = (taskId: string) => Promise<void>;
+
 function clampDelta(value: number) {
   return Math.round(value);
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function getAnalysisDelayMs() {
+  const configured = Number(process.env.MOCK_ANALYSIS_DELAY_MS ?? 2500);
+  if (!Number.isFinite(configured) || configured < 0) {
+    return 2500;
+  }
+  return Math.round(configured);
+}
+
+function getUploadsDir() {
+  return path.resolve(process.cwd(), 'uploads');
+}
+
+function getUploadBaseName(fileName: string) {
+  const normalized = fileName.replace(/\\/g, '/');
+  const baseName = path.posix.basename(normalized).trim();
+  return baseName || 'upload.bin';
+}
+
+function getSafeUploadExtension(fileName: string) {
+  const extension = path.extname(fileName).toLowerCase();
+  return /^[.a-z0-9]+$/.test(extension) ? extension : '';
+}
+
+function removeFileIfExists(target?: string) {
+  if (target && fs.existsSync(target)) {
+    fs.rmSync(target, { force: true });
+  }
+}
+
+function moveFile(sourcePath: string, targetPath: string) {
+  try {
+    fs.renameSync(sourcePath, targetPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') {
+      throw error;
+    }
+
+    fs.copyFileSync(sourcePath, targetPath);
+    fs.rmSync(sourcePath, { force: true });
+  }
 }
 
 function getActionLabel(actionType: string) {
@@ -263,14 +315,25 @@ export function updateTask(taskId: string, patch: Partial<TaskRecord>): TaskReco
   return tasks[index];
 }
 
-export function saveUpload(taskId: string, fileName: string, content?: Buffer, mimeType?: string) {
-  const uploadsDir = path.resolve(process.cwd(), 'uploads');
+export function saveUpload(taskId: string, fileName: string, stagedUploadPath: string, mimeType?: string) {
+  const current = getTask(taskId);
+  if (!current) {
+    removeFileIfExists(stagedUploadPath);
+    return undefined;
+  }
+
+  const uploadsDir = getUploadsDir();
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-  const safeName = `${taskId}-${fileName}`;
-  const uploadPath = path.join(uploadsDir, safeName);
-  fs.writeFileSync(uploadPath, content ?? Buffer.from('demo'));
+  const baseFileName = getUploadBaseName(fileName);
+  const uploadPath = path.join(uploadsDir, `${taskId}-${randomUUID().slice(0, 8)}${getSafeUploadExtension(baseFileName)}`);
+
+  moveFile(stagedUploadPath, uploadPath);
+  if (current.uploadPath && current.uploadPath !== uploadPath) {
+    removeFileIfExists(current.uploadPath);
+  }
+
   return updateTask(taskId, {
-    fileName,
+    fileName: baseFileName,
     mimeType,
     uploadPath,
     status: 'uploaded',
@@ -294,16 +357,18 @@ export function saveUpload(taskId: string, fileName: string, content?: Buffer, m
   });
 }
 
-export async function startMockAnalysis(taskId: string) {
-  const current = getTask(taskId);
-  if (!current) return undefined;
-  if (!current.uploadPath) return undefined;
+async function runAnalysisPipeline(taskId: string) {
+  let task = getTask(taskId);
+  if (!task?.uploadPath) return;
 
-  let task = current;
   if (task.preprocess?.status !== 'completed') {
     const preprocessed = await runPreprocess(taskId);
     if (!preprocessed || preprocessed.preprocess?.status !== 'completed') {
-      return updateTask(taskId, { status: 'failed', errorCode: 'preprocess_failed' });
+      updateTask(taskId, {
+        status: 'failed',
+        errorCode: preprocessed?.preprocess?.errorCode ?? 'preprocess_failed',
+      });
+      return;
     }
     task = preprocessed;
   }
@@ -315,17 +380,87 @@ export async function startMockAnalysis(taskId: string) {
     }
   }
 
-  const processingTask = updateTask(taskId, { status: 'processing', errorCode: undefined });
+  await delay(getAnalysisDelayMs());
+
+  const latest = getTask(taskId);
+  if (!latest || latest.status === 'failed') return;
+  const rawResult = buildMockResult(latest);
+  const enrichedResult = enrichResultWithHistory(latest, rawResult);
+  const resultPath = saveResult(taskId, enrichedResult);
+  updateTask(taskId, { status: 'completed', resultPath });
+}
+
+let analysisWorker: AnalysisWorker = runAnalysisPipeline;
+
+function queueAnalysisTask(taskId: string) {
+  if (activeAnalysisTasks.has(taskId)) return;
+
+  const taskPromise = analysisWorker(taskId)
+    .catch((error) => {
+      const current = getTask(taskId);
+      updateTask(taskId, {
+        status: 'failed',
+        errorCode: 'preprocess_failed',
+        preprocess: {
+          ...(current?.preprocess ?? { status: 'failed' }),
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'analysis failed unexpectedly',
+        },
+      });
+    })
+    .finally(() => {
+      activeAnalysisTasks.delete(taskId);
+    });
+
+  activeAnalysisTasks.set(taskId, taskPromise);
+}
+
+export async function startMockAnalysis(taskId: string) {
+  const current = getTask(taskId);
+  if (!current) return undefined;
+  if (!current.uploadPath) return undefined;
+
+  if (activeAnalysisTasks.has(taskId) && current.status === 'processing') {
+    return current;
+  }
+
+  const processingTask = updateTask(taskId, {
+    status: 'processing',
+    errorCode: undefined,
+    preprocess: current.preprocess?.status === 'completed'
+      ? current.preprocess
+      : {
+          ...(current.preprocess ?? { status: 'idle' }),
+          status: 'queued',
+          startedAt: undefined,
+          completedAt: undefined,
+          errorCode: undefined,
+          errorMessage: undefined,
+          metadata: undefined,
+          artifacts: undefined,
+        },
+    pose: current.pose?.status === 'completed'
+      ? current.pose
+      : {
+          ...(current.pose ?? { status: 'idle' }),
+          status: 'idle',
+          startedAt: undefined,
+          completedAt: undefined,
+          errorMessage: undefined,
+          resultPath: undefined,
+          summary: undefined,
+        },
+  });
   if (!processingTask) return undefined;
 
-  setTimeout(() => {
-    const latest = getTask(taskId);
-    if (!latest) return;
-    const rawResult = buildMockResult(latest);
-    const enrichedResult = enrichResultWithHistory(latest, rawResult);
-    const resultPath = saveResult(taskId, enrichedResult);
-    updateTask(taskId, { status: 'completed', resultPath });
-  }, 2500);
-
+  queueAnalysisTask(taskId);
   return processingTask;
+}
+
+export function setAnalysisWorkerForTests(worker?: AnalysisWorker) {
+  analysisWorker = worker ?? runAnalysisPipeline;
+}
+
+export function getActiveAnalysisTaskForTests(taskId: string) {
+  return activeAnalysisTasks.get(taskId);
 }

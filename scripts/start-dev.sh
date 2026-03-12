@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
 BACKEND_PID=""
 FRONTEND_PID=""
 
@@ -18,37 +20,40 @@ trap cleanup EXIT INT TERM
 
 cd "$ROOT_DIR"
 
-if lsof -iTCP:8787 -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "Port 8787 is already in use. Stop the existing backend process first." >&2
+if lsof -iTCP:"$BACKEND_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "Port $BACKEND_PORT is already in use. Stop the existing backend process first." >&2
   exit 1
 fi
 
-if lsof -iTCP:5173 -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "Port 5173 is already in use. Stop the existing frontend process first." >&2
+if lsof -iTCP:"$FRONTEND_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "Port $FRONTEND_PORT is already in use. Stop the existing frontend process first." >&2
   exit 1
 fi
 
-export PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  echo "python3 not found. Set PYTHON_BIN in .env or install Python 3." >&2
+  exit 1
+fi
 
 echo "Using PYTHON_BIN=$PYTHON_BIN"
-echo "Starting backend on http://127.0.0.1:8787 ..."
+echo "Starting backend on http://127.0.0.1:$BACKEND_PORT ..."
 (
   cd "$ROOT_DIR/backend"
-  npm run dev
+  PORT="$BACKEND_PORT" npm run dev
 ) &
 BACKEND_PID=$!
 
-echo "Starting frontend on http://127.0.0.1:5173 ..."
+echo "Starting frontend on http://127.0.0.1:$FRONTEND_PORT ..."
 (
   cd "$ROOT_DIR/frontend"
-  npm run dev -- --host 127.0.0.1 --port 5173
+  VITE_API_BASE="$VITE_API_BASE" npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT"
 ) &
 FRONTEND_PID=$!
 
 echo
 echo "Project is starting..."
-echo "- Frontend: http://127.0.0.1:5173"
-echo "- Backend:  http://127.0.0.1:8787"
+echo "- Frontend: http://127.0.0.1:$FRONTEND_PORT"
+echo "- Backend:  http://127.0.0.1:$BACKEND_PORT"
 echo "Press Ctrl+C to stop both services."
 echo
 

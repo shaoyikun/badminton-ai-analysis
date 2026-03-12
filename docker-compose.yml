@@ -6,9 +6,9 @@ services:
       args:
         APT_MIRROR: mirrors.aliyun.com
     environment:
-      PYTHON_BIN: python3
+      PYTHON_BIN: ${PYTHON_BIN:-python3}
     ports:
-      - "8787:8787"
+      - "${BACKEND_PORT:-8787}:8787"
     volumes:
       - backend_data:/app/backend/data
       - backend_uploads:/app/backend/uploads
@@ -25,9 +25,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_API_BASE: ""
+        VITE_API_BASE: ${VITE_API_BASE:-}
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
     depends_on:
       backend:
         condition: service_healthy

@@ -1,21 +1,30 @@
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { createTask, getCustomRetestComparison, getRetestComparison, getTask, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
-import { getPreprocessSummary, runPreprocess } from './services/preprocessService';
+import { getMaxFileSizeBytes, getPreprocessSummary, runPreprocess } from './services/preprocessService';
 import { getPoseResult, getPoseSummary, runPoseAnalysis } from './services/poseService';
 import { readResult, readResultByTaskId } from './services/store';
 
-async function buildServer() {
+export async function buildServer() {
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
     origin: true,
   });
 
-  await app.register(multipart);
+  await app.register(multipart, {
+    limits: {
+      files: 1,
+      fileSize: getMaxFileSizeBytes(),
+    },
+  });
 
   await app.register(fastifyStatic, {
     root: path.resolve(process.cwd(), 'data'),
@@ -43,13 +52,43 @@ async function buildServer() {
 
   app.post('/api/tasks/:taskId/upload', async (request, reply) => {
     const params = request.params as { taskId: string };
-    const file = await request.file();
+    if (!getTask(params.taskId)) {
+      return reply.status(404).send({ error: 'task not found' });
+    }
+
+    let file;
+    try {
+      file = await request.file();
+    } catch (error) {
+      if (error instanceof Error && /too large/i.test(error.message)) {
+        return reply.status(413).send({ error: 'file exceeds current PoC upload limit', errorCode: 'upload_failed' });
+      }
+      throw error;
+    }
+
     if (!file) {
       return reply.status(400).send({ error: 'file is required' });
     }
-    const buffer = await file.toBuffer();
-    const task = saveUpload(params.taskId, file.filename, buffer, file.mimetype);
+
+    const stagedUploadPath = path.join(os.tmpdir(), `badminton-upload-${params.taskId}-${randomUUID().slice(0, 8)}.tmp`);
+
+    try {
+      await pipeline(file.file, fs.createWriteStream(stagedUploadPath, { flags: 'wx' }));
+      if (file.file.truncated) {
+        fs.rmSync(stagedUploadPath, { force: true });
+        return reply.status(413).send({ error: 'file exceeds current PoC upload limit', errorCode: 'upload_failed' });
+      }
+    } catch (error) {
+      fs.rmSync(stagedUploadPath, { force: true });
+      if (error instanceof Error && /too large/i.test(error.message)) {
+        return reply.status(413).send({ error: 'file exceeds current PoC upload limit', errorCode: 'upload_failed' });
+      }
+      return reply.status(500).send({ error: error instanceof Error ? error.message : 'failed to persist upload' });
+    }
+
+    const task = saveUpload(params.taskId, file.filename, stagedUploadPath, file.mimetype);
     if (!task) {
+      fs.rmSync(stagedUploadPath, { force: true });
       return reply.status(404).send({ error: 'task not found' });
     }
     return {
@@ -238,9 +277,13 @@ async function buildServer() {
   return app;
 }
 
-buildServer()
-  .then((app) => app.listen({ port: 8787, host: '0.0.0.0' }))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+if (require.main === module) {
+  const port = Number(process.env.PORT ?? 8787);
+
+  buildServer()
+    .then((app) => app.listen({ port, host: '0.0.0.0' }))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

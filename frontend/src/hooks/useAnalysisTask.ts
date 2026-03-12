@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed'
 export type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
@@ -238,7 +238,7 @@ export function useAnalysisTask() {
     appendLog(`${copy.title}：${copy.message}`)
   }
 
-  async function fetchHistory(nextActionType?: string) {
+  const fetchHistory = useCallback(async (nextActionType?: string) => {
     const action = nextActionType ?? actionType
     const res = await fetch(`${API_BASE}/api/history?actionType=${action}`)
     const data = await res.json()
@@ -246,7 +246,7 @@ export function useAnalysisTask() {
     const items = data.items ?? []
     setHistory(items)
     return items as TaskHistoryItem[]
-  }
+  }, [actionType])
 
   async function fetchComparison(currentTaskId?: string, previousTaskId?: string) {
     const targetTaskId = currentTaskId ?? taskId
@@ -477,7 +477,7 @@ export function useAnalysisTask() {
 
   useEffect(() => {
     fetchHistory(actionType)
-  }, [actionType])
+  }, [actionType, fetchHistory])
 
   useEffect(() => {
     return () => stopPolling()

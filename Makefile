@@ -1,9 +1,12 @@
 SHELL := /bin/bash
 
-.PHONY: setup dev up up-build down logs compose-up compose-logs compose-logs-backend compose-logs-frontend compose-down compose-ps build
+.PHONY: setup run dev up up-build down logs compose-up compose-logs compose-logs-backend compose-logs-frontend compose-down compose-ps test build verify lint
 
 setup:
 	./scripts/setup-dev.sh
+
+run:
+	./scripts/up.sh
 
 dev:
 	./scripts/start-dev.sh
@@ -39,5 +42,13 @@ compose-ps:
 	docker compose ps
 
 build:
-	cd backend && npm run build
-	cd frontend && npm run build
+	./scripts/build.sh
+
+test:
+	./scripts/test.sh
+
+verify:
+	./scripts/verify.sh
+
+lint:
+	cd frontend && npm run lint

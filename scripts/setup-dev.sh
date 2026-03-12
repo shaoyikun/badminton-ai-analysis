@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 
 cd "$ROOT_DIR"
 
@@ -56,6 +57,7 @@ ensure_cmd npm node
 ensure_cmd python3 python
 ensure_cmd ffmpeg ffmpeg
 ensure_cmd ffprobe ffmpeg
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
 
 echo "[2/4] Installing backend dependencies..."
 cd "$ROOT_DIR/backend"
@@ -67,8 +69,8 @@ npm install
 
 echo "[4/4] Installing analysis-service Python dependencies..."
 cd "$ROOT_DIR/analysis-service"
-python3 -m pip install -r requirements.txt
+"$PYTHON_BIN" -m pip install -r requirements.txt
 
 echo
 echo "Setup complete."
-echo "Run ./scripts/up.sh to start the project with one command."
+echo "Run make run to start the project with one command."

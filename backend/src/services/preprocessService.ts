@@ -1,28 +1,34 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { PreprocessArtifacts, PreprocessFrameItem, TaskRecord, VideoMetadata } from '../types/task';
 import { getTask, updateTask } from './taskService';
 
 const SUPPORTED_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v', '.webm']);
 const MIN_FILE_SIZE_BYTES = 100 * 1024;
-const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
+const DEFAULT_MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
 const MIN_DURATION_SECONDS = 5;
 const MAX_DURATION_SECONDS = 15;
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 320;
 const DEFAULT_FRAME_RATE = 25;
+const execFileAsync = promisify(execFile);
 
 function now() {
   return new Date().toISOString();
 }
 
-function sanitizeFileName(fileName: string) {
-  return fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+export function getMaxFileSizeBytes() {
+  const configured = Number(process.env.UPLOAD_MAX_FILE_SIZE_BYTES ?? DEFAULT_MAX_FILE_SIZE_BYTES);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_MAX_FILE_SIZE_BYTES;
+  }
+  return Math.round(configured);
 }
 
-function ensureDir(target: string) {
-  if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
 function clearDir(target: string) {
@@ -41,19 +47,19 @@ function buildSampleTimestamps(durationSeconds: number, targetFrameCount: number
   return Array.from({ length: targetFrameCount }, (_, index) => Number((step * (index + 1)).toFixed(2)));
 }
 
-function runCommand(command: string, args: string[]) {
-  return execFileSync(command, args, {
+async function runCommand(command: string, args: string[]) {
+  const { stdout } = await execFileAsync(command, args, {
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
+  });
+  return stdout.trim();
 }
 
-function probeVideo(task: TaskRecord): VideoMetadata | undefined {
+async function probeVideo(task: TaskRecord): Promise<VideoMetadata | undefined> {
   if (!task.uploadPath || !task.fileName) return undefined;
   const stat = fs.statSync(task.uploadPath);
   const extension = path.extname(task.fileName).toLowerCase();
 
-  const probeOutput = runCommand('ffprobe', [
+  const probeOutput = await runCommand('ffprobe', [
     '-v',
     'error',
     '-select_streams',
@@ -115,7 +121,7 @@ function validateUploadedVideo(metadata: VideoMetadata) {
     };
   }
 
-  if (metadata.fileSizeBytes > MAX_FILE_SIZE_BYTES) {
+  if (metadata.fileSizeBytes > getMaxFileSizeBytes()) {
     return {
       errorCode: 'upload_failed',
       errorMessage: 'video file is too large for current PoC limits',
@@ -139,7 +145,7 @@ function validateUploadedVideo(metadata: VideoMetadata) {
   return null;
 }
 
-function extractFrames(taskId: string, task: TaskRecord, metadata: VideoMetadata): PreprocessArtifacts {
+async function extractFrames(taskId: string, task: TaskRecord, metadata: VideoMetadata): Promise<PreprocessArtifacts> {
   if (!task.uploadPath) throw new Error('upload path not found');
 
   const targetFrameCount = Math.min(12, Math.max(6, Math.round((metadata.durationSeconds ?? 6) / 1.2)));
@@ -147,12 +153,13 @@ function extractFrames(taskId: string, task: TaskRecord, metadata: VideoMetadata
   const artifactsDir = path.join(getArtifactsBaseDir(), taskId);
   clearDir(artifactsDir);
 
-  const sampledFrames: PreprocessFrameItem[] = sampleTimestamps.map((timestamp, index) => {
+  const sampledFrames: PreprocessFrameItem[] = [];
+  for (const [index, timestamp] of sampleTimestamps.entries()) {
     const frameFileName = `frame-${String(index + 1).padStart(2, '0')}.jpg`;
     const fullPath = path.join(artifactsDir, frameFileName);
     const relativePath = path.posix.join('data', 'preprocess', taskId, frameFileName);
 
-    runCommand('ffmpeg', [
+    await runCommand('ffmpeg', [
       '-y',
       '-ss',
       String(timestamp),
@@ -165,13 +172,13 @@ function extractFrames(taskId: string, task: TaskRecord, metadata: VideoMetadata
       fullPath,
     ]);
 
-    return {
+    sampledFrames.push({
       index: index + 1,
       timestampSeconds: timestamp,
       fileName: frameFileName,
       relativePath,
-    };
-  });
+    });
+  }
 
   const manifestPath = path.join(artifactsDir, 'manifest.json');
   const relativeManifestPath = path.posix.join('data', 'preprocess', taskId, 'manifest.json');
@@ -222,7 +229,7 @@ export async function runPreprocess(taskId: string) {
   try {
     const current = getTask(taskId);
     if (!current) return undefined;
-    const metadata = probeVideo(current);
+    const metadata = await probeVideo(current);
     if (!metadata) {
       return updateTask(taskId, {
         preprocess: {
@@ -251,7 +258,7 @@ export async function runPreprocess(taskId: string) {
       });
     }
 
-    const artifacts = extractFrames(taskId, current, metadata);
+    const artifacts = await extractFrames(taskId, current, metadata);
     return updateTask(taskId, {
       preprocess: {
         status: 'completed',

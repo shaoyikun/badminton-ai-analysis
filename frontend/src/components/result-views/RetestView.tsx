@@ -1,5 +1,6 @@
 import type { PoseResult, ReportResult, RetestComparison } from '../../hooks/useAnalysisTask'
-import { buildAssetUrl, ComparisonCard } from './shared'
+import { ComparisonCard } from './shared'
+import { buildAssetUrl } from './utils'
 
 export function RetestView({ report, poseResult, comparison }: { report: ReportResult; poseResult: PoseResult | null; comparison: RetestComparison | null }) {
   return (
