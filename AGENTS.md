@@ -28,14 +28,18 @@ Primary runtime entry points:
 
 Use these commands as the default automation interface for this repo:
 
+- `make help`: discover the supported repo commands
+- `make setup`: install local dependencies and bootstrap the repo
 - `make run`: stable startup command, prefers Docker Compose and falls back to local dev
 - `make test`: stable automated test command
 - `make build`: stable production build command
-- `make verify`: stable validation command for handoff
+- `make verify`: strict validation command for handoff
+- `make verify-local`: local-only validation command that skips Docker Compose build verification
 
 Supporting commands:
 
 - `./scripts/setup-dev.sh`: install local dependencies
+- `make dev`: force local development mode
 - `make down`: stop Docker Compose services
 - `make logs`: stream Docker Compose logs
 
@@ -53,6 +57,7 @@ The skills live under `.agents/skills/`.
 - Start by reading the relevant README, AGENTS instructions, and the touched subsystem before editing.
 - Prefer updating existing scripts and docs over adding parallel alternatives.
 - When commands or env vars change, keep `README.md`, `.env.example`, `Makefile`, and relevant scripts in sync.
+- Keep `docs/engineering/DELIVERY-BASELINE.md` aligned with the actual run/test/build/verify workflow.
 - When API or workflow changes touch both backend and frontend, document the end-to-end effect in the final handoff.
 - Avoid large refactors unless they are required to restore automation, testability, or build stability.
 

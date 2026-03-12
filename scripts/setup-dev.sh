@@ -6,10 +6,6 @@ source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 
 cd "$ROOT_DIR"
 
-has_cmd() {
-  command -v "$1" >/dev/null 2>&1
-}
-
 install_with_brew() {
   local pkg="$1"
   if has_cmd brew; then
@@ -52,6 +48,7 @@ ensure_cmd() {
 }
 
 echo "[1/4] Checking base tools..."
+echo "Auto-install currently supports Homebrew and apt-get. Other environments require manual setup."
 ensure_cmd node node
 ensure_cmd npm node
 ensure_cmd python3 python
@@ -74,3 +71,4 @@ cd "$ROOT_DIR/analysis-service"
 echo
 echo "Setup complete."
 echo "Run make run to start the project with one command."
+echo "Use make verify for the strict handoff gate, or make verify-local for the local-only gate."

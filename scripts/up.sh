@@ -20,51 +20,37 @@ for arg in "$@"; do
   esac
 done
 
-has_docker=0
-if command -v docker >/dev/null 2>&1; then
-  has_docker=1
-fi
+if docker_cli_available; then
+  if ! docker_daemon_available; then
+    try_start_colima || true
+  fi
 
-if [[ "$has_docker" -eq 1 ]]; then
-  if ! docker info >/dev/null 2>&1; then
-    if command -v colima >/dev/null 2>&1; then
-      echo "[1/3] Starting colima..."
-      colima start
+  if docker_daemon_available; then
+    if [[ "$WITH_BUILD" -eq 1 ]]; then
+      print_section "Rebuilding and starting services with Docker Compose"
+      docker compose up --build -d
     else
-      echo "Docker CLI found, but Docker daemon is not available."
-      echo "If you use Docker Desktop, please start Docker Desktop first."
-      echo "If you use colima, install/start colima first."
-      exit 1
+      print_section "Starting services with Docker Compose"
+      docker compose up -d
     fi
+
+    print_section "Current Docker Compose status"
+    docker compose ps
+
+    echo
+    echo "Project is running in Docker Compose mode."
+    print_access_urls
+    echo
+    print_standard_commands
+    exit 0
   fi
 
-  if [[ "$WITH_BUILD" -eq 1 ]]; then
-    echo "[2/3] Rebuilding and starting project with Docker Compose..."
-    docker compose up --build -d
-  else
-    echo "[2/3] Starting project with Docker Compose..."
-    docker compose up -d
-  fi
-
-  echo "[3/3] Current service status:"
-  docker compose ps
-
-  echo
-  echo "Done."
-  echo "- Frontend: http://127.0.0.1:$FRONTEND_PORT"
-  echo "- Backend:  http://127.0.0.1:$BACKEND_PORT"
-  echo
-  echo "Useful commands:"
-  echo "- make run                # start services"
-  echo "- make verify             # lint + test + build"
-  echo "- ./scripts/up.sh --build   # rebuild images and start"
-  echo "- ./scripts/logs.sh"
-  echo "- ./scripts/down.sh"
-  exit 0
+  echo "Docker CLI is installed, but the Docker daemon is unavailable."
+  echo "Falling back to local development mode."
 fi
 
 if [[ -x "$ROOT_DIR/scripts/start-dev.sh" ]]; then
-  echo "Docker not found. Falling back to local dev mode..."
+  print_section "Starting local development mode"
   exec "$ROOT_DIR/scripts/start-dev.sh"
 fi
 

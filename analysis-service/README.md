@@ -1,15 +1,47 @@
 # Analysis Service
 
-这是羽毛球 AI 项目的姿态识别 / 分析服务预留目录。
+`analysis-service/` 是后端调用的 Python 姿态分析辅助模块，不作为独立产品入口维护。统一启动、测试、构建和交付门禁以仓库根目录为准：
 
-当前阶段目标：
-- 先把 `关键帧 -> 姿态点结果` 的最小链路搭出来
-- 优先验证 Python 服务、关键帧读取、结果输出结构
-- 后续再把规则评分、动作诊断、报告生成继续接到主后端
+```bash
+make setup
+make run
+make test
+make build
+make verify
+```
 
-建议结构：
-- `app.py`：服务入口或命令行入口
-- `services/pose_estimator.py`：姿态识别逻辑
+第一次进入仓库时，先读：
+
+- `../README.md`
+- `../docs/engineering/DELIVERY-BASELINE.md`
+
+## 当前职责
+
+- 读取预处理后的关键帧
+- 执行姿态估计
+- 输出供 backend 消费的结构化结果
+
+当前目录约定：
+
+- `app.py`：CLI / 入口
 - `services/frame_loader.py`：关键帧读取与遍历
-- `models/`：模型文件或下载说明
-- `samples/`：样例输入输出
+- `services/pose_estimator.py`：姿态识别逻辑
+- `tests/`：轻量自动化测试
+
+## 本地单独调试
+
+安装依赖：
+
+```bash
+cd analysis-service
+python3 -m pip install -r requirements.txt
+```
+
+运行测试：
+
+```bash
+cd analysis-service
+PYTHONPATH=. python3 -m unittest discover -s tests -p 'test_*.py'
+```
+
+仓库级 `make test` 与 `make build` 已覆盖这里的最小验证路径。

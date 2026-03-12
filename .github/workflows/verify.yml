@@ -38,5 +38,5 @@ jobs:
       - name: Install project dependencies
         run: ./scripts/setup-dev.sh
 
-      - name: Run repository verification
+      - name: Run strict repository verification
         run: make verify

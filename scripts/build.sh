@@ -6,24 +6,26 @@ source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 
 cd "$ROOT_DIR"
 
-if [[ -z "$PYTHON_BIN" ]]; then
-  echo "python3 not found. Set PYTHON_BIN in .env or install Python 3." >&2
+if ! has_cmd npm; then
+  echo "npm not found. Install Node.js and rerun make setup." >&2
   exit 1
 fi
 
-echo "[1/3] Building backend..."
+require_python
+
+print_section "Building backend"
 (
   cd "$ROOT_DIR/backend"
   npm run build
 )
 
-echo "[2/3] Building frontend..."
+print_section "Building frontend"
 (
   cd "$ROOT_DIR/frontend"
   npm run build
 )
 
-echo "[3/3] Compiling Python sources..."
+print_section "Compiling Python sources"
 (
   cd "$ROOT_DIR/analysis-service"
   PYTHONPYCACHEPREFIX=/tmp/badminton-ai-analysis-pycache "$PYTHON_BIN" -m py_compile app.py services/*.py tests/*.py
