@@ -2,16 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { PreprocessArtifacts, PreprocessFrameItem, TaskRecord, VideoMetadata } from '../types/task';
+import { FlowErrorCode, PreprocessArtifacts, PreprocessFrameItem, TaskRecord, VideoMetadata } from '../types/task';
 import { getTask, updateTask } from './taskRepository';
+import { uploadConstraints } from './uploadFlowConfig';
 
-const SUPPORTED_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v', '.webm']);
-const MIN_FILE_SIZE_BYTES = 100 * 1024;
-const DEFAULT_MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
-const MIN_DURATION_SECONDS = 5;
-const MAX_DURATION_SECONDS = 15;
-const MIN_WIDTH = 320;
-const MIN_HEIGHT = 320;
 const DEFAULT_FRAME_RATE = 25;
 const execFileAsync = promisify(execFile);
 
@@ -20,9 +14,9 @@ function now() {
 }
 
 export function getMaxFileSizeBytes() {
-  const configured = Number(process.env.UPLOAD_MAX_FILE_SIZE_BYTES ?? DEFAULT_MAX_FILE_SIZE_BYTES);
+  const configured = Number(process.env.UPLOAD_MAX_FILE_SIZE_BYTES ?? uploadConstraints.defaultMaxFileSizeBytes);
   if (!Number.isFinite(configured) || configured <= 0) {
-    return DEFAULT_MAX_FILE_SIZE_BYTES;
+    return uploadConstraints.defaultMaxFileSizeBytes;
   }
   return Math.round(configured);
 }
@@ -107,37 +101,40 @@ async function probeVideo(task: TaskRecord): Promise<VideoMetadata | undefined> 
 }
 
 function validateUploadedVideo(metadata: VideoMetadata) {
-  if (!SUPPORTED_EXTENSIONS.has(metadata.extension ?? '')) {
+  if (!uploadConstraints.supportedExtensions.includes(metadata.extension ?? '')) {
     return {
-      errorCode: 'upload_failed',
+      errorCode: 'upload_failed' as FlowErrorCode,
       errorMessage: `unsupported video extension: ${metadata.extension ?? 'unknown'}`,
     };
   }
 
-  if (metadata.fileSizeBytes < MIN_FILE_SIZE_BYTES) {
+  if (metadata.fileSizeBytes < uploadConstraints.minFileSizeBytes) {
     return {
-      errorCode: 'upload_failed',
+      errorCode: 'upload_failed' as FlowErrorCode,
       errorMessage: 'video file is too small to analyze reliably',
     };
   }
 
   if (metadata.fileSizeBytes > getMaxFileSizeBytes()) {
     return {
-      errorCode: 'upload_failed',
+      errorCode: 'upload_failed' as FlowErrorCode,
       errorMessage: 'video file is too large for current PoC limits',
     };
   }
 
-  if ((metadata.durationSeconds ?? 0) < MIN_DURATION_SECONDS || (metadata.durationSeconds ?? 0) > MAX_DURATION_SECONDS) {
+  if (
+    (metadata.durationSeconds ?? 0) < uploadConstraints.minDurationSeconds
+    || (metadata.durationSeconds ?? 0) > uploadConstraints.maxDurationSeconds
+  ) {
     return {
-      errorCode: 'invalid_duration',
-      errorMessage: `video duration should be between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS} seconds`,
+      errorCode: 'invalid_duration' as FlowErrorCode,
+      errorMessage: `video duration should be between ${uploadConstraints.minDurationSeconds} and ${uploadConstraints.maxDurationSeconds} seconds`,
     };
   }
 
-  if ((metadata.width ?? 0) < MIN_WIDTH || (metadata.height ?? 0) < MIN_HEIGHT) {
+  if ((metadata.width ?? 0) < uploadConstraints.minWidth || (metadata.height ?? 0) < uploadConstraints.minHeight) {
     return {
-      errorCode: 'poor_lighting_or_occlusion',
+      errorCode: 'poor_lighting_or_occlusion' as FlowErrorCode,
       errorMessage: `video resolution is too small: ${metadata.width ?? 0}x${metadata.height ?? 0}`,
     };
   }

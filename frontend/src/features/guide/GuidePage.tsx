@@ -1,6 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useAnalysisTask } from '../../hooks/useAnalysisTask'
+import { ACTION_GUIDE_COPY, UPLOAD_CONSTRAINTS } from '../upload/uploadFlow'
 
 export function GuidePage() {
+  const { selectedActionLabel, actionType } = useAnalysisTask()
+  const actionGuide = ACTION_GUIDE_COPY[actionType]
+
   return (
     <div className="page-stack">
       <section className="surface-card">
@@ -9,12 +14,21 @@ export function GuidePage() {
           <h2>推荐拍摄要求</h2>
         </div>
         <div className="info-list">
-          <div className="list-row">单人出镜，避免其他人频繁进入画面</div>
-          <div className="list-row">时长 5~15 秒，完整覆盖准备、击球和收拍</div>
-          <div className="list-row">优先侧后方或正后方机位</div>
-          <div className="list-row">人物尽量全身完整入镜</div>
-          <div className="list-row">一段视频只分析一种动作</div>
-          <div className="list-row">避免逆光、遮挡和剧烈抖动</div>
+          {UPLOAD_CONSTRAINTS.captureChecklist.map((item) => (
+            <div key={item} className="list-row">{item}</div>
+          ))}
+        </div>
+      </section>
+
+      <section className="surface-card">
+        <span className="badge neutral">当前动作：{selectedActionLabel}</span>
+        <div className="section-head">
+          <h2>{actionGuide.title}</h2>
+        </div>
+        <div className="info-list">
+          {actionGuide.checklist.map((item) => (
+            <div key={item} className="list-row">{item}</div>
+          ))}
         </div>
       </section>
 

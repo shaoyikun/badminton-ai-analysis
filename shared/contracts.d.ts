@@ -1,8 +1,48 @@
 export type ActionType = 'clear' | 'smash';
+export type FlowErrorCode =
+  | 'upload_failed'
+  | 'invalid_duration'
+  | 'multi_person_detected'
+  | 'body_not_detected'
+  | 'poor_lighting_or_occlusion'
+  | 'invalid_camera_angle'
+  | 'preprocess_failed'
+  | 'pose_failed'
+  | 'result_not_ready';
+
+export type FlowActionTarget = 'upload' | 'guide';
 
 export type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed';
 export type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed';
 export type PoseStatus = 'idle' | 'processing' | 'completed' | 'failed';
+
+export interface UploadConstraints {
+  minDurationSeconds: number;
+  maxDurationSeconds: number;
+  minFileSizeBytes: number;
+  defaultMaxFileSizeBytes: number;
+  minWidth: number;
+  minHeight: number;
+  supportedExtensions: string[];
+  recommendedAngles: string[];
+  supportedActionLabels: Record<ActionType, string>;
+  captureChecklist: string[];
+}
+
+export interface FlowErrorCatalogItem {
+  title: string;
+  summary: string;
+  explanation: string;
+  suggestions: string[];
+  uploadBanner: string;
+  primaryAction: FlowActionTarget;
+  secondaryAction: FlowActionTarget;
+}
+
+export interface UploadFlowConfig {
+  constraints: UploadConstraints;
+  errorCatalog: Record<FlowErrorCode, FlowErrorCatalogItem>;
+}
 
 export interface DimensionScore {
   name: string;
@@ -57,7 +97,7 @@ export interface PreprocessInfo {
   status: PreprocessStatus;
   startedAt?: string;
   completedAt?: string;
-  errorCode?: string;
+  errorCode?: FlowErrorCode;
   errorMessage?: string;
   metadata?: VideoMetadata;
   artifacts?: PreprocessArtifacts;
@@ -109,6 +149,7 @@ export interface PoseInfo {
   status: PoseStatus;
   startedAt?: string;
   completedAt?: string;
+  errorCode?: FlowErrorCode;
   errorMessage?: string;
   resultPath?: string;
   summary?: {
@@ -242,7 +283,7 @@ export interface UploadTaskResponse {
 export interface TaskStatusResponse {
   taskId: string;
   status: TaskStatus;
-  errorCode?: string;
+  errorCode?: FlowErrorCode;
   errorMessage?: string;
   preprocessStatus: PreprocessStatus;
   poseStatus: PoseStatus;

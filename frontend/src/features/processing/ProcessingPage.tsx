@@ -8,25 +8,47 @@ function getSteps(status: string, preprocessStatus: string, poseStatus: string) 
   const poseDone = poseStatus === 'completed' || status === 'completed'
 
   return [
-    { title: '视频已上传', state: status ? 'done' : 'idle' },
+    {
+      title: '视频已上传',
+      state: status ? 'done' : 'idle',
+      description: '文件已提交成功，接下来会先检查视频是否符合当前 MVP 要求。',
+    },
     {
       title: '正在校验与抽帧',
       state: preprocessDone ? 'done' : (preprocessStatus === 'processing' || preprocessStatus === 'queued' || status === 'uploaded') ? 'active' : 'idle',
+      description: preprocessDone
+        ? '已完成视频信息校验，并抽取了后续分析所需的关键帧。'
+        : '系统正在读取视频信息、检查基本约束，并准备关键帧。你暂时不需要操作。',
     },
     {
       title: '正在识别动作特征',
       state: poseDone ? 'done' : poseStatus === 'processing' || preprocessDone ? 'active' : 'idle',
+      description: poseDone
+        ? '已完成主体动作骨架识别，正在整理关键动作特征。'
+        : '系统正在识别你的动作骨架和关键发力特征，机位和画面清晰度会直接影响这一阶段。',
     },
     {
       title: '正在生成诊断与复测建议',
       state: status === 'completed' ? 'done' : (poseDone || status === 'processing') ? 'active' : 'idle',
+      description: status === 'completed'
+        ? '分析结果已经准备好，正在跳转到报告页。'
+        : '系统正在把动作识别结果整理成报告、问题解释和下一次复测建议。',
     },
   ] as const
 }
 
+function getLiveSummary(preprocessStatus: string, poseStatus: string, status: string) {
+  if (status === 'completed') return '本次分析已经完成，正在进入报告页。'
+  if (poseStatus === 'processing') return '动作识别正在进行中，这是最依赖画面质量和机位的一步。'
+  if (preprocessStatus === 'processing' || preprocessStatus === 'queued' || status === 'uploaded') {
+    return '系统正在检查时长、视频质量并抽取关键帧，确认这段视频是否适合进入分析。'
+  }
+  return '任务已启动，系统会自动依次完成校验、识别和结果生成。'
+}
+
 export function ProcessingPage() {
   const navigate = useNavigate()
-  const { taskId, status, preprocessStatus, poseStatus, errorState, selectedActionLabel } = useAnalysisTask()
+  const { taskId, status, preprocessStatus, poseStatus, errorState, selectedActionLabel, selectedVideoSummary } = useAnalysisTask()
 
   useEffect(() => {
     if (!taskId) {
@@ -51,22 +73,34 @@ export function ProcessingPage() {
           <h2>当前任务：{selectedActionLabel}</h2>
           <StatusPill label={status === 'completed' ? '已完成' : '处理中'} tone="progress" />
         </div>
+        <div className="meta-grid">
+          <div className="list-row">
+            <span>当前文件</span>
+            <strong>{selectedVideoSummary?.fileName ?? '已上传视频'}</strong>
+          </div>
+          <div className="list-row">
+            <span>预计耗时</span>
+            <strong>约 15~30 秒</strong>
+          </div>
+        </div>
+        <p className="muted-copy">{getLiveSummary(preprocessStatus, poseStatus, status)}</p>
+      </section>
 
+      <section className="surface-card">
+        <div className="section-head">
+          <h2>分步骤反馈</h2>
+        </div>
         <div className="step-list">
           {steps.map((step) => (
             <div key={step.title} className={`step-row ${step.state}`}>
               <span className={`step-dot ${step.state}`} />
               <div>
                 <strong>{step.title}</strong>
-                <p>{step.state === 'done' ? '已完成' : step.state === 'active' ? '正在进行' : '等待中'}</p>
+                <p>{step.description}</p>
               </div>
             </div>
           ))}
         </div>
-
-        <p className="muted-copy">
-          预计耗时 15~30 秒。分析成功后会自动进入报告，若视频不符合要求会返回明确的重拍建议。
-        </p>
       </section>
     </div>
   )

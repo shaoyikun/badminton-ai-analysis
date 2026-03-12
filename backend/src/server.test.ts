@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { buildServer } from './server';
+import { updateTask } from './services/taskRepository';
+import { setAnalysisWorkerForTests } from './services/taskService';
 
 function buildMultipartPayload(fileName: string, content: Buffer | string, mimeType = 'video/mp4') {
   const boundary = `----badminton-test-${Date.now()}`;
@@ -120,6 +122,127 @@ test('upload endpoint rejects files above configured limit before buffering them
     });
 
     assert.equal(uploadResponse.statusCode, 413);
+    assert.equal((uploadResponse.json() as { errorCode?: string }).errorCode, 'upload_failed');
+  });
+});
+
+test('status endpoint surfaces invalid_duration after analyze starts', async (t) => {
+  await withTempWorkspace(async (workspace) => {
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+    t.after(() => {
+      setAnalysisWorkerForTests();
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'clear' },
+    });
+    const createPayload = createResponse.json() as { taskId: string };
+
+    setAnalysisWorkerForTests(async (taskId) => {
+      updateTask(taskId, {
+        status: 'failed',
+        errorCode: 'invalid_duration',
+        preprocess: {
+          status: 'failed',
+          errorCode: 'invalid_duration',
+          errorMessage: 'video duration should be between 5 and 15 seconds',
+        },
+      });
+    });
+
+    const multipart = buildMultipartPayload('too-short.mp4', 'demo-video');
+
+    const uploadResponse = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${createPayload.taskId}/upload`,
+      headers: {
+        'content-type': `multipart/form-data; boundary=${multipart.boundary}`,
+      },
+      payload: multipart.payload,
+    });
+    assert.equal(uploadResponse.statusCode, 200);
+
+    const analyzeResponse = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${createPayload.taskId}/analyze`,
+    });
+
+    assert.equal(analyzeResponse.statusCode, 200);
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const statusResponse = await app.inject({
+      method: 'GET',
+      url: `/api/tasks/${createPayload.taskId}`,
+    });
+
+    assert.equal(statusResponse.statusCode, 200);
+    const statusPayload = statusResponse.json() as { status: string; errorCode?: string; preprocessStatus: string };
+    assert.equal(statusPayload.status, 'failed');
+    assert.equal(statusPayload.errorCode, 'invalid_duration');
+    assert.equal(statusPayload.preprocessStatus, 'failed');
+  });
+});
+
+test('pose failure returns pose_failed and is visible from task status endpoint', async (t) => {
+  await withTempWorkspace(async (workspace) => {
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'smash' },
+    });
+    const createPayload = createResponse.json() as { taskId: string };
+
+    updateTask(createPayload.taskId, {
+      status: 'processing',
+      preprocess: {
+        status: 'completed',
+        artifacts: {
+          normalizedFileName: 'clip.mp4',
+          metadataExtractedAt: new Date().toISOString(),
+          artifactsDir: path.join(workspace, 'missing-artifacts'),
+          manifestPath: 'data/preprocess/missing/manifest.json',
+          framePlan: {
+            strategy: 'uniform-sampling-ffmpeg-v1',
+            targetFrameCount: 6,
+            sampleTimestamps: [1, 2, 3],
+          },
+          sampledFrames: [],
+        },
+      },
+    });
+
+    const poseResponse = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${createPayload.taskId}/pose`,
+    });
+
+    assert.equal(poseResponse.statusCode, 422);
+    const posePayload = poseResponse.json() as { errorCode?: string; poseStatus?: string };
+    assert.equal(posePayload.errorCode, 'pose_failed');
+    assert.equal(posePayload.poseStatus, 'failed');
+
+    const statusResponse = await app.inject({
+      method: 'GET',
+      url: `/api/tasks/${createPayload.taskId}`,
+    });
+
+    assert.equal(statusResponse.statusCode, 200);
+    const statusPayload = statusResponse.json() as { status: string; errorCode?: string; poseStatus: string; errorMessage?: string };
+    assert.equal(statusPayload.status, 'failed');
+    assert.equal(statusPayload.errorCode, 'pose_failed');
+    assert.equal(statusPayload.poseStatus, 'failed');
+    assert.match(statusPayload.errorMessage ?? '', /no such file|not found/i);
   });
 });
 

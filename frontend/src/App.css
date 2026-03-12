@@ -362,6 +362,15 @@ button {
   margin-top: 12px;
 }
 
+.inline-error-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.inline-error-list li + li {
+  margin-top: 6px;
+}
+
 .upload-field {
   display: block;
   border: 1px dashed var(--line-strong);
@@ -403,11 +412,16 @@ button {
   max-height: 240px;
 }
 
+.upload-summary-inset {
+  margin-top: 14px;
+}
+
 .info-list,
 .history-list,
 .step-list,
 .sheet-stack,
-.field-stack {
+.field-stack,
+.checklist-stack {
   display: grid;
   gap: 10px;
 }
@@ -419,6 +433,7 @@ button {
 .list-row,
 .history-card,
 .step-row,
+.checklist-row,
 .score-tile,
 .compare-tile,
 .debug-kv,
@@ -475,6 +490,11 @@ button {
   background: linear-gradient(180deg, rgba(45, 122, 82, 0.08) 0%, rgba(255, 255, 255, 0.92) 100%);
 }
 
+.warning-card {
+  background: linear-gradient(180deg, rgba(255, 245, 228, 0.92) 0%, rgba(255, 255, 255, 0.98) 100%);
+  border-color: rgba(240, 173, 78, 0.28);
+}
+
 .summary-card,
 .comparison-summary-card,
 .primary-issue-card {
@@ -518,6 +538,54 @@ button {
 
 .compare-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.checklist-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.checklist-badge {
+  flex: 0 0 auto;
+  min-width: 52px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.checklist-badge.pass {
+  background: rgba(45, 122, 82, 0.12);
+  color: var(--brand-strong);
+}
+
+.checklist-badge.fail {
+  background: rgba(201, 77, 63, 0.14);
+  color: #8b3025;
+}
+
+.checklist-badge.pending {
+  background: #eef2ef;
+  color: var(--muted);
+}
+
+.confirm-check {
+  margin-top: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+}
+
+.confirm-check input {
+  margin-top: 3px;
 }
 
 .step-row {

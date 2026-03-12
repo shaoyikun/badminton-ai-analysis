@@ -13,6 +13,8 @@ import type {
   ComparisonResponse,
   CreateTaskRequest,
   CreateTaskResponse,
+  FlowActionTarget,
+  FlowErrorCode,
   HistoryDetailResponse,
   HistoryListResponse,
   PoseAnalysisResult,
@@ -25,6 +27,12 @@ import type {
   TaskStatusResponse,
   UploadTaskResponse,
 } from '../../../shared/contracts'
+import {
+  getActionLabel,
+  getErrorCatalogItem,
+  getErrorRouteAction,
+  type LocalVideoSummary,
+} from '../features/upload/uploadFlow'
 
 export type {
   ActionType,
@@ -63,9 +71,14 @@ export const POSE_LABELS: Record<PoseStatus, string> = {
 }
 
 export type ErrorState = {
-  errorCode?: string
+  errorCode?: FlowErrorCode | string
   title: string
-  message: string
+  summary: string
+  explanation: string
+  suggestions: string[]
+  uploadBanner: string
+  primaryAction: FlowActionTarget
+  secondaryAction: FlowActionTarget
 } | null
 
 type SessionSnapshot = {
@@ -73,6 +86,8 @@ type SessionSnapshot = {
   taskId: string
   latestCompletedTaskId: string
   selectedCompareTaskId: string
+  selectedVideoSummary: LocalVideoSummary | null
+  uploadChecklistConfirmed: boolean
   errorState: ErrorState
   debugEnabled: boolean
 }
@@ -97,6 +112,11 @@ type AnalysisSessionContextValue = {
   setSelectedCompareTaskId: (value: string) => void
   selectedHistoryReport: ReportResult | null
   file: File | null
+  selectedVideoSummary: LocalVideoSummary | null
+  setSelectedVideoSummary: (value: LocalVideoSummary | null) => void
+  uploadChecklistConfirmed: boolean
+  setUploadChecklistConfirmed: (value: boolean) => void
+  resetUploadDraft: () => void
   setFile: (value: File | null) => void
   log: string[]
   isBusy: boolean
@@ -126,45 +146,6 @@ type AnalysisSessionContextValue = {
 
 const SESSION_STORAGE_KEY = 'badminton-ai-analysis-session'
 
-const ERROR_COPY: Record<string, { title: string; message: string }> = {
-  upload_failed: {
-    title: '视频暂时不能处理',
-    message: '请确认上传的是清晰、完整且可正常播放的视频文件，再重新上传。',
-  },
-  invalid_duration: {
-    title: '视频时长不符合要求',
-    message: '请控制在 5~15 秒之间，并保留完整准备、击球和收拍过程。',
-  },
-  multi_person_detected: {
-    title: '检测到多人同框',
-    message: '请只保留一个主体出镜，避免其他人干扰画面。',
-  },
-  body_not_detected: {
-    title: '未识别到清晰人体',
-    message: '请让人物全身尽量完整入镜，并确保动作过程没有被裁切。',
-  },
-  poor_lighting_or_occlusion: {
-    title: '画面质量不足',
-    message: '请调整光线、减少遮挡，并确保人物在画面中足够清晰。',
-  },
-  invalid_camera_angle: {
-    title: '机位不利于分析',
-    message: '建议改为侧后方或正后方机位重新拍摄。',
-  },
-  preprocess_failed: {
-    title: '预处理失败',
-    message: '这段视频没能顺利通过预处理，请更换一段更规范的视频重试。',
-  },
-  pose_failed: {
-    title: '姿态识别失败',
-    message: '视频已上传并完成预处理，但姿态识别阶段失败。你可以先查看拍摄规范，再换一段视频重试。',
-  },
-  result_not_ready: {
-    title: '结果暂未就绪',
-    message: '分析任务已经启动，但报告结果还没准备好，请稍后再试。',
-  },
-}
-
 const AnalysisSessionContext = createContext<AnalysisSessionContextValue | null>(null)
 
 function readSessionSnapshot(): SessionSnapshot {
@@ -174,6 +155,8 @@ function readSessionSnapshot(): SessionSnapshot {
       taskId: '',
       latestCompletedTaskId: '',
       selectedCompareTaskId: '',
+      selectedVideoSummary: null,
+      uploadChecklistConfirmed: false,
       errorState: null,
       debugEnabled: false,
     }
@@ -188,6 +171,8 @@ function readSessionSnapshot(): SessionSnapshot {
       taskId: parsed.taskId ?? '',
       latestCompletedTaskId: parsed.latestCompletedTaskId ?? '',
       selectedCompareTaskId: parsed.selectedCompareTaskId ?? '',
+      selectedVideoSummary: parsed.selectedVideoSummary ?? null,
+      uploadChecklistConfirmed: Boolean(parsed.uploadChecklistConfirmed),
       errorState: parsed.errorState ?? null,
       debugEnabled: Boolean(parsed.debugEnabled),
     }
@@ -197,39 +182,25 @@ function readSessionSnapshot(): SessionSnapshot {
       taskId: '',
       latestCompletedTaskId: '',
       selectedCompareTaskId: '',
+      selectedVideoSummary: null,
+      uploadChecklistConfirmed: false,
       errorState: null,
       debugEnabled: false,
     }
   }
 }
 
-function getErrorCopy(errorCode?: string, fallback?: string) {
-  if (errorCode && ERROR_COPY[errorCode]) return ERROR_COPY[errorCode]
-  return {
-    title: '处理失败',
-    message: fallback ?? '这次处理没有成功，你可以换一段更规范的视频再试一次。',
+export function getErrorRouteActions(errorState: ErrorState) {
+  if (!errorState) {
+    return {
+      primary: getErrorRouteAction('upload'),
+      secondary: getErrorRouteAction('guide'),
+    }
   }
-}
 
-export function getErrorRouteActions(errorCode?: string) {
-  switch (errorCode) {
-    case 'multi_person_detected':
-    case 'body_not_detected':
-    case 'poor_lighting_or_occlusion':
-    case 'invalid_camera_angle':
-      return {
-        primary: { label: '查看拍摄规范', to: '/guide' },
-        secondary: { label: '重新上传', to: '/upload' },
-      }
-    case 'upload_failed':
-    case 'invalid_duration':
-    case 'preprocess_failed':
-    case 'pose_failed':
-    default:
-      return {
-        primary: { label: '重新上传', to: '/upload' },
-        secondary: { label: '查看拍摄规范', to: '/guide' },
-      }
+  return {
+    primary: getErrorRouteAction(errorState.primaryAction),
+    secondary: getErrorRouteAction(errorState.secondaryAction),
   }
 }
 
@@ -248,6 +219,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const [selectedCompareTaskId, setSelectedCompareTaskId] = useState(initialSession.selectedCompareTaskId)
   const [selectedHistoryReport, setSelectedHistoryReport] = useState<ReportResult | null>(null)
   const [file, setFile] = useState<File | null>(null)
+  const [selectedVideoSummary, setSelectedVideoSummary] = useState<LocalVideoSummary | null>(initialSession.selectedVideoSummary)
+  const [uploadChecklistConfirmed, setUploadChecklistConfirmed] = useState(initialSession.uploadChecklistConfirmed)
   const [log, setLog] = useState<string[]>([])
   const [isBusy, setIsBusy] = useState(false)
   const [isPolling, setIsPolling] = useState(false)
@@ -257,7 +230,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const pollingRef = useRef<number | null>(null)
   const lastFailureReasonRef = useRef<'server' | 'network' | null>(null)
 
-  const selectedActionLabel = actionType === 'smash' ? '杀球' : '正手高远球'
+  const selectedActionLabel = getActionLabel(actionType)
   const canOpenReportTab = Boolean(latestCompletedTaskId)
 
   const appendLog = useCallback((text: string) => {
@@ -265,6 +238,11 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const clearErrorState = useCallback(() => setErrorState(null), [])
+
+  const resetUploadDraft = useCallback(() => {
+    setFile(null)
+    setUploadChecklistConfirmed(false)
+  }, [])
 
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
@@ -274,11 +252,13 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     setIsPolling(false)
   }, [])
 
-  const setFriendlyError = useCallback((errorCode?: string, fallback?: string) => {
+  const setFriendlyError = useCallback((errorCode?: FlowErrorCode | string, fallback?: string) => {
     lastFailureReasonRef.current = 'server'
-    const copy = getErrorCopy(errorCode, fallback)
+    const copy = getErrorCatalogItem(errorCode, fallback)
     setErrorState({ errorCode, ...copy })
-    appendLog(`${copy.title}：${copy.message}`)
+    setFile(null)
+    setUploadChecklistConfirmed(false)
+    appendLog(`${copy.title}：${copy.summary}`)
   }, [appendLog])
 
   const fetchHistory = useCallback(async (nextActionType?: ActionType) => {
@@ -618,10 +598,21 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       taskId,
       latestCompletedTaskId,
       selectedCompareTaskId,
+      selectedVideoSummary,
+      uploadChecklistConfirmed,
       errorState,
       debugEnabled,
     } satisfies SessionSnapshot))
-  }, [actionType, debugEnabled, errorState, latestCompletedTaskId, selectedCompareTaskId, taskId])
+  }, [
+    actionType,
+    debugEnabled,
+    errorState,
+    latestCompletedTaskId,
+    selectedCompareTaskId,
+    selectedVideoSummary,
+    taskId,
+    uploadChecklistConfirmed,
+  ])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -667,6 +658,11 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     setSelectedCompareTaskId,
     selectedHistoryReport,
     file,
+    selectedVideoSummary,
+    setSelectedVideoSummary,
+    uploadChecklistConfirmed,
+    setUploadChecklistConfirmed,
+    resetUploadDraft,
     setFile,
     log,
     isBusy,

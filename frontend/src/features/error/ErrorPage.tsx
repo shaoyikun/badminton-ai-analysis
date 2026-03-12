@@ -17,24 +17,31 @@ export function ErrorPage() {
     )
   }
 
-  const actions = getErrorRouteActions(errorState.errorCode)
+  const actions = getErrorRouteActions(errorState)
 
   return (
     <div className="page-stack">
       <section className="surface-card error-card">
         <span className="badge warning">处理失败</span>
         <h2>{errorState.title}</h2>
-        <p>{errorState.message}</p>
+        <p>{errorState.summary}</p>
       </section>
 
       <section className="surface-card">
         <div className="section-head">
-          <h2>建议你这样处理</h2>
+          <h2>发生了什么</h2>
+        </div>
+        <p>{errorState.explanation}</p>
+      </section>
+
+      <section className="surface-card">
+        <div className="section-head">
+          <h2>这次建议这样处理</h2>
         </div>
         <div className="info-list compact">
-          <div className="list-row">只保留一个主体重新拍摄，尽量保证全身完整入镜</div>
-          <div className="list-row">优先使用侧后方或正后方机位，减少遮挡和逆光</div>
-          <div className="list-row">控制在 5~15 秒，并保留准备、击球和收拍完整过程</div>
+          {errorState.suggestions.map((suggestion) => (
+            <div key={suggestion} className="list-row">{suggestion}</div>
+          ))}
         </div>
       </section>
 

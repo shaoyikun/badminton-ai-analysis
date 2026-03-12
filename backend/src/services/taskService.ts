@@ -354,9 +354,14 @@ async function runAnalysisPipeline(taskId: string) {
 
   if (task.pose?.status !== 'completed') {
     const posed = await runPoseAnalysis(taskId);
-    if (posed) {
-      task = posed;
+    if (!posed || posed.pose?.status !== 'completed') {
+      updateTask(taskId, {
+        status: 'failed',
+        errorCode: posed?.pose?.errorCode ?? 'pose_failed',
+      });
+      return;
     }
+    task = posed;
   }
 
   await delay(getAnalysisDelayMs());
@@ -425,6 +430,7 @@ export async function startMockAnalysis(taskId: string) {
           status: 'idle',
           startedAt: undefined,
           completedAt: undefined,
+          errorCode: undefined,
           errorMessage: undefined,
           resultPath: undefined,
           summary: undefined,

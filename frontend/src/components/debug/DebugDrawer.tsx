@@ -46,7 +46,7 @@ export function DebugDrawer({ open, onClose }: { open: boolean; onClose: () => v
         {errorState ? (
           <div className="inline-error compact">
             <strong>{errorState.title}</strong>
-            <p>{errorState.message}</p>
+            <p>{errorState.summary}</p>
           </div>
         ) : null}
         <div className="inline-actions two-up">

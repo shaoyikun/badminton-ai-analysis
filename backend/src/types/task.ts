@@ -4,6 +4,7 @@ export type {
   CreateTaskResponse,
   ComparisonResponse,
   DimensionScore,
+  FlowErrorCode,
   HistoryDetailResponse,
   HistoryListQuery,
   HistoryListResponse,
@@ -33,7 +34,7 @@ export type {
   UploadTaskResponse,
   VideoMetadata,
 } from '../../../shared/contracts';
-import type { ActionType, PoseInfo, PreprocessInfo, TaskStatus } from '../../../shared/contracts';
+import type { ActionType, FlowErrorCode, PoseInfo, PreprocessInfo, TaskStatus } from '../../../shared/contracts';
 
 export interface TaskRecord {
   taskId: string;
@@ -43,7 +44,7 @@ export interface TaskRecord {
   mimeType?: string;
   uploadPath?: string;
   resultPath?: string;
-  errorCode?: string;
+  errorCode?: FlowErrorCode;
   preprocess?: PreprocessInfo;
   pose?: PoseInfo;
   previousCompletedTaskId?: string;

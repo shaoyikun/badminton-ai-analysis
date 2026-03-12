@@ -11,10 +11,13 @@ export async function runPoseAnalysis(taskId: string) {
   if (!task) return undefined;
   if (!task.preprocess?.artifacts?.artifactsDir) {
     return updateTask(taskId, {
+      status: 'failed',
+      errorCode: 'pose_failed',
       pose: {
         status: 'failed',
         startedAt: now(),
         completedAt: now(),
+        errorCode: 'pose_failed',
         errorMessage: 'preprocess artifacts not found',
       },
     });
@@ -26,6 +29,7 @@ export async function runPoseAnalysis(taskId: string) {
       status: 'processing',
       startedAt: now(),
       completedAt: undefined,
+      errorCode: undefined,
       errorMessage: undefined,
     },
   });
@@ -51,10 +55,13 @@ export async function runPoseAnalysis(taskId: string) {
     });
   } catch (error) {
     return updateTask(taskId, {
+      status: 'failed',
+      errorCode: 'pose_failed',
       pose: {
         status: 'failed',
         startedAt: task.pose?.startedAt ?? now(),
         completedAt: now(),
+        errorCode: 'pose_failed',
         errorMessage: error instanceof Error ? error.message : 'pose analysis failed',
       },
     });

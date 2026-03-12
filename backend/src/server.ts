@@ -153,6 +153,7 @@ export async function buildServer() {
     if (updated.pose?.status === 'failed') {
       return reply.status(422).send({
         error: updated.pose.errorMessage ?? 'pose analysis failed',
+        errorCode: updated.pose.errorCode ?? updated.errorCode ?? 'pose_failed',
         poseStatus: updated.pose.status,
       });
     }
@@ -216,8 +217,8 @@ export async function buildServer() {
     return {
       taskId: task.taskId,
       status: task.status,
-      errorCode: task.errorCode,
-      errorMessage: task.preprocess?.errorMessage,
+      errorCode: task.errorCode ?? task.pose?.errorCode ?? task.preprocess?.errorCode,
+      errorMessage: task.pose?.errorMessage ?? task.preprocess?.errorMessage,
       preprocessStatus: task.preprocess?.status ?? 'idle',
       poseStatus: task.pose?.status ?? 'idle',
       poseSummary: task.pose?.summary,

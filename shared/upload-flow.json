@@ -1,0 +1,142 @@
+{
+  "constraints": {
+    "minDurationSeconds": 5,
+    "maxDurationSeconds": 15,
+    "minFileSizeBytes": 102400,
+    "defaultMaxFileSizeBytes": 209715200,
+    "minWidth": 320,
+    "minHeight": 320,
+    "supportedExtensions": [".mp4", ".mov", ".m4v", ".webm"],
+    "recommendedAngles": ["侧后方", "正后方"],
+    "supportedActionLabels": {
+      "clear": "正手高远球",
+      "smash": "杀球"
+    },
+    "captureChecklist": [
+      "单人出镜，避免其他人频繁进入画面",
+      "完整覆盖准备、击球、收拍，建议 5~15 秒",
+      "优先侧后方或正后方机位",
+      "人物尽量全身完整入镜，避免逆光和遮挡",
+      "一段视频只分析一种动作"
+    ]
+  },
+  "errorCatalog": {
+    "upload_failed": {
+      "title": "视频暂时不能处理",
+      "summary": "上传的文件没有通过当前上传要求。",
+      "explanation": "系统需要一段可正常播放、格式受支持、大小在限制内的视频，才能继续进入分析。",
+      "suggestions": [
+        "重新选择一段可正常播放的视频，优先使用 MP4 或 MOV",
+        "确认文件大小在当前限制内，再重新上传",
+        "如果是从聊天或云盘转存的视频，先在手机本地完整打开后再上传"
+      ],
+      "uploadBanner": "上次上传未通过，请重新选择一段可正常播放、格式受支持的视频。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "invalid_duration": {
+      "title": "视频时长不符合要求",
+      "summary": "这段视频太短或太长，无法稳定覆盖完整动作。",
+      "explanation": "系统需要看到准备、击球和收拍的完整过程，时长过短会缺关键片段，过长会引入大量无效内容。",
+      "suggestions": [
+        "控制在 5~15 秒之间",
+        "从准备动作开始拍，到收拍和回位结束",
+        "重新录制前先连续试拍一段，确认整套动作都被拍到"
+      ],
+      "uploadBanner": "上次失败是因为时长不符合要求，请重新选择或重拍一段 5~15 秒的视频。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "multi_person_detected": {
+      "title": "检测到多人同框",
+      "summary": "画面里主体不够明确，系统无法稳定判断你要分析的人。",
+      "explanation": "多人频繁进入画面会干扰人体跟踪，导致击球动作被识别错位或直接分析失败。",
+      "suggestions": [
+        "重新拍摄时只保留一个主体出镜",
+        "让旁人尽量不要进入取景范围",
+        "优先固定机位，避免跟拍时把其他人带进画面"
+      ],
+      "uploadBanner": "上次失败是因为多人同框，建议先按拍摄指引重拍后再上传。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
+    "body_not_detected": {
+      "title": "未识别到清晰人体",
+      "summary": "人物没有被稳定识别，系统拿不到足够的动作骨架信息。",
+      "explanation": "如果人物太远、被裁切，或者击球关键阶段没拍全，后续姿态识别就无法继续。",
+      "suggestions": [
+        "让人物全身尽量完整入镜，尤其是持拍手和双腿",
+        "机位稍微靠近一些，但不要裁掉挥拍空间",
+        "从准备到收拍全程保持主体在画面中"
+      ],
+      "uploadBanner": "上次失败是因为没有识别到清晰人体，建议调整距离和入镜范围后重拍。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
+    "poor_lighting_or_occlusion": {
+      "title": "画面质量不足",
+      "summary": "光线、清晰度或遮挡影响了关键动作识别。",
+      "explanation": "当人物轮廓不清、画面过暗或关键部位被遮挡时，系统很难稳定抽取动作特征。",
+      "suggestions": [
+        "换到光线更稳定的位置，避免逆光",
+        "减少球网、围栏或其他人物对身体的遮挡",
+        "确认手机镜头干净，拍摄时尽量保持稳定"
+      ],
+      "uploadBanner": "上次失败是因为画面质量不足，建议先参考拍摄指引调整光线和遮挡。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
+    "invalid_camera_angle": {
+      "title": "机位不利于分析",
+      "summary": "当前角度缺少关键动作信息，不适合继续分析。",
+      "explanation": "过正、过偏或低角度机位会让挥拍路径和身体联动信息缺失，影响动作判断。",
+      "suggestions": [
+        "优先改为侧后方或正后方机位",
+        "保持镜头高度接近胸口到肩部位置",
+        "固定机位后先试录一段，确认引拍和击球点都能看到"
+      ],
+      "uploadBanner": "上次失败是因为机位不合适，建议先按推荐角度重拍。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
+    "preprocess_failed": {
+      "title": "预处理没有完成",
+      "summary": "视频已上传，但在校验或抽帧阶段没能顺利通过。",
+      "explanation": "分析前需要先读取视频信息并抽取关键帧，这一步失败通常意味着视频格式或内容不够稳定。",
+      "suggestions": [
+        "优先重新上传一段更规范的视频",
+        "确保视频能在本地完整播放，没有损坏",
+        "如果连续失败，先参考拍摄指引重新录制再试"
+      ],
+      "uploadBanner": "上次失败发生在分析前处理阶段，建议换一段更规范的视频重新上传。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "pose_failed": {
+      "title": "姿态识别失败",
+      "summary": "视频通过了上传和抽帧，但关键动作骨架没有稳定识别出来。",
+      "explanation": "这通常说明主体可见性、机位或动作完整度仍然不足，导致系统无法继续生成可信结果。",
+      "suggestions": [
+        "优先保留侧后方或正后方机位重新拍摄",
+        "确保人物全身完整入镜，击球过程不要被裁切",
+        "重拍时减少画面抖动和遮挡"
+      ],
+      "uploadBanner": "上次失败发生在动作识别阶段，建议按拍摄指引重拍后重新上传。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
+    "result_not_ready": {
+      "title": "结果暂未就绪",
+      "summary": "分析已经启动，但报告还没准备好。",
+      "explanation": "任务仍在后台处理中，暂时还不能展示完整报告。",
+      "suggestions": [
+        "稍等几秒后重新进入分析中或报告页",
+        "如果长时间没有结果，再重新上传一段视频",
+        "重新上传前先确认视频符合拍摄规范"
+      ],
+      "uploadBanner": "上一次任务结果还没准备好，你可以稍后再看，或重新上传一段视频。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    }
+  }
+}
