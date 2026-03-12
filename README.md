@@ -224,6 +224,7 @@ make compose-down
 - backend 改为容器内直接跑构建产物（`npm start`），更接近发布态
 - backend 的 `data/`、`uploads/` 用 Docker volume 持久化
 - backend Dockerfile 支持通过 `APT_MIRROR` 切换 apt 镜像源，默认在 compose 中使用更快的镜像站以减少首次 build 耗时
+- backend Dockerfile 会单独缓存 `analysis-service/requirements.txt` 的 Python 依赖层；首次 build 仍可能较慢，但后续在未改依赖时会明显更快
 
 ---
 
@@ -242,7 +243,7 @@ make verify
 - `make run`：启动仓库，优先 Docker，兜底本地开发模式
 - `make test`：跑后端自动化测试和 Python 轻量测试
 - `make build`：构建 backend、frontend，并编译 Python 源文件
-- `make verify`：跑前端 lint、全部测试和全部构建，作为交付前检查
+- `make verify`：跑前端 lint、全部测试、全部构建，并校验 `docker compose build backend frontend`
 
 如果你不想用 Makefile，也可以直接调用：
 
@@ -251,6 +252,12 @@ make verify
 ./scripts/test.sh
 ./scripts/build.sh
 ./scripts/verify.sh
+```
+
+如果当前机器没有可用的 Docker daemon，但你只想做本地校验，可以临时跳过 Docker 构建检查：
+
+```bash
+SKIP_DOCKER_VERIFY=1 make verify
 ```
 
 ---
@@ -266,6 +273,7 @@ make verify
 - backend：`npm run build`
 - frontend：`npm run build`
 - analysis-service：通过 `py_compile` 做语法级构建校验
+- Docker Compose：`make verify` 默认额外校验 `docker compose build backend frontend`
 
 ### 部署
 - 当前稳定部署方式仍是 Docker Compose

@@ -5,6 +5,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm install
 
+COPY shared /app/shared
 COPY frontend/ ./
 ARG VITE_API_BASE=
 ENV VITE_API_BASE=${VITE_API_BASE}
