@@ -4,15 +4,17 @@
 
 ## 当前保留文件
 - `PRODUCT-SPEC.md`：产品定位、MVP 范围、主流程和异常流程摘要
+- `MVP-ARCHITECTURE-SPEC.md`：PoC 到可交付 MVP 的目标架构、接口、状态机、存储和模块边界
 - `INTERACTION-SPEC.md`：移动端页面重点、信息层级和关键交互要求摘要
 - `DATA-SPEC.md`：报告、历史记录、复测对比和标准动作对比的数据结构摘要
 - `COMMIT-SPEC.md`：commit 粒度、命名格式和提交流程规范
 
 ## 推荐阅读顺序
 1. `PRODUCT-SPEC.md`
-2. `INTERACTION-SPEC.md`
-3. `DATA-SPEC.md`
-4. `COMMIT-SPEC.md`
+2. `MVP-ARCHITECTURE-SPEC.md`
+3. `INTERACTION-SPEC.md`
+4. `DATA-SPEC.md`
+5. `COMMIT-SPEC.md`
 
 ## 使用原则
 - `docs/` 仍是主文档区，`spec/` 不是平行维护的一整套副本

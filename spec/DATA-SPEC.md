@@ -28,18 +28,34 @@
 ## 2. 任务状态与错误信息
 ### task summary
 - taskId
+- actionType
 - status（`created` / `uploaded` / `processing` / `completed` / `failed`）
+- stage（`upload_pending` / `uploaded` / `validating` / `extracting_frames` / `estimating_pose` / `generating_report` / `completed` / `failed`）
+- progressPercent
 - errorCode（可选）
 - errorMessage（可选）
+- retryable
 - preprocessStatus
 - poseStatus
 - poseSummary（可选）
 - previousCompletedTaskId（可选）
+- createdAt
 - updatedAt
 
 说明：
-- 当前错误信息主要挂在任务状态与预处理/姿态识别阶段，不再单独维护一个独立 `error_result` 结构
-- 常见错误码包括 `upload_failed`、`invalid_duration`、`multi_person_detected`、`body_not_detected`、`poor_lighting_or_occlusion`、`invalid_camera_angle`
+- MVP 目标协议以 `status + stage + error snapshot` 表达任务状态；`preprocessStatus`、`poseStatus` 仍可在内部或调试接口保留，但不再作为前端主状态机
+- 错误信息不再使用零散字段自由组合，统一走稳定 `errorCode`
+- 常见错误码包括 `upload_failed`、`invalid_duration`、`multi_person_detected`、`body_not_detected`、`poor_lighting_or_occlusion`、`invalid_camera_angle`、`preprocess_failed`、`pose_failed`
+
+### error response
+- error
+  - code
+  - message
+  - retryable
+
+说明：
+- `code` 是前端映射标题、文案和返回路径的唯一稳定键
+- `message` 主要给日志、开发联调和排障使用
 
 ## 3. 历史记录结构
 ### history item
