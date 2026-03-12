@@ -15,6 +15,10 @@ export function EmptyState({
 }) {
   return (
     <section className="surface-card empty-card">
+      <div className="empty-state-illustration" aria-hidden="true">
+        <span className="empty-state-orbit" />
+        <span className="empty-state-racket" />
+      </div>
       {badge ? <span className="badge neutral">{badge}</span> : null}
       <h2>{title}</h2>
       <p>{description}</p>

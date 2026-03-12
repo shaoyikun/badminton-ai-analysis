@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { PoseResult, TaskHistoryItem, RetestComparison, ReportResult } from '../../hooks/useAnalysisTask'
+import { ScoreBadge } from '../ui/ScoreBadge'
 import {
   getActionTypeLabel,
   getComparisonChangeLabel,
@@ -39,14 +40,14 @@ export function ReportHeroCard({ report, comparison }: { report: ReportResult; c
   const trendLabel = comparison ? getComparisonTrendLabel(comparison.totalScoreDelta) : '先完成下一次复测更有价值'
 
   return (
-    <section className="hero-panel result-hero-card">
+    <section className="hero-panel result-hero-card report-conclusion-card">
       <span className="badge badge-inverse">{getActionTypeLabel(report.actionType)}</span>
       <span className="eyebrow-copy hero-eyebrow">一句话结论</span>
       <h1>{report.summaryText ?? '这次报告已经生成，先看当前最关键的问题和下一步训练方向。'}</h1>
       <div className="hero-meta-grid">
-        <div className="hero-metric-card">
+        <div className="hero-metric-card report-score-summary-card">
           <span>参考总分</span>
-          <strong>{report.totalScore}</strong>
+          <ScoreBadge label="总分" value={report.totalScore} tone="good" size="l" />
           <p>总分只做辅助，先看结论和最该先练的动作点。</p>
         </div>
         <div className="hero-metric-card">
@@ -68,7 +69,7 @@ export function PrimaryIssueCard({ report }: { report: ReportResult }) {
   if (!primaryIssue) return null
 
   return (
-    <section className="surface-card primary-issue-card">
+    <section className="surface-card primary-issue-card report-issue-card">
       <span className="eyebrow-copy">这次最该先看的问题</span>
       <h2>{primaryIssue.title}</h2>
       <p className="body-copy">{primaryIssue.description}</p>
@@ -84,7 +85,7 @@ export function TrainingFocusCard({ report }: { report: ReportResult }) {
   const focus = getTrainingFocus(report)
 
   return (
-    <section className="surface-card training-focus-card">
+    <section className="surface-card training-focus-card report-advice-card">
       <span className="eyebrow-copy">这次先练这一件事</span>
       <h2>{focus.primaryTitle}</h2>
       <p className="body-copy">{focus.primaryDescription}</p>
@@ -166,7 +167,7 @@ export function ComparisonHighlightCard({ comparison }: { comparison: RetestComp
   if (!comparison) return null
 
   return (
-    <section className="surface-card comparison-highlight-card">
+    <section className="surface-card comparison-highlight-card report-history-compare-card">
       <span className="eyebrow-copy">最近一次复测结论</span>
       <h2>{getComparisonTrendLabel(comparison.totalScoreDelta)}</h2>
       <p className="body-copy">{comparison.coachReview.headline}</p>
@@ -225,7 +226,7 @@ export function ComparisonCard({ comparison }: { comparison: RetestComparison | 
   }
 
   return (
-    <section className="surface-card comparison-summary-card">
+    <section className="surface-card comparison-summary-card report-history-compare-card">
       <span className="eyebrow-copy">复测结论</span>
       <h2>{getComparisonTrendLabel(comparison.totalScoreDelta)}</h2>
       <p className="body-copy">{comparison.coachReview.headline}</p>

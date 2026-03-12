@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { formatFileSize } from '../../components/result-views/utils'
+import { BottomCTA } from '../../components/ui/BottomCTA'
+import { Notice } from '../../components/ui/Notice'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 import {
   buildLocalVideoSummary,
@@ -88,11 +90,9 @@ export function UploadPage() {
   return (
     <div className="page-stack">
       {errorState ? (
-        <section className="surface-card warning-card">
-          <span className="badge warning">上次失败原因</span>
-          <h2>{errorState.title}</h2>
-          <p>{errorState.uploadBanner}</p>
-        </section>
+        <Notice tone="warning" title={`上次失败原因: ${errorState.title}`}>
+          {errorState.uploadBanner}
+        </Notice>
       ) : null}
 
       <section className="surface-card">
@@ -211,29 +211,31 @@ export function UploadPage() {
       </section>
 
       {blockingReasons.length > 0 ? (
-        <div className="inline-error">
-          <strong>当前还不能提交</strong>
+        <Notice tone="warning" title="当前还不能提交">
           <ul className="inline-error-list">
             {blockingReasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>
-        </div>
+        </Notice>
       ) : null}
 
       {submissionError ? (
-        <div className="inline-error compact">
-          <strong>提交失败</strong>
-          <p>{submissionError}</p>
-        </div>
+        <Notice compact tone="error" title="提交失败">
+          {submissionError}
+        </Notice>
       ) : null}
 
-      <div className="action-stack">
-        <button className="primary-action button-reset" onClick={() => void handleStartAnalysis()} disabled={submissionDisabled} type="button">
-          {isBusy ? '处理中...' : '确认并开始分析'}
-        </button>
-        <Link className="secondary-action" to="/guide">查看拍摄规范</Link>
-      </div>
+      <BottomCTA
+        sticky={false}
+        primary={{
+          label: '确认并开始分析',
+          onClick: () => void handleStartAnalysis(),
+          disabled: submissionDisabled,
+          loading: isBusy,
+        }}
+        secondary={{ label: '查看拍摄规范', to: '/guide', tone: 'secondary' }}
+      />
     </div>
   )
 }

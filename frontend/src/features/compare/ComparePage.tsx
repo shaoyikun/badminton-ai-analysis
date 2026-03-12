@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { BottomCTA } from '../../components/ui/BottomCTA'
 import { getValidBaselineItem } from '../../components/result-views/insights'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RetestView } from '../../components/result-views/RetestView'
@@ -23,11 +24,11 @@ export function ComparePage() {
   return (
     <div className="page-stack">
       <RetestView comparison={comparison} />
-      <div className="action-stack">
-        <Link className="primary-action" to="/upload">继续复测上传</Link>
-        <Link className="secondary-action" to="/history">更换对比基线</Link>
-        <Link className="secondary-action" to="/report">返回本次报告</Link>
-      </div>
+      <BottomCTA
+        primary={{ label: '继续复测上传', to: '/upload' }}
+        secondary={{ label: '更换对比基线', to: '/history', tone: 'secondary' }}
+      />
+      <Link className="secondary-action tertiary-action" to="/report">返回本次报告</Link>
     </div>
   )
 }

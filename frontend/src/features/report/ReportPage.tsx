@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { BottomCTA } from '../../components/ui/BottomCTA'
 import { ReportView } from '../../components/result-views/ReportView'
 import { getValidBaselineItem } from '../../components/result-views/insights'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
@@ -71,10 +72,11 @@ export function ReportPage() {
         <div className="section-head">
           <h2>继续动作</h2>
         </div>
-        <div className="action-stack">
-          <Link className="primary-action" to="/upload">再次上传</Link>
-          <Link className="secondary-action" to="/history">去历史里换对比基线</Link>
-        </div>
+        <BottomCTA
+          sticky={false}
+          primary={{ label: '再次上传', to: '/upload' }}
+          secondary={{ label: '去历史里换对比基线', to: '/history', tone: 'secondary' }}
+        />
       </section>
     </div>
   )

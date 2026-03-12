@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom'
+import { BottomCTA } from '../../components/ui/BottomCTA'
+import { Notice } from '../../components/ui/Notice'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 import { ACTION_GUIDE_COPY, UPLOAD_CONSTRAINTS } from '../upload/uploadFlow'
 
@@ -64,14 +65,14 @@ export function GuidePage() {
         </div>
       </section>
 
-      <div className="notice-strip">
+      <Notice tone="warning" title="上传前提醒">
         先按规范拍好再上传，MVP 阶段识别效果高度依赖输入视频质量。
-      </div>
+      </Notice>
 
-      <div className="action-stack">
-        <Link className="primary-action" to="/upload">我已了解，去上传</Link>
-        <Link className="secondary-action" to="/">返回首页</Link>
-      </div>
+      <BottomCTA
+        primary={{ label: '我已了解，去上传', to: '/upload' }}
+        secondary={{ label: '返回首页', to: '/', tone: 'secondary' }}
+      />
     </div>
   )
 }

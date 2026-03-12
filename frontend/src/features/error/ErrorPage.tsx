@@ -1,5 +1,6 @@
-import { Link } from 'react-router-dom'
+import { BottomCTA } from '../../components/ui/BottomCTA'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Notice } from '../../components/ui/Notice'
 import { getErrorRouteActions, useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 export function ErrorPage() {
@@ -45,10 +46,14 @@ export function ErrorPage() {
         </div>
       </section>
 
-      <div className="action-stack">
-        <Link className="primary-action" to={actions.primary.to}>{actions.primary.label}</Link>
-        <Link className="secondary-action" to={actions.secondary.to}>{actions.secondary.label}</Link>
-      </div>
+      <Notice tone="error" title="为什么要先处理这个问题">
+        这不是模型坏掉，而是当前视频条件已经影响到动作判断可信度。先把拍摄条件拉回到可分析范围，后面的结论才更可靠。
+      </Notice>
+
+      <BottomCTA
+        primary={{ label: actions.primary.label, to: actions.primary.to }}
+        secondary={{ label: actions.secondary.label, to: actions.secondary.to, tone: 'secondary' }}
+      />
     </div>
   )
 }

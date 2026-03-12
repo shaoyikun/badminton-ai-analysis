@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { StatusPill } from '../../components/ui/StatusPill'
+import { StepProgress } from '../../components/ui/StepProgress'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 function getSteps(stage: string, status: string) {
@@ -95,17 +96,7 @@ export function ProcessingPage() {
         <div className="section-head">
           <h2>分步骤反馈</h2>
         </div>
-        <div className="step-list">
-          {steps.map((step) => (
-            <div key={step.title} className={`step-row ${step.state}`}>
-              <span className={`step-dot ${step.state}`} />
-              <div>
-                <strong>{step.title}</strong>
-                <p>{step.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <StepProgress steps={steps} />
       </section>
     </div>
   )

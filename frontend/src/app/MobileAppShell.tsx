@@ -15,6 +15,8 @@ const ROUTE_META: Record<string, { title: string; subtitle: string; root?: boole
   '/history': { title: '历史记录', subtitle: '持续训练反馈', root: true },
   '/compare': { title: '复测对比', subtitle: '看看有没有进步' },
   '/error': { title: '处理失败', subtitle: '给你明确下一步' },
+  '/design-system/foundations': { title: 'Design Foundations', subtitle: '样式页与基础 token' },
+  '/design-system/components': { title: 'Design Components', subtitle: '组件页与报告模式' },
 }
 
 export function MobileAppShell({ children }: { children: ReactNode }) {
@@ -25,6 +27,7 @@ export function MobileAppShell({ children }: { children: ReactNode }) {
 
   const meta = ROUTE_META[location.pathname] ?? ROUTE_META['/']
   const showTabs = PRIMARY_ROUTES.has(location.pathname)
+  const designMode = location.pathname.startsWith('/design-system')
 
   function handleBack() {
     if (window.history.length > 1) {
@@ -35,10 +38,10 @@ export function MobileAppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
-      <div className="device-frame">
-        <div className="device-glow" />
-        <div className="device-screen">
+    <div className={`app-shell ${designMode ? 'design-mode' : ''}`}>
+      <div className={`device-frame ${designMode ? 'design-board-frame' : ''}`}>
+        {designMode ? null : <div className="device-glow" />}
+        <div className={`device-screen ${designMode ? 'design-board-screen' : ''}`}>
           <header className="top-nav">
             <div className="top-nav-main">
               {meta.root ? (
@@ -63,7 +66,7 @@ export function MobileAppShell({ children }: { children: ReactNode }) {
             ) : null}
           </header>
 
-          <main className={`page-scroll ${showTabs ? 'with-tabs' : ''}`}>
+          <main className={`page-scroll ${showTabs ? 'with-tabs' : ''} ${designMode ? 'design-scroll' : ''}`}>
             {children}
           </main>
 
