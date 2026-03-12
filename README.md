@@ -21,7 +21,7 @@ make verify
 ```
 
 - `make run`：稳定启动命令，优先走 Docker Compose，无法使用 Docker 时回退到本地开发模式
-- `make test`：后端自动化测试 + Python 轻量测试
+- `make test`：backend 自动化测试 + frontend Playwright H5 UI 自动化测试 + Python 轻量测试
 - `make build`：backend / frontend 生产构建 + Python 语法编译校验
 - `make verify`：严格交付门禁，包含前端 lint、全部测试、全部构建，以及 Docker Compose 构建校验
 
@@ -69,7 +69,7 @@ make setup
 | `make setup` | 安装本地依赖 | 首次进入仓库优先执行 |
 | `make run` | 启动仓库 | Docker Compose 优先，失败时回退本地开发 |
 | `make dev` | 强制本地开发模式 | 直接启动 frontend + backend |
-| `make test` | 运行自动化测试 | backend + analysis-service |
+| `make test` | 运行自动化测试 | backend + frontend Playwright + analysis-service |
 | `make build` | 运行生产构建 | backend + frontend + Python 编译校验 |
 | `make verify` | 严格交付门禁 | 需要可用 Docker daemon |
 | `make verify-local` | 本地快速校验 | 跳过 Docker Compose 构建检查 |

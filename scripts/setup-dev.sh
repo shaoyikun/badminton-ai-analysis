@@ -64,7 +64,11 @@ echo "[3/4] Installing frontend dependencies..."
 cd "$ROOT_DIR/frontend"
 npm install
 
-echo "[4/4] Installing analysis-service Python dependencies..."
+echo "[4/5] Installing Playwright browser dependencies..."
+cd "$ROOT_DIR/frontend"
+npx playwright install chromium
+
+echo "[5/5] Installing analysis-service Python dependencies..."
 cd "$ROOT_DIR/analysis-service"
 "$PYTHON_BIN" -m pip install -r requirements.txt
 

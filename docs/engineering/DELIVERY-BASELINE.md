@@ -103,6 +103,7 @@ make down
 
 - `make setup` 已完成，依赖安装无遗漏
 - `make test` 通过
+  - 包括 backend 自动化测试、frontend Playwright H5 UI 自动化测试、analysis-service 轻量测试
 - `make build` 通过
 - `make verify` 在有 Docker daemon 的环境中通过
 - 根 README、`.env.example`、`Makefile`、脚本、子系统 README 的命令和环境变量说明一致

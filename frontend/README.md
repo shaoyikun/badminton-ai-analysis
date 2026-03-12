@@ -28,6 +28,30 @@ npm run dev
 
 - `http://127.0.0.1:5173`
 
+## 前端 UI 自动化测试
+
+前端 H5 的主流程与关键状态页已经接入 Playwright：
+
+```bash
+cd frontend
+npm run test:e2e
+```
+
+常用补充命令：
+
+```bash
+cd frontend
+npm run test:e2e:headed
+npm run test:e2e:debug
+npm run test:e2e:install
+```
+
+说明：
+
+- Playwright 默认以移动端 viewport 运行
+- 测试会自行启动一个 Vite dev server，并用 mock API 覆盖 `/api` 与 `/artifacts`
+- 上传页使用仓库内 fixture，不依赖桌面文件或本地脏数据
+
 本地 `npm run dev` 会通过 `vite.config.ts` 将 `/api`、`/data`、`/health` 代理到 `http://127.0.0.1:8787`。
 
 ## 当前能力

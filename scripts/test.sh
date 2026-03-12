@@ -19,6 +19,12 @@ print_section "Running backend automated tests"
   npm test
 )
 
+print_section "Running frontend UI automated tests"
+(
+  cd "$ROOT_DIR/frontend"
+  npm run test:e2e
+)
+
 print_section "Running analysis-service automated tests"
 (
   cd "$ROOT_DIR/analysis-service"

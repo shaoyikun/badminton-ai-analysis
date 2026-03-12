@@ -22,6 +22,7 @@ frontend/node_modules/
 # Runtime data
 backend/uploads/
 backend/data/
+backend/artifacts/
 
 # Env
 .env
@@ -34,6 +35,8 @@ build/
 .cache/
 backend/dist/
 frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
 
 # Media / temp outputs
 *.tmp
