@@ -329,6 +329,27 @@ select:disabled,
   gap: 12px;
 }
 
+.result-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.result-view-tab {
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  color: #475467;
+  font-weight: 700;
+}
+
+.result-view-tab.active {
+  background: #4338ca;
+  border-color: #4338ca;
+  color: #ffffff;
+}
+
 .score-card strong {
   font-size: 28px;
   line-height: 1.2;
@@ -663,6 +684,25 @@ select:disabled,
 
 .comparison-block {
   margin-top: 12px;
+}
+
+.history-entry-card {
+  background: linear-gradient(180deg, #f5faff 0%, #ffffff 100%);
+}
+
+.history-summary-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: #eef6ff;
+  border: 1px solid #cfe3ff;
+  margin-top: 12px;
+}
+
+.history-summary-card strong {
+  display: block;
+  margin-top: 6px;
+  color: #1d4ed8;
+  font-size: 18px;
 }
 
 .comparison-summary-card {
