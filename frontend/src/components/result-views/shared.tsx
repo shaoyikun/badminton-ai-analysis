@@ -1,4 +1,12 @@
+import { Link } from 'react-router-dom'
 import type { PoseResult, TaskHistoryItem, RetestComparison, ReportResult } from '../../hooks/useAnalysisTask'
+import {
+  getActionTypeLabel,
+  getComparisonChangeLabel,
+  getComparisonRiskLabel,
+  getComparisonTrendLabel,
+  getTrainingFocus,
+} from './insights'
 import { buildAssetUrl, buildReferenceUrl, formatScore, formatTime } from './utils'
 
 export function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
@@ -22,6 +30,34 @@ export function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null 
   )
 }
 
+export function ReportHeroCard({ report, comparison }: { report: ReportResult; comparison: RetestComparison | null }) {
+  const trendLabel = comparison ? getComparisonTrendLabel(comparison.totalScoreDelta) : '先完成下一次复测更有价值'
+
+  return (
+    <section className="hero-panel result-hero-card">
+      <span className="badge badge-inverse">{getActionTypeLabel(report.actionType)}</span>
+      <span className="eyebrow-copy hero-eyebrow">一句话结论</span>
+      <h1>{report.summaryText ?? '这次报告已经生成，先看当前最关键的问题和下一步训练方向。'}</h1>
+      <div className="hero-meta-grid">
+        <div className="hero-metric-card">
+          <span>参考总分</span>
+          <strong>{report.totalScore}</strong>
+          <p>总分只做辅助，先看结论和最该先练的动作点。</p>
+        </div>
+        <div className="hero-metric-card">
+          <span>{comparison ? '当前复测状态' : '持续使用价值'}</span>
+          <strong>{trendLabel}</strong>
+          <p>
+            {comparison
+              ? `当前样本会和 ${formatTime(comparison.previousCreatedAt)} 这条历史基线对照。`
+              : '等你再录一条同动作样本，这里会直接告诉你训练方向有没有起作用。'}
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export function PrimaryIssueCard({ report }: { report: ReportResult }) {
   const primaryIssue = report.issues[0]
   if (!primaryIssue) return null
@@ -35,6 +71,46 @@ export function PrimaryIssueCard({ report }: { report: ReportResult }) {
         <span>为什么这件事要先改</span>
         <p>{primaryIssue.impact}</p>
       </div>
+    </section>
+  )
+}
+
+export function TrainingFocusCard({ report }: { report: ReportResult }) {
+  const focus = getTrainingFocus(report)
+
+  return (
+    <section className="surface-card training-focus-card">
+      <span className="eyebrow-copy">这次先练这一件事</span>
+      <h2>{focus.primaryTitle}</h2>
+      <p className="body-copy">{focus.primaryDescription}</p>
+
+      <div className="training-outline-grid">
+        <div className="key-point-panel">
+          <span>为什么先改它</span>
+          <p>{focus.impact}</p>
+        </div>
+        <div className="key-point-panel">
+          <span>下次练习先做到</span>
+          <strong>{focus.actionTitle}</strong>
+          <p>{focus.actionDescription}</p>
+        </div>
+        <div className="key-point-panel">
+          <span>下次复测看什么算在变好</span>
+          <p>{focus.checkDescription}</p>
+        </div>
+      </div>
+
+      {focus.supportingSuggestions.length > 0 ? (
+        <div className="info-list compact">
+          {focus.supportingSuggestions.map((item) => (
+            <div key={item.title} className="list-row">
+              <span>练稳这一件事后，再继续看</span>
+              <strong>{item.title}</strong>
+              <p>{item.description}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -70,7 +146,7 @@ export function HistoryCard({ history, selectedCompareTaskId, onSelectCompare, o
               <div key={item.taskId} className="list-row">
                 <span>{formatTime(item.createdAt)}</span>
                 <strong>{item.totalScore ?? '—'} 分</strong>
-                <p>{item.summaryText ?? `${item.actionType} 已完成分析`}</p>
+                <p>{item.summaryText ?? `${getActionTypeLabel(item.actionType)} 已完成分析`}</p>
                 {onOpenHistoryDetail ? <button className="ghost-action inline" onClick={() => onOpenHistoryDetail(item.taskId)} disabled={disabled} type="button">查看这次详情</button> : null}
               </div>
             ))}
@@ -78,6 +154,56 @@ export function HistoryCard({ history, selectedCompareTaskId, onSelectCompare, o
         </>
       )}
     </div>
+  )
+}
+
+export function ComparisonHighlightCard({ comparison }: { comparison: RetestComparison | null }) {
+  if (!comparison) return null
+
+  return (
+    <section className="surface-card comparison-highlight-card">
+      <span className="eyebrow-copy">最近一次复测结论</span>
+      <h2>{getComparisonTrendLabel(comparison.totalScoreDelta)}</h2>
+      <p className="body-copy">{comparison.coachReview.headline}</p>
+
+      <div className="comparison-vs-strip">
+        <div>
+          <span>当前样本</span>
+          <strong>{formatTime(comparison.currentCreatedAt)}</strong>
+        </div>
+        <div>
+          <span>当前基线</span>
+          <strong>{formatTime(comparison.previousCreatedAt)}</strong>
+        </div>
+        <div>
+          <span>参考分数变化</span>
+          <strong>{comparison.totalScoreDelta > 0 ? `+${comparison.totalScoreDelta}` : comparison.totalScoreDelta}</strong>
+        </div>
+      </div>
+
+      <div className="compare-grid">
+        <div className="compare-tile">
+          <span>这次最明显在变好的地方</span>
+          <strong>{getComparisonChangeLabel(comparison)}</strong>
+          <p>{comparison.coachReview.progressNote}</p>
+        </div>
+        <div className="compare-tile">
+          <span>这次最该防止回落的点</span>
+          <strong>{getComparisonRiskLabel(comparison)}</strong>
+          <p>{comparison.coachReview.regressionNote ?? comparison.coachReview.keepDoing ?? '这次没有明显回落项，先把已经稳住的部分继续保住。'}</p>
+        </div>
+      </div>
+
+      <div className="coach-note">
+        <strong>下一次只先盯这个</strong>
+        <p>{comparison.coachReview.nextFocus}</p>
+        <p>{comparison.coachReview.nextCheck}</p>
+      </div>
+
+      <div className="action-stack">
+        <Link className="secondary-action" to="/compare">查看完整复测对比</Link>
+      </div>
+    </section>
   )
 }
 
@@ -93,41 +219,98 @@ export function ComparisonCard({ comparison }: { comparison: RetestComparison | 
     )
   }
 
-  const trendLabel = comparison.totalScoreDelta > 0 ? '这次整体在变好' : comparison.totalScoreDelta < 0 ? '这次有一点回落' : '这次整体基本持平'
-  const topImprovement = comparison.improvedDimensions[0]
-  const topRegression = comparison.declinedDimensions[0]
-
   return (
     <section className="surface-card comparison-summary-card">
-      <div className="section-head">
-        <h2>复测对比</h2>
+      <span className="eyebrow-copy">复测结论</span>
+      <h2>{getComparisonTrendLabel(comparison.totalScoreDelta)}</h2>
+      <p className="body-copy">{comparison.coachReview.headline}</p>
+
+      <div className="comparison-vs-strip">
+        <div>
+          <span>当前样本</span>
+          <strong>{formatTime(comparison.currentCreatedAt)}</strong>
+        </div>
+        <div>
+          <span>当前基线</span>
+          <strong>{formatTime(comparison.previousCreatedAt)}</strong>
+        </div>
+        <div>
+          <span>参考分数变化</span>
+          <strong>{comparison.totalScoreDelta > 0 ? `+${comparison.totalScoreDelta}` : comparison.totalScoreDelta}</strong>
+        </div>
       </div>
-      <div className="key-point-panel">
-        <span>先看结论</span>
-        <strong>{trendLabel}</strong>
-        <p>{comparison.coachReview.headline}</p>
-      </div>
+
       <div className="compare-grid">
         <div className="compare-tile">
-          <span>这次最明显的变化</span>
-          <strong>{topImprovement ? `${topImprovement.name} 在变好` : '暂时没有明显单项提升'}</strong>
+          <span>这次最明显在变好的地方</span>
+          <strong>{getComparisonChangeLabel(comparison)}</strong>
           <p>{comparison.coachReview.progressNote}</p>
         </div>
         <div className="compare-tile">
-          <span>这次最该防止继续掉的点</span>
-          <strong>{topRegression ? topRegression.name : '当前没有明显回落项'}</strong>
-          <p>{comparison.coachReview.regressionNote ?? comparison.coachReview.keepDoing ?? '这次没有明显回落项，先把已经稳定住的部分继续保住。'}</p>
+          <span>现在最该防止继续回落的点</span>
+          <strong>{getComparisonRiskLabel(comparison)}</strong>
+          <p>{comparison.coachReview.regressionNote ?? comparison.coachReview.keepDoing ?? '这次没有明显回落项，先把已经稳住的部分继续保住。'}</p>
         </div>
       </div>
+
       <div className="coach-note">
-        <strong>下次复测只先盯这个</strong>
+        <strong>下一次只先盯这个</strong>
         <p>{comparison.coachReview.nextFocus}</p>
         <p>{comparison.coachReview.nextCheck}</p>
       </div>
-      <div className="meta-grid">
-        <div><span>对比样本</span><strong>{formatTime(comparison.previousCreatedAt)}</strong></div>
-        <div><span>当前样本</span><strong>{formatTime(comparison.currentCreatedAt)}</strong></div>
-        <div><span>参考分数变化</span><strong>{comparison.totalScoreDelta > 0 ? `+${comparison.totalScoreDelta}` : comparison.totalScoreDelta}</strong></div>
+
+      {comparison.summaryText ? (
+        <div className="key-point-panel">
+          <span>补充说明</span>
+          <p>{comparison.summaryText}</p>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+export function ReportHistoryBridgeCard({
+  historyCount,
+  historyTrend,
+  baselineItem,
+  comparison,
+}: {
+  historyCount: number
+  historyTrend: string
+  baselineItem: TaskHistoryItem | null
+  comparison: RetestComparison | null
+}) {
+  return (
+    <section className="surface-card report-history-bridge-card">
+      <div className="section-head">
+        <div>
+          <h2>历史与当前对比基线</h2>
+          <p className="muted-copy">别只看这次结果，也要知道现在是在和哪一次的自己比较。</p>
+        </div>
+      </div>
+
+      <div className="summary-inline-grid">
+        <div className="key-point-panel">
+          <span>同动作历史</span>
+          <strong>{historyCount === 0 ? '还没有可回看的样本' : `已有 ${historyCount} 条样本`}</strong>
+          <p>{historyTrend}</p>
+        </div>
+        <div className="key-point-panel">
+          <span>当前对比基线</span>
+          <strong>{baselineItem ? `${formatTime(baselineItem.createdAt)} · ${baselineItem.totalScore ?? '—'} 分` : '默认对比上一条同动作样本'}</strong>
+          <p>
+            {baselineItem
+              ? baselineItem.summaryText ?? '当前复测会拿这条历史样本做参照。'
+              : comparison
+                ? `当前系统正在对比 ${formatTime(comparison.previousCreatedAt)} 这条历史样本。`
+                : '先去历史记录回看旧样本，想换基线时也从那里切。'}
+          </p>
+        </div>
+      </div>
+
+      <div className="action-stack">
+        <Link className="primary-action" to="/history">查看历史并切换基线</Link>
+        {comparison ? <Link className="secondary-action" to="/compare">查看完整复测对比</Link> : null}
       </div>
     </section>
   )

@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom'
+import { getValidBaselineItem } from '../../components/result-views/insights'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RetestView } from '../../components/result-views/RetestView'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 export function ComparePage() {
-  const { comparison, selectedCompareTaskId } = useAnalysisTask()
+  const { comparison, history, selectedCompareTaskId } = useAnalysisTask()
+  const validBaseline = getValidBaselineItem(history, selectedCompareTaskId)
 
-  if (!comparison && !selectedCompareTaskId) {
+  if (!comparison && !validBaseline) {
     return (
       <EmptyState
         badge="暂无对比"
@@ -23,6 +25,7 @@ export function ComparePage() {
       <RetestView comparison={comparison} />
       <div className="action-stack">
         <Link className="primary-action" to="/upload">继续复测上传</Link>
+        <Link className="secondary-action" to="/history">更换对比基线</Link>
         <Link className="secondary-action" to="/report">返回本次报告</Link>
       </div>
     </div>

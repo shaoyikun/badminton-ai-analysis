@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ReportView } from '../../components/result-views/ReportView'
+import { getValidBaselineItem } from '../../components/result-views/insights'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 export function ReportPage() {
@@ -9,10 +10,16 @@ export function ReportPage() {
   const {
     report,
     comparison,
+    history,
+    selectedCompareTaskId,
+    analyzeHistoryTrend,
     latestCompletedTaskId,
     isHydratingReport,
     ensureLatestReportLoaded,
   } = useAnalysisTask()
+
+  const baselineItem = getValidBaselineItem(history, selectedCompareTaskId)
+  const historyTrend = analyzeHistoryTrend()
 
   useEffect(() => {
     if (report) return
@@ -52,7 +59,13 @@ export function ReportPage() {
 
   return (
     <div className="page-stack">
-      <ReportView report={report} />
+      <ReportView
+        report={report}
+        comparison={comparison}
+        history={history}
+        historyTrend={historyTrend}
+        baselineItem={baselineItem}
+      />
 
       <section className="surface-card">
         <div className="section-head">
@@ -60,8 +73,7 @@ export function ReportPage() {
         </div>
         <div className="action-stack">
           <Link className="primary-action" to="/upload">再次上传</Link>
-          <Link className="secondary-action" to="/history">查看历史记录</Link>
-          {comparison ? <Link className="secondary-action" to="/compare">查看复测对比</Link> : null}
+          <Link className="secondary-action" to="/history">去历史里换对比基线</Link>
         </div>
       </section>
     </div>
