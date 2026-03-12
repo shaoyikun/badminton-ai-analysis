@@ -34,6 +34,19 @@
       "primaryAction": "upload",
       "secondaryAction": "guide"
     },
+    "unsupported_file_type": {
+      "title": "文件格式暂不支持",
+      "summary": "这次上传的文件格式不在当前 MVP 支持范围内。",
+      "explanation": "系统目前优先支持常见手机视频格式，如 MP4、MOV、M4V、WebM。",
+      "suggestions": [
+        "优先重新选择 MP4 或 MOV 视频",
+        "如果视频来自第三方应用，先导出为常见格式再上传",
+        "确认文件可以在本地正常播放"
+      ],
+      "uploadBanner": "上次失败是因为文件格式不支持，请重新选择常见视频格式后再上传。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
     "invalid_duration": {
       "title": "视频时长不符合要求",
       "summary": "这段视频太短或太长，无法稳定覆盖完整动作。",
@@ -125,6 +138,19 @@
       "primaryAction": "guide",
       "secondaryAction": "upload"
     },
+    "report_generation_failed": {
+      "title": "报告生成失败",
+      "summary": "动作识别已经完成，但整理成最终报告时没有顺利结束。",
+      "explanation": "这通常是一次后端流水线异常，不一定代表你的视频本身有问题。",
+      "suggestions": [
+        "稍后重新上传同一段视频再试一次",
+        "如果问题重复出现，再换一段同机位视频重试",
+        "保留当前样本时间点，便于后续排查"
+      ],
+      "uploadBanner": "上次失败发生在报告生成阶段，可以稍后重试或重新上传。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
     "result_not_ready": {
       "title": "结果暂未就绪",
       "summary": "分析已经启动，但报告还没准备好。",
@@ -135,6 +161,71 @@
         "重新上传前先确认视频符合拍摄规范"
       ],
       "uploadBanner": "上一次任务结果还没准备好，你可以稍后再看，或重新上传一段视频。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "invalid_task_state": {
+      "title": "当前任务状态不允许继续",
+      "summary": "这个任务已经不在当前步骤，不能直接执行这次操作。",
+      "explanation": "为了保证任务状态一致性，系统会限制只能在正确阶段继续上传、启动或读取结果。",
+      "suggestions": [
+        "返回上传页重新创建一次任务",
+        "如果只是想看结果，回到报告页或历史页查看",
+        "如果任务已经失败，请直接重新上传"
+      ],
+      "uploadBanner": "当前任务状态已经变化，请重新创建并上传一段视频。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "task_not_found": {
+      "title": "任务不存在",
+      "summary": "这条分析任务没有找到，可能已经失效或当前链接不完整。",
+      "explanation": "当任务 ID 丢失、会话过期或本地数据已更新时，系统可能无法再读取这条任务。",
+      "suggestions": [
+        "返回上传页重新开始一次分析",
+        "如果是想查看旧结果，尝试从历史记录页重新进入",
+        "避免在分析过程中手动刷新或切换调试地址"
+      ],
+      "uploadBanner": "当前任务已不可用，请重新创建一次分析任务。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "comparison_action_mismatch": {
+      "title": "基线样本不匹配",
+      "summary": "当前样本和选择的历史样本不是同一种动作，不能直接比较。",
+      "explanation": "复测对比只适用于同动作样本，例如高远球只能和高远球比较。",
+      "suggestions": [
+        "回到历史记录页重新选择同动作样本",
+        "先按动作类型筛选后再切换比较基线",
+        "如果不确定，优先使用系统默认基线"
+      ],
+      "uploadBanner": "当前选择的对比样本不匹配，请重新选择同动作历史样本。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "internal_error": {
+      "title": "服务暂时不可用",
+      "summary": "这次处理没有顺利完成，但更像是系统内部异常。",
+      "explanation": "这类问题通常不是你的视频本身导致，可以稍后重试。",
+      "suggestions": [
+        "稍后重新上传再试一次",
+        "如果连续出现，先记录大致时间点方便排查",
+        "优先保留原视频，避免每次都重拍"
+      ],
+      "uploadBanner": "服务暂时不可用，请稍后重新上传或重试。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
+    "task_recovery_failed": {
+      "title": "任务恢复失败",
+      "summary": "上一次处理中断后，这条任务没能稳定恢复。",
+      "explanation": "系统重启或中途中断时，如果上下文不完整，会主动终止任务，避免一直卡住。",
+      "suggestions": [
+        "直接重新上传同一段视频重新开始",
+        "如果经常发生，优先保留当前视频样本方便排查",
+        "重新开始后尽量等待任务自然完成"
+      ],
+      "uploadBanner": "上次任务中断后恢复失败，请重新上传开始一次新的分析。",
       "primaryAction": "upload",
       "secondaryAction": "guide"
     }

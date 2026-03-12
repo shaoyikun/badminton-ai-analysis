@@ -1,5 +1,20 @@
 export type ActionType = 'clear' | 'smash';
+
+export type ErrorCategory =
+  | 'request_validation'
+  | 'domain_state'
+  | 'media_validation'
+  | 'pipeline_execution'
+  | 'internal_recovery';
+
 export type FlowErrorCode =
+  | 'invalid_action_type'
+  | 'file_required'
+  | 'task_not_found'
+  | 'invalid_task_state'
+  | 'result_not_ready'
+  | 'comparison_action_mismatch'
+  | 'unsupported_file_type'
   | 'upload_failed'
   | 'invalid_duration'
   | 'multi_person_detected'
@@ -8,11 +23,23 @@ export type FlowErrorCode =
   | 'invalid_camera_angle'
   | 'preprocess_failed'
   | 'pose_failed'
-  | 'result_not_ready';
+  | 'report_generation_failed'
+  | 'task_recovery_failed'
+  | 'internal_error';
 
 export type FlowActionTarget = 'upload' | 'guide';
 
 export type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed';
+export type TaskStage =
+  | 'upload_pending'
+  | 'uploaded'
+  | 'validating'
+  | 'extracting_frames'
+  | 'estimating_pose'
+  | 'generating_report'
+  | 'completed'
+  | 'failed';
+
 export type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed';
 export type PoseStatus = 'idle' | 'processing' | 'completed' | 'failed';
 
@@ -41,7 +68,19 @@ export interface FlowErrorCatalogItem {
 
 export interface UploadFlowConfig {
   constraints: UploadConstraints;
-  errorCatalog: Record<FlowErrorCode, FlowErrorCatalogItem>;
+  errorCatalog: Record<string, FlowErrorCatalogItem>;
+}
+
+export interface ErrorSnapshot {
+  code: FlowErrorCode;
+  category: ErrorCategory;
+  message: string;
+  retryable: boolean;
+  occurredAt: string;
+}
+
+export interface ErrorResponse {
+  error: ErrorSnapshot;
 }
 
 export interface DimensionScore {
@@ -193,9 +232,8 @@ export interface RetestComparison {
 export interface TaskHistoryItem {
   taskId: string;
   actionType: ActionType;
-  status: TaskStatus;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  completedAt: string;
   totalScore?: number;
   summaryText?: string;
   poseBased?: boolean;
@@ -238,8 +276,6 @@ export interface ReportResult {
   retestAdvice: string;
   createdAt?: string;
   poseBased?: boolean;
-  comparison?: RetestComparison;
-  history?: TaskHistoryItem[];
   standardComparison?: StandardComparison;
   scoringEvidence?: {
     detectedFrameCount?: number;
@@ -256,53 +292,50 @@ export interface ReportResult {
   };
 }
 
+export interface TaskResource {
+  taskId: string;
+  actionType: ActionType;
+  status: TaskStatus;
+  stage: TaskStage;
+  progressPercent: number;
+  error?: ErrorSnapshot;
+  baselineTaskId?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 export interface CreateTaskRequest {
   actionType: ActionType;
 }
 
-export interface CreateTaskResponse {
-  taskId: string;
-  status: TaskStatus;
-}
+export interface CreateTaskResponse extends TaskResource {}
 
 export interface HistoryListQuery {
   actionType?: ActionType;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface HistoryListResponse {
   items: TaskHistoryItem[];
+  nextCursor?: string;
 }
 
-export interface UploadTaskResponse {
-  taskId: string;
-  status: TaskStatus;
+export interface UploadTaskResponse extends TaskResource {
   fileName?: string;
-  preprocessStatus: PreprocessStatus;
 }
 
-export interface TaskStatusResponse {
-  taskId: string;
-  status: TaskStatus;
-  errorCode?: FlowErrorCode;
-  errorMessage?: string;
-  preprocessStatus: PreprocessStatus;
-  poseStatus: PoseStatus;
-  poseSummary?: PoseInfo['summary'];
-  previousCompletedTaskId?: string;
-  updatedAt: string;
-}
+export interface TaskStatusResponse extends TaskResource {}
 
 export interface HistoryDetailResponse {
-  taskId: string;
-  actionType: ActionType;
-  createdAt: string;
-  updatedAt: string;
+  task: TaskResource;
   report: ReportResult;
 }
 
 export interface ComparisonResponse {
-  current?: ReportResult;
-  previous?: ReportResult;
-  comparison?: RetestComparison;
-  history: TaskHistoryItem[];
+  currentTask: TaskResource;
+  baselineTask: TaskResource;
+  comparison: RetestComparison;
 }

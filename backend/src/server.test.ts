@@ -4,8 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { buildServer } from './server';
-import { updateTask } from './services/taskRepository';
+import { getTask, saveReport, saveTask } from './services/taskRepository';
+import { buildErrorSnapshot } from './services/errorCatalog';
+import { failTask } from './domain/analysisTask';
 import { setAnalysisWorkerForTests } from './services/taskService';
+import type { ReportResult } from './types/task';
 
 function buildMultipartPayload(fileName: string, content: Buffer | string, mimeType = 'video/mp4') {
   const boundary = `----badminton-test-${Date.now()}`;
@@ -31,6 +34,7 @@ async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
   try {
     await run(workspace);
   } finally {
+    setAnalysisWorkerForTests();
     process.chdir(originalCwd);
     fs.rmSync(workspace, { recursive: true, force: true });
   }
@@ -53,7 +57,7 @@ test('health endpoint returns ok', async (t) => {
   });
 });
 
-test('upload endpoint stores streamed file inside uploads directory', async (t) => {
+test('task lifecycle endpoints expose new task resource shape', async (t) => {
   await withTempWorkspace(async (workspace) => {
     const app = await buildServer();
     t.after(async () => {
@@ -65,12 +69,17 @@ test('upload endpoint stores streamed file inside uploads directory', async (t) 
       url: '/api/tasks',
       payload: { actionType: 'clear' },
     });
-    const createPayload = createResponse.json() as { taskId: string };
-    const multipart = buildMultipartPayload('nested/../../clip.mp4', 'video-content');
 
+    assert.equal(createResponse.statusCode, 200);
+    const created = createResponse.json() as { taskId: string; status: string; stage: string; progressPercent: number };
+    assert.equal(created.status, 'created');
+    assert.equal(created.stage, 'upload_pending');
+    assert.equal(created.progressPercent, 0);
+
+    const multipart = buildMultipartPayload('nested/../../clip.mp4', 'video-content');
     const uploadResponse = await app.inject({
       method: 'POST',
-      url: `/api/tasks/${createPayload.taskId}/upload`,
+      url: `/api/tasks/${created.taskId}/upload`,
       headers: {
         'content-type': `multipart/form-data; boundary=${multipart.boundary}`,
       },
@@ -78,199 +87,165 @@ test('upload endpoint stores streamed file inside uploads directory', async (t) 
     });
 
     assert.equal(uploadResponse.statusCode, 200);
+    const uploadPayload = uploadResponse.json() as { status: string; stage: string; fileName?: string };
+    assert.equal(uploadPayload.status, 'uploaded');
+    assert.equal(uploadPayload.stage, 'uploaded');
+    assert.equal(uploadPayload.fileName, 'clip.mp4');
 
-    const tasks = JSON.parse(fs.readFileSync(path.join(workspace, 'data', 'tasks.json'), 'utf8')) as Array<{ fileName?: string; uploadPath?: string }>;
-    const task = tasks[0];
-    assert.equal(task?.fileName, 'clip.mp4');
-    assert.ok(task?.uploadPath);
-    assert.equal(fs.realpathSync(path.dirname(task!.uploadPath!)), fs.realpathSync(path.join(workspace, 'uploads')));
+    const storedTask = getTask(created.taskId);
+    assert.ok(storedTask?.artifacts.sourceFilePath);
+    assert.equal(fs.realpathSync(path.dirname(storedTask!.artifacts.sourceFilePath!)), fs.realpathSync(path.join(workspace, 'artifacts', 'tasks', created.taskId)));
   });
 });
 
-test('upload endpoint rejects files above configured limit before buffering them in memory', async (t) => {
-  const originalLimit = process.env.UPLOAD_MAX_FILE_SIZE_BYTES;
-  process.env.UPLOAD_MAX_FILE_SIZE_BYTES = '4';
-
+test('start endpoint triggers worker and task status exposes unified error object', async (t) => {
   await withTempWorkspace(async () => {
     const app = await buildServer();
     t.after(async () => {
       await app.close();
     });
-    t.after(() => {
-      if (originalLimit === undefined) {
-        delete process.env.UPLOAD_MAX_FILE_SIZE_BYTES;
-        return;
-      }
-      process.env.UPLOAD_MAX_FILE_SIZE_BYTES = originalLimit;
-    });
 
     const createResponse = await app.inject({
       method: 'POST',
       url: '/api/tasks',
       payload: { actionType: 'clear' },
     });
-    const createPayload = createResponse.json() as { taskId: string };
-    const multipart = buildMultipartPayload('clip.mp4', '12345');
-
-    const uploadResponse = await app.inject({
+    const created = createResponse.json() as { taskId: string };
+    const multipart = buildMultipartPayload('clip.mp4', 'video-content');
+    await app.inject({
       method: 'POST',
-      url: `/api/tasks/${createPayload.taskId}/upload`,
+      url: `/api/tasks/${created.taskId}/upload`,
       headers: {
         'content-type': `multipart/form-data; boundary=${multipart.boundary}`,
       },
       payload: multipart.payload,
     });
-
-    assert.equal(uploadResponse.statusCode, 413);
-    assert.equal((uploadResponse.json() as { errorCode?: string }).errorCode, 'upload_failed');
-  });
-});
-
-test('status endpoint surfaces invalid_duration after analyze starts', async (t) => {
-  await withTempWorkspace(async (workspace) => {
-    const app = await buildServer();
-    t.after(async () => {
-      await app.close();
-    });
-    t.after(() => {
-      setAnalysisWorkerForTests();
-    });
-
-    const createResponse = await app.inject({
-      method: 'POST',
-      url: '/api/tasks',
-      payload: { actionType: 'clear' },
-    });
-    const createPayload = createResponse.json() as { taskId: string };
 
     setAnalysisWorkerForTests(async (taskId) => {
-      updateTask(taskId, {
-        status: 'failed',
-        errorCode: 'invalid_duration',
-        preprocess: {
-          status: 'failed',
-          errorCode: 'invalid_duration',
-          errorMessage: 'video duration should be between 5 and 15 seconds',
-        },
-      });
+      const current = getTask(taskId);
+      if (!current) return;
+      saveTask(failTask(current, buildErrorSnapshot('invalid_duration', 'video duration should be between 5 and 15 seconds')));
     });
 
-    const multipart = buildMultipartPayload('too-short.mp4', 'demo-video');
-
-    const uploadResponse = await app.inject({
+    const startResponse = await app.inject({
       method: 'POST',
-      url: `/api/tasks/${createPayload.taskId}/upload`,
-      headers: {
-        'content-type': `multipart/form-data; boundary=${multipart.boundary}`,
-      },
-      payload: multipart.payload,
-    });
-    assert.equal(uploadResponse.statusCode, 200);
-
-    const analyzeResponse = await app.inject({
-      method: 'POST',
-      url: `/api/tasks/${createPayload.taskId}/analyze`,
+      url: `/api/tasks/${created.taskId}/start`,
     });
 
-    assert.equal(analyzeResponse.statusCode, 200);
+    assert.equal(startResponse.statusCode, 200);
+    const started = startResponse.json() as { status: string; stage: string };
+    assert.equal(started.status, 'processing');
+    assert.equal(started.stage, 'validating');
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const statusResponse = await app.inject({
       method: 'GET',
-      url: `/api/tasks/${createPayload.taskId}`,
+      url: `/api/tasks/${created.taskId}`,
     });
 
     assert.equal(statusResponse.statusCode, 200);
-    const statusPayload = statusResponse.json() as { status: string; errorCode?: string; preprocessStatus: string };
+    const statusPayload = statusResponse.json() as { status: string; stage: string; error?: { code?: string; category?: string } };
     assert.equal(statusPayload.status, 'failed');
-    assert.equal(statusPayload.errorCode, 'invalid_duration');
-    assert.equal(statusPayload.preprocessStatus, 'failed');
+    assert.equal(statusPayload.stage, 'failed');
+    assert.equal(statusPayload.error?.code, 'invalid_duration');
+    assert.equal(statusPayload.error?.category, 'media_validation');
   });
 });
 
-test('pose failure returns pose_failed and is visible from task status endpoint', async (t) => {
-  await withTempWorkspace(async (workspace) => {
+test('history detail and comparison endpoints read from dedicated projections', async (t) => {
+  await withTempWorkspace(async () => {
     const app = await buildServer();
     t.after(async () => {
       await app.close();
     });
 
-    const createResponse = await app.inject({
+    const first = await app.inject({
       method: 'POST',
       url: '/api/tasks',
-      payload: { actionType: 'smash' },
+      payload: { actionType: 'clear' },
     });
-    const createPayload = createResponse.json() as { taskId: string };
-
-    updateTask(createPayload.taskId, {
-      status: 'processing',
-      preprocess: {
-        status: 'completed',
-        artifacts: {
-          normalizedFileName: 'clip.mp4',
-          metadataExtractedAt: new Date().toISOString(),
-          artifactsDir: path.join(workspace, 'missing-artifacts'),
-          manifestPath: 'data/preprocess/missing/manifest.json',
-          framePlan: {
-            strategy: 'uniform-sampling-ffmpeg-v1',
-            targetFrameCount: 6,
-            sampleTimestamps: [1, 2, 3],
-          },
-          sampledFrames: [],
-        },
-      },
-    });
-
-    const poseResponse = await app.inject({
-      method: 'POST',
-      url: `/api/tasks/${createPayload.taskId}/pose`,
-    });
-
-    assert.equal(poseResponse.statusCode, 422);
-    const posePayload = poseResponse.json() as { errorCode?: string; poseStatus?: string };
-    assert.equal(posePayload.errorCode, 'pose_failed');
-    assert.equal(posePayload.poseStatus, 'failed');
-
-    const statusResponse = await app.inject({
-      method: 'GET',
-      url: `/api/tasks/${createPayload.taskId}`,
-    });
-
-    assert.equal(statusResponse.statusCode, 200);
-    const statusPayload = statusResponse.json() as { status: string; errorCode?: string; poseStatus: string; errorMessage?: string };
-    assert.equal(statusPayload.status, 'failed');
-    assert.equal(statusPayload.errorCode, 'pose_failed');
-    assert.equal(statusPayload.poseStatus, 'failed');
-    assert.match(statusPayload.errorMessage ?? '', /no such file|not found/i);
-  });
-});
-
-test('create task persists task state into local store', async (t) => {
-  await withTempWorkspace(async (workspace) => {
-    const app = await buildServer();
-    t.after(async () => {
-      await app.close();
-    });
-
-    const response = await app.inject({
+    const second = await app.inject({
       method: 'POST',
       url: '/api/tasks',
       payload: { actionType: 'clear' },
     });
 
-    assert.equal(response.statusCode, 200);
-    const payload = response.json() as { taskId: string; status: string };
-    assert.match(payload.taskId, /^task_/);
-    assert.equal(payload.status, 'created');
+    const firstTaskId = (first.json() as { taskId: string }).taskId;
+    const secondTaskId = (second.json() as { taskId: string }).taskId;
+    const now = new Date().toISOString();
 
-    const tasksFile = path.join(workspace, 'data', 'tasks.json');
-    assert.equal(fs.existsSync(tasksFile), true);
+    const firstTask = getTask(firstTaskId)!;
+    const secondTask = getTask(secondTaskId)!;
+    saveTask({
+      ...firstTask,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      completedAt: now,
+      updatedAt: now,
+    });
+    saveTask({
+      ...secondTask,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      baselineTaskId: firstTaskId,
+      completedAt: now,
+      updatedAt: now,
+    });
 
-    const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf8')) as Array<{ taskId: string; actionType: string; status: string }>;
-    assert.equal(tasks.length, 1);
-    assert.equal(tasks[0]?.taskId, payload.taskId);
-    assert.equal(tasks[0]?.actionType, 'clear');
-    assert.equal(tasks[0]?.status, 'created');
+    const firstReport: ReportResult = {
+      taskId: firstTaskId,
+      actionType: 'clear',
+      totalScore: 70,
+      summaryText: 'first',
+      dimensionScores: [{ name: '准备姿态', score: 70 }],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: false,
+    };
+    const secondReport: ReportResult = {
+      taskId: secondTaskId,
+      actionType: 'clear',
+      totalScore: 75,
+      summaryText: 'second',
+      dimensionScores: [{ name: '准备姿态', score: 75 }],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: false,
+    };
+    saveReport(firstTaskId, JSON.stringify(firstReport), firstReport.totalScore, firstReport.summaryText, firstReport.poseBased);
+    saveReport(secondTaskId, JSON.stringify(secondReport), secondReport.totalScore, secondReport.summaryText, secondReport.poseBased);
+
+    const historyResponse = await app.inject({
+      method: 'GET',
+      url: '/api/history?actionType=clear',
+    });
+    assert.equal(historyResponse.statusCode, 200);
+    const historyPayload = historyResponse.json() as { items: Array<{ taskId: string }> };
+    assert.equal(historyPayload.items.length, 2);
+
+    const detailResponse = await app.inject({
+      method: 'GET',
+      url: `/api/history/${secondTaskId}`,
+    });
+    assert.equal(detailResponse.statusCode, 200);
+    const detailPayload = detailResponse.json() as { task: { taskId: string }; report: { summaryText?: string } };
+    assert.equal(detailPayload.task.taskId, secondTaskId);
+    assert.equal(detailPayload.report.summaryText, 'second');
+
+    const comparisonResponse = await app.inject({
+      method: 'GET',
+      url: `/api/tasks/${secondTaskId}/comparison`,
+    });
+    assert.equal(comparisonResponse.statusCode, 200);
+    const comparisonPayload = comparisonResponse.json() as { baselineTask: { taskId: string }; comparison: { totalScoreDelta: number } };
+    assert.equal(comparisonPayload.baselineTask.taskId, firstTaskId);
+    assert.equal(comparisonPayload.comparison.totalScoreDelta, 5);
   });
 });

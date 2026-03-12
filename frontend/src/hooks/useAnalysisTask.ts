@@ -14,5 +14,6 @@ export {
   type ReportResult,
   type RetestComparison,
   type TaskHistoryItem,
+  type TaskStage,
   type TaskStatus,
 } from '../app/AnalysisSessionProvider'

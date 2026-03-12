@@ -7,14 +7,39 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { CreateTaskRequest, HistoryListQuery } from './types/task';
-import { createTask, getCustomRetestComparison, getRetestComparison, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
-import { getMaxFileSizeBytes, getPreprocessSummary, runPreprocess } from './services/preprocessService';
-import { getPoseResult, getPoseSummary, runPoseAnalysis } from './services/poseService';
-import { readResult, readResultByTaskId } from './services/store';
-import { getTask } from './services/taskRepository';
+import type { CreateTaskRequest, HistoryListQuery, ReportResult } from './types/task';
+import { getTask, getReportRow } from './services/taskRepository';
+import { getMaxFileSizeBytes } from './services/preprocessService';
+import {
+  assertActionType,
+  createAnalysisTask,
+  getHistoryDetail,
+  getPoseResultForDebug,
+  getRetestComparison,
+  listTaskHistory,
+  migrateLegacyStoreIfNeeded,
+  recoverStaleTasks,
+  saveUpload,
+  startAnalysis,
+} from './services/taskService';
+import { buildErrorSnapshot, getErrorStatusCode } from './services/errorCatalog';
+import { getArtifactsDir } from './services/database';
+import { toTaskResource } from './types/task';
+
+function sendError(reply: { status: (code: number) => { send: (payload: unknown) => unknown } }, code: Parameters<typeof buildErrorSnapshot>[0], message?: string) {
+  const error = buildErrorSnapshot(code, message);
+  return reply.status(getErrorStatusCode(code)).send({ error });
+}
+
+function readReport(taskId: string) {
+  const row = getReportRow(taskId);
+  return row ? JSON.parse(row.report_json) as ReportResult : undefined;
+}
 
 export async function buildServer() {
+  await migrateLegacyStoreIfNeeded();
+  recoverStaleTasks();
+
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
@@ -28,34 +53,43 @@ export async function buildServer() {
     },
   });
 
+  fs.mkdirSync(getArtifactsDir(), { recursive: true });
+
   await app.register(fastifyStatic, {
-    root: path.resolve(process.cwd(), 'data'),
-    prefix: '/data/',
+    root: getArtifactsDir(),
+    prefix: '/artifacts/',
   });
 
   app.get('/health', async () => ({ ok: true }));
 
   app.post('/api/tasks', async (request, reply) => {
     const body = request.body as Partial<CreateTaskRequest>;
-    const actionType = body?.actionType;
-    if (!actionType) {
-      return reply.status(400).send({ error: 'actionType is required' });
+    if (!body?.actionType) {
+      return sendError(reply, 'invalid_action_type');
     }
-    const task = createTask(actionType);
-    return { taskId: task.taskId, status: task.status };
+
+    try {
+      assertActionType(body.actionType);
+      const task = createAnalysisTask(body.actionType);
+      return toTaskResource(task);
+    } catch (error) {
+      return sendError(reply, 'invalid_action_type', error instanceof Error ? error.message : undefined);
+    }
   });
 
   app.get('/api/history', async (request) => {
     const query = request.query as HistoryListQuery;
-    return {
-      items: listTaskHistory(query.actionType),
-    };
+    return listTaskHistory(query);
   });
 
   app.post('/api/tasks/:taskId/upload', async (request, reply) => {
     const params = request.params as { taskId: string };
-    if (!getTask(params.taskId)) {
-      return reply.status(404).send({ error: 'task not found' });
+    const task = getTask(params.taskId);
+    if (!task) {
+      return sendError(reply, 'task_not_found');
+    }
+    if (task.status !== 'created' || task.stage !== 'upload_pending') {
+      return sendError(reply, 'invalid_task_state');
     }
 
     let file;
@@ -63,13 +97,13 @@ export async function buildServer() {
       file = await request.file();
     } catch (error) {
       if (error instanceof Error && /too large/i.test(error.message)) {
-        return reply.status(413).send({ error: 'file exceeds current PoC upload limit', errorCode: 'upload_failed' });
+        return sendError(reply, 'upload_failed', 'file exceeds current upload limit');
       }
       throw error;
     }
 
     if (!file) {
-      return reply.status(400).send({ error: 'file is required' });
+      return sendError(reply, 'file_required');
     }
 
     const stagedUploadPath = path.join(os.tmpdir(), `badminton-upload-${params.taskId}-${randomUUID().slice(0, 8)}.tmp`);
@@ -78,203 +112,103 @@ export async function buildServer() {
       await pipeline(file.file, fs.createWriteStream(stagedUploadPath, { flags: 'wx' }));
       if (file.file.truncated) {
         fs.rmSync(stagedUploadPath, { force: true });
-        return reply.status(413).send({ error: 'file exceeds current PoC upload limit', errorCode: 'upload_failed' });
+        return sendError(reply, 'upload_failed', 'file exceeds current upload limit');
       }
     } catch (error) {
       fs.rmSync(stagedUploadPath, { force: true });
-      if (error instanceof Error && /too large/i.test(error.message)) {
-        return reply.status(413).send({ error: 'file exceeds current PoC upload limit', errorCode: 'upload_failed' });
+      return sendError(reply, 'upload_failed', error instanceof Error ? error.message : 'failed to persist upload');
+    }
+
+    try {
+      const updated = saveUpload(params.taskId, file.filename, stagedUploadPath, file.mimetype);
+      if (!updated) {
+        fs.rmSync(stagedUploadPath, { force: true });
+        return sendError(reply, 'task_not_found');
       }
-      return reply.status(500).send({ error: error instanceof Error ? error.message : 'failed to persist upload' });
-    }
 
-    const task = saveUpload(params.taskId, file.filename, stagedUploadPath, file.mimetype);
-    if (!task) {
+      return {
+        ...toTaskResource(updated),
+        fileName: updated.artifacts.upload?.fileName,
+      };
+    } catch (error) {
       fs.rmSync(stagedUploadPath, { force: true });
-      return reply.status(404).send({ error: 'task not found' });
+      return sendError(reply, 'upload_failed', error instanceof Error ? error.message : 'failed to persist upload');
     }
-    return {
-      taskId: task.taskId,
-      status: task.status,
-      fileName: task.fileName,
-      preprocessStatus: task.preprocess?.status ?? 'idle',
-    };
   });
 
-  app.post('/api/tasks/:taskId/preprocess', async (request, reply) => {
+  app.post('/api/tasks/:taskId/start', async (request, reply) => {
     const params = request.params as { taskId: string };
     const task = getTask(params.taskId);
     if (!task) {
-      return reply.status(404).send({ error: 'task not found' });
+      return sendError(reply, 'task_not_found');
     }
-    if (!task.uploadPath) {
-      return reply.status(409).send({ error: 'upload required before preprocess' });
+    if (task.status !== 'uploaded' || task.stage !== 'uploaded') {
+      return sendError(reply, 'invalid_task_state');
     }
-    const updated = await runPreprocess(params.taskId);
-    if (!updated) {
-      return reply.status(500).send({ error: 'preprocess failed to start' });
-    }
-    if (updated.preprocess?.status === 'failed') {
-      return reply.status(422).send({
-        error: updated.preprocess.errorMessage ?? 'preprocess failed',
-        errorCode: updated.preprocess.errorCode ?? updated.errorCode ?? 'upload_failed',
-        preprocess: updated.preprocess,
-      });
-    }
-    return {
-      taskId: updated.taskId,
-      status: updated.status,
-      preprocess: updated.preprocess,
-    };
-  });
 
-  app.get('/api/tasks/:taskId/preprocess', async (request, reply) => {
-    const params = request.params as { taskId: string };
-    const summary = getPreprocessSummary(params.taskId);
-    if (!summary) {
-      return reply.status(404).send({ error: 'task not found' });
+    try {
+      const updated = await startAnalysis(params.taskId);
+      if (!updated) {
+        return sendError(reply, 'task_not_found');
+      }
+      return toTaskResource(updated);
+    } catch (error) {
+      return sendError(reply, 'internal_error', error instanceof Error ? error.message : undefined);
     }
-    return summary;
-  });
-
-  app.post('/api/tasks/:taskId/pose', async (request, reply) => {
-    const params = request.params as { taskId: string };
-    const task = getTask(params.taskId);
-    if (!task) {
-      return reply.status(404).send({ error: 'task not found' });
-    }
-    if (!task.preprocess?.artifacts?.artifactsDir) {
-      return reply.status(409).send({ error: 'preprocess required before pose analysis' });
-    }
-    const updated = await runPoseAnalysis(params.taskId);
-    if (!updated) {
-      return reply.status(500).send({ error: 'failed to start pose analysis' });
-    }
-    if (updated.pose?.status === 'failed') {
-      return reply.status(422).send({
-        error: updated.pose.errorMessage ?? 'pose analysis failed',
-        errorCode: updated.pose.errorCode ?? updated.errorCode ?? 'pose_failed',
-        poseStatus: updated.pose.status,
-      });
-    }
-    return {
-      taskId: updated.taskId,
-      pose: updated.pose,
-    };
-  });
-
-  app.get('/api/tasks/:taskId/pose', async (request, reply) => {
-    const params = request.params as { taskId: string };
-    const result = getPoseResult(params.taskId);
-    if (!result) {
-      return reply.status(404).send({ error: 'pose result not found' });
-    }
-    return result;
-  });
-
-  app.get('/api/tasks/:taskId/pose-summary', async (request, reply) => {
-    const params = request.params as { taskId: string };
-    const summary = getPoseSummary(params.taskId);
-    if (!summary) {
-      return reply.status(404).send({ error: 'task not found' });
-    }
-    return summary;
-  });
-
-  app.post('/api/tasks/:taskId/analyze', async (request, reply) => {
-    const params = request.params as { taskId: string };
-    const task = getTask(params.taskId);
-    if (!task) {
-      return reply.status(404).send({ error: 'task not found' });
-    }
-    if (!task.uploadPath) {
-      return reply.status(409).send({ error: 'upload required before analyze' });
-    }
-    const updated = await startMockAnalysis(params.taskId);
-    if (!updated) {
-      return reply.status(500).send({ error: 'failed to start analysis' });
-    }
-    if (updated.status === 'failed') {
-      return reply.status(422).send({
-        error: updated.preprocess?.errorMessage ?? 'analysis blocked by preprocess validation',
-        errorCode: updated.preprocess?.errorCode ?? updated.errorCode ?? 'upload_failed',
-        preprocessStatus: updated.preprocess?.status ?? 'failed',
-      });
-    }
-    return {
-      taskId: updated.taskId,
-      status: updated.status,
-      preprocessStatus: updated.preprocess?.status ?? 'idle',
-    };
   });
 
   app.get('/api/tasks/:taskId', async (request, reply) => {
     const params = request.params as { taskId: string };
     const task = getTask(params.taskId);
     if (!task) {
-      return reply.status(404).send({ error: 'task not found' });
+      return sendError(reply, 'task_not_found');
     }
-    return {
-      taskId: task.taskId,
-      status: task.status,
-      errorCode: task.errorCode ?? task.pose?.errorCode ?? task.preprocess?.errorCode,
-      errorMessage: task.pose?.errorMessage ?? task.preprocess?.errorMessage,
-      preprocessStatus: task.preprocess?.status ?? 'idle',
-      poseStatus: task.pose?.status ?? 'idle',
-      poseSummary: task.pose?.summary,
-      previousCompletedTaskId: task.previousCompletedTaskId,
-      updatedAt: task.updatedAt,
-    };
+    return toTaskResource(task);
   });
 
   app.get('/api/tasks/:taskId/result', async (request, reply) => {
     const params = request.params as { taskId: string };
     const task = getTask(params.taskId);
     if (!task) {
-      return reply.status(404).send({ error: 'task not found' });
+      return sendError(reply, 'task_not_found');
     }
-    if (!task.resultPath) {
-      return reply.status(409).send({ error: 'result not ready' });
+    const report = readReport(params.taskId);
+    if (!report) {
+      return sendError(reply, 'result_not_ready');
     }
-    return readResult(task.resultPath);
+    return report;
   });
 
   app.get('/api/history/:taskId', async (request, reply) => {
     const params = request.params as { taskId: string };
-    const task = getTask(params.taskId);
-    const result = readResultByTaskId(params.taskId);
-    if (!task || !result) {
-      return reply.status(404).send({ error: 'history item not found' });
+    const detail = getHistoryDetail(params.taskId);
+    if (!detail) {
+      return sendError(reply, 'task_not_found');
     }
-    return {
-      taskId: task.taskId,
-      actionType: task.actionType,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-      report: result,
-    };
+    return detail;
   });
 
   app.get('/api/tasks/:taskId/comparison', async (request, reply) => {
     const params = request.params as { taskId: string };
-    const query = request.query as { previousTaskId?: string };
+    const query = request.query as { baselineTaskId?: string };
+    const payload = getRetestComparison(params.taskId, query.baselineTaskId);
 
-    if (query.previousTaskId) {
-      const payload = getCustomRetestComparison(params.taskId, query.previousTaskId);
-      if (payload === null) {
-        return reply.status(409).send({ error: 'tasks must share the same action type' });
-      }
-      if (!payload) {
-        return reply.status(404).send({ error: 'task not found or comparison unavailable' });
-      }
-      return payload;
+    if (payload === null) {
+      return sendError(reply, 'comparison_action_mismatch');
     }
-
-    const payload = getRetestComparison(params.taskId);
     if (!payload) {
-      return reply.status(404).send({ error: 'task not found or comparison unavailable' });
+      return sendError(reply, 'result_not_ready', 'comparison unavailable');
     }
     return payload;
+  });
+
+  app.get('/api/debug/tasks/:taskId/pose', async (request, reply) => {
+    const params = request.params as { taskId: string };
+    const result = getPoseResultForDebug(params.taskId);
+    if (!result) {
+      return sendError(reply, 'result_not_ready');
+    }
+    return result;
   });
 
   return app;

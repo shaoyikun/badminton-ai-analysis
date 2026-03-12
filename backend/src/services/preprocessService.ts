@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { FlowErrorCode, PreprocessArtifacts, PreprocessFrameItem, TaskRecord, VideoMetadata } from '../types/task';
-import { getTask, updateTask } from './taskRepository';
+import type { FlowErrorCode, PreprocessArtifacts, PreprocessFrameItem, VideoMetadata } from '../types/task';
 import { uploadConstraints } from './uploadFlowConfig';
+import { getPreprocessDir } from './artifactStore';
 
 const DEFAULT_FRAME_RATE = 25;
 const execFileAsync = promisify(execFile);
@@ -30,10 +30,6 @@ function clearDir(target: string) {
   fs.mkdirSync(target, { recursive: true });
 }
 
-function getArtifactsBaseDir() {
-  return path.resolve(process.cwd(), 'data', 'preprocess');
-}
-
 function buildSampleTimestamps(durationSeconds: number, targetFrameCount: number) {
   if (durationSeconds <= 0 || targetFrameCount <= 0) return [];
   if (targetFrameCount === 1) return [Number((durationSeconds / 2).toFixed(2))];
@@ -48,10 +44,9 @@ async function runCommand(command: string, args: string[]) {
   return stdout.trim();
 }
 
-async function probeVideo(task: TaskRecord): Promise<VideoMetadata | undefined> {
-  if (!task.uploadPath || !task.fileName) return undefined;
-  const stat = fs.statSync(task.uploadPath);
-  const extension = path.extname(task.fileName).toLowerCase();
+export async function probeVideo(sourcePath: string, metadata: Pick<VideoMetadata, 'fileName' | 'mimeType'>): Promise<VideoMetadata> {
+  const stat = fs.statSync(sourcePath);
+  const extension = path.extname(metadata.fileName).toLowerCase();
 
   const probeOutput = await runCommand('ffprobe', [
     '-v',
@@ -62,7 +57,7 @@ async function probeVideo(task: TaskRecord): Promise<VideoMetadata | undefined> 
     'stream=width,height,r_frame_rate,avg_frame_rate,duration,nb_frames:format=duration',
     '-of',
     'json',
-    task.uploadPath,
+    sourcePath,
   ]);
 
   const parsed = JSON.parse(probeOutput) as {
@@ -87,9 +82,9 @@ async function probeVideo(task: TaskRecord): Promise<VideoMetadata | undefined> 
   const estimatedFrames = stream.nb_frames ? Number.parseInt(stream.nb_frames, 10) : Math.round(durationSeconds * frameRate);
 
   return {
-    fileName: task.fileName,
+    fileName: metadata.fileName,
     fileSizeBytes: stat.size,
-    mimeType: task.mimeType,
+    mimeType: metadata.mimeType,
     extension,
     durationSeconds: Number(durationSeconds.toFixed(2)),
     estimatedFrames,
@@ -100,25 +95,25 @@ async function probeVideo(task: TaskRecord): Promise<VideoMetadata | undefined> 
   };
 }
 
-function validateUploadedVideo(metadata: VideoMetadata) {
+export function validateUploadedVideo(metadata: VideoMetadata): { errorCode: FlowErrorCode; errorMessage: string } | null {
   if (!uploadConstraints.supportedExtensions.includes(metadata.extension ?? '')) {
     return {
-      errorCode: 'upload_failed' as FlowErrorCode,
+      errorCode: 'unsupported_file_type',
       errorMessage: `unsupported video extension: ${metadata.extension ?? 'unknown'}`,
     };
   }
 
   if (metadata.fileSizeBytes < uploadConstraints.minFileSizeBytes) {
     return {
-      errorCode: 'upload_failed' as FlowErrorCode,
+      errorCode: 'upload_failed',
       errorMessage: 'video file is too small to analyze reliably',
     };
   }
 
   if (metadata.fileSizeBytes > getMaxFileSizeBytes()) {
     return {
-      errorCode: 'upload_failed' as FlowErrorCode,
-      errorMessage: 'video file is too large for current PoC limits',
+      errorCode: 'upload_failed',
+      errorMessage: 'video file is too large for current upload limits',
     };
   }
 
@@ -127,14 +122,14 @@ function validateUploadedVideo(metadata: VideoMetadata) {
     || (metadata.durationSeconds ?? 0) > uploadConstraints.maxDurationSeconds
   ) {
     return {
-      errorCode: 'invalid_duration' as FlowErrorCode,
+      errorCode: 'invalid_duration',
       errorMessage: `video duration should be between ${uploadConstraints.minDurationSeconds} and ${uploadConstraints.maxDurationSeconds} seconds`,
     };
   }
 
   if ((metadata.width ?? 0) < uploadConstraints.minWidth || (metadata.height ?? 0) < uploadConstraints.minHeight) {
     return {
-      errorCode: 'poor_lighting_or_occlusion' as FlowErrorCode,
+      errorCode: 'poor_lighting_or_occlusion',
       errorMessage: `video resolution is too small: ${metadata.width ?? 0}x${metadata.height ?? 0}`,
     };
   }
@@ -142,26 +137,24 @@ function validateUploadedVideo(metadata: VideoMetadata) {
   return null;
 }
 
-async function extractFrames(taskId: string, task: TaskRecord, metadata: VideoMetadata): Promise<PreprocessArtifacts> {
-  if (!task.uploadPath) throw new Error('upload path not found');
-
+export async function extractFrames(taskId: string, sourcePath: string, metadata: VideoMetadata): Promise<PreprocessArtifacts> {
   const targetFrameCount = Math.min(12, Math.max(6, Math.round((metadata.durationSeconds ?? 6) / 1.2)));
   const sampleTimestamps = buildSampleTimestamps(metadata.durationSeconds ?? 6, targetFrameCount);
-  const artifactsDir = path.join(getArtifactsBaseDir(), taskId);
+  const artifactsDir = getPreprocessDir(taskId);
   clearDir(artifactsDir);
 
   const sampledFrames: PreprocessFrameItem[] = [];
   for (const [index, timestamp] of sampleTimestamps.entries()) {
     const frameFileName = `frame-${String(index + 1).padStart(2, '0')}.jpg`;
     const fullPath = path.join(artifactsDir, frameFileName);
-    const relativePath = path.posix.join('data', 'preprocess', taskId, frameFileName);
+    const relativePath = path.posix.join('artifacts', 'tasks', taskId, 'preprocess', frameFileName);
 
     await runCommand('ffmpeg', [
       '-y',
       '-ss',
       String(timestamp),
       '-i',
-      task.uploadPath!,
+      sourcePath,
       '-frames:v',
       '1',
       '-q:v',
@@ -177,116 +170,16 @@ async function extractFrames(taskId: string, task: TaskRecord, metadata: VideoMe
     });
   }
 
-  const manifestPath = path.join(artifactsDir, 'manifest.json');
-  const relativeManifestPath = path.posix.join('data', 'preprocess', taskId, 'manifest.json');
-
-  const artifacts: PreprocessArtifacts = {
+  return {
     normalizedFileName: sanitizeFileName(metadata.fileName),
     metadataExtractedAt: now(),
-    artifactsDir: path.posix.join('data', 'preprocess', taskId),
-    manifestPath: relativeManifestPath,
+    artifactsDir: path.posix.join('artifacts', 'tasks', taskId, 'preprocess'),
+    manifestPath: path.posix.join('artifacts', 'tasks', taskId, 'preprocess', 'manifest.json'),
     framePlan: {
       strategy: 'uniform-sampling-ffmpeg-v1',
       targetFrameCount,
       sampleTimestamps,
     },
     sampledFrames,
-  };
-
-  fs.writeFileSync(manifestPath, JSON.stringify(artifacts, null, 2), 'utf8');
-  return artifacts;
-}
-
-export async function runPreprocess(taskId: string) {
-  const task = getTask(taskId);
-  if (!task) return undefined;
-  if (!task.uploadPath || !task.fileName) {
-    return updateTask(taskId, {
-      preprocess: {
-        status: 'failed',
-        startedAt: now(),
-        completedAt: now(),
-        errorCode: 'upload_failed',
-        errorMessage: 'upload file not found',
-      },
-    });
-  }
-
-  updateTask(taskId, {
-    preprocess: {
-      ...(task.preprocess ?? { status: 'idle' }),
-      status: 'processing',
-      startedAt: now(),
-      completedAt: undefined,
-      errorCode: undefined,
-      errorMessage: undefined,
-    },
-  });
-
-  try {
-    const current = getTask(taskId);
-    if (!current) return undefined;
-    const metadata = await probeVideo(current);
-    if (!metadata) {
-      return updateTask(taskId, {
-        preprocess: {
-          status: 'failed',
-          startedAt: current.preprocess?.startedAt,
-          completedAt: now(),
-          errorCode: 'upload_failed',
-          errorMessage: 'failed to read video metadata',
-        },
-      });
-    }
-
-    const validation = validateUploadedVideo(metadata);
-    if (validation) {
-      return updateTask(taskId, {
-        status: 'failed',
-        errorCode: validation.errorCode,
-        preprocess: {
-          status: 'failed',
-          startedAt: current.preprocess?.startedAt,
-          completedAt: now(),
-          errorCode: validation.errorCode,
-          errorMessage: validation.errorMessage,
-          metadata,
-        },
-      });
-    }
-
-    const artifacts = await extractFrames(taskId, current, metadata);
-    return updateTask(taskId, {
-      preprocess: {
-        status: 'completed',
-        startedAt: current.preprocess?.startedAt,
-        completedAt: now(),
-        metadata,
-        artifacts,
-      },
-    });
-  } catch (error) {
-    const current = getTask(taskId);
-    return updateTask(taskId, {
-      status: 'failed',
-      errorCode: 'upload_failed',
-      preprocess: {
-        status: 'failed',
-        startedAt: current?.preprocess?.startedAt,
-        completedAt: now(),
-        errorCode: 'upload_failed',
-        errorMessage: error instanceof Error ? error.message : 'preprocess execution failed',
-      },
-    });
-  }
-}
-
-export function getPreprocessSummary(taskId: string) {
-  const task = getTask(taskId);
-  if (!task) return undefined;
-  return {
-    taskId: task.taskId,
-    status: task.status,
-    preprocess: task.preprocess ?? { status: 'idle' },
   };
 }

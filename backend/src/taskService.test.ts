@@ -22,7 +22,7 @@ async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
   }
 }
 
-test('saveUpload strips directory segments from uploaded filename', async () => {
+test('saveUpload strips directory segments and stores source video under artifact task directory', async () => {
   await withTempWorkspace(async (workspace) => {
     const task = createTask('clear');
     const stagedUploadPath = path.join(workspace, 'incoming.tmp');
@@ -31,10 +31,10 @@ test('saveUpload strips directory segments from uploaded filename', async () => 
     const updated = saveUpload(task.taskId, 'nested/../../clip.mp4', stagedUploadPath, 'video/mp4');
 
     assert.ok(updated);
-    assert.equal(updated?.fileName, 'clip.mp4');
-    assert.ok(updated?.uploadPath);
-    assert.equal(fs.realpathSync(path.dirname(updated!.uploadPath!)), fs.realpathSync(path.join(workspace, 'uploads')));
-    assert.match(path.basename(updated!.uploadPath!), /^task_[a-z0-9]{8}-[a-z0-9]{8}\.mp4$/);
+    assert.equal(updated?.artifacts.upload?.fileName, 'clip.mp4');
+    assert.ok(updated?.artifacts.sourceFilePath);
+    assert.equal(fs.realpathSync(path.dirname(updated!.artifacts.sourceFilePath!)), fs.realpathSync(path.join(workspace, 'artifacts', 'tasks', task.taskId)));
+    assert.match(path.basename(updated!.artifacts.sourceFilePath!), /^source\.mp4$/);
   });
 });
 
@@ -67,7 +67,7 @@ test('startMockAnalysis returns before background worker finishes', async () => 
 
     assert.ok(started);
     assert.equal(started.status, 'processing');
-    assert.equal(started.preprocess?.status, 'queued');
+    assert.equal(started.stage, 'validating');
     assert.ok(getActiveAnalysisTaskForTests(task.taskId));
     assert.equal(getTask(task.taskId)?.status, 'processing');
 

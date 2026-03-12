@@ -1,6 +1,6 @@
 import fs from 'node:fs';
-import { PoseAnalysisResult, ReportResult, StandardComparison, SuggestionItem, TaskRecord } from '../types/task';
-import { readPoseResult } from './store';
+import type { AnalysisTaskRecord, PoseAnalysisResult, ReportResult, StandardComparison, SuggestionItem } from '../types/task';
+import { readPoseResult } from './poseService';
 
 function now() {
   return new Date().toISOString();
@@ -384,12 +384,12 @@ function buildStandardComparison(config: ActionConfig, rankedIssues: RankedIssue
   };
 }
 
-export function getPoseResultForTask(task: TaskRecord): PoseAnalysisResult | undefined {
-  if (!task.pose?.resultPath || !fs.existsSync(task.pose.resultPath)) return undefined;
-  return readPoseResult(task.pose.resultPath);
+export function getPoseResultForTask(task: AnalysisTaskRecord): PoseAnalysisResult | undefined {
+  if (!task.artifacts.poseResultPath || !fs.existsSync(task.artifacts.poseResultPath)) return undefined;
+  return readPoseResult(task.artifacts.poseResultPath);
 }
 
-export function buildRuleBasedResult(task: TaskRecord, poseResult: PoseAnalysisResult): ReportResult {
+export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseAnalysisResult): ReportResult {
   const config = resolveActionConfig(task.actionType);
   const summary = poseResult.summary;
   const detectionCoverage = poseResult.frameCount > 0 ? poseResult.detectedFrameCount / poseResult.frameCount : 0;
@@ -438,13 +438,13 @@ export function buildRuleBasedResult(task: TaskRecord, poseResult: PoseAnalysisR
       humanSummary: summary.humanSummary,
     },
     preprocess: {
-      metadata: task.preprocess?.metadata,
-      artifacts: task.preprocess?.artifacts,
+      metadata: task.artifacts.preprocess?.metadata,
+      artifacts: task.artifacts.preprocess?.artifacts,
     },
   };
 }
 
-export function buildMockResult(task: TaskRecord): ReportResult {
+export function buildMockResult(task: AnalysisTaskRecord): ReportResult {
   const poseResult = getPoseResultForTask(task);
   if (poseResult && poseResult.detectedFrameCount > 0) {
     return buildRuleBasedResult(task, poseResult);
@@ -497,8 +497,8 @@ export function buildMockResult(task: TaskRecord): ReportResult {
         differences: ['高点准备不够顶', '身体联动发力偏弱', '下压感不够明显'],
       },
       preprocess: {
-        metadata: task.preprocess?.metadata,
-        artifacts: task.preprocess?.artifacts,
+        metadata: task.artifacts.preprocess?.metadata,
+        artifacts: task.artifacts.preprocess?.artifacts,
       },
     };
   }
@@ -549,8 +549,8 @@ export function buildMockResult(task: TaskRecord): ReportResult {
       differences: ['转体展开不足', '高点击球空间不够', '准备到击球衔接不够完整'],
     },
     preprocess: {
-      metadata: task.preprocess?.metadata,
-      artifacts: task.preprocess?.artifacts,
+      metadata: task.artifacts.preprocess?.metadata,
+      artifacts: task.artifacts.preprocess?.artifacts,
     },
   };
 }

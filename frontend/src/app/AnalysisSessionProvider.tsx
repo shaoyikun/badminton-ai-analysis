@@ -12,7 +12,7 @@ import type {
   ActionType,
   ComparisonResponse,
   CreateTaskRequest,
-  CreateTaskResponse,
+  ErrorResponse,
   FlowActionTarget,
   FlowErrorCode,
   HistoryDetailResponse,
@@ -23,6 +23,7 @@ import type {
   ReportResult,
   RetestComparison,
   TaskHistoryItem,
+  TaskStage,
   TaskStatus,
   TaskStatusResponse,
   UploadTaskResponse,
@@ -42,6 +43,7 @@ export type {
   ReportResult,
   RetestComparison,
   TaskHistoryItem,
+  TaskStage,
   TaskStatus,
 } from '../../../shared/contracts'
 
@@ -57,9 +59,9 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 
 export const PREPROCESS_LABELS: Record<PreprocessStatus, string> = {
   idle: '未开始',
-  queued: '排队中',
+  queued: '待处理',
   processing: '校验与抽帧中',
-  completed: '校验完成',
+  completed: '已完成',
   failed: '预处理失败',
 }
 
@@ -102,6 +104,8 @@ type AnalysisSessionContextValue = {
   taskId: string
   latestCompletedTaskId: string
   status: TaskStatus | ''
+  stage: TaskStage | ''
+  progressPercent: number
   preprocessStatus: PreprocessStatus
   poseStatus: PoseStatus
   report: ReportResult | null
@@ -190,6 +194,39 @@ function readSessionSnapshot(): SessionSnapshot {
   }
 }
 
+function parseErrorPayload(data: ErrorResponse | { error?: ErrorResponse['error'] } | { error?: string }) {
+  if (!data || typeof data !== 'object' || !('error' in data) || !data.error) {
+    return undefined
+  }
+  return typeof data.error === 'string' ? undefined : data.error
+}
+
+function deriveStageStatuses(stage: TaskStage | '', status: TaskStatus | '', errorCode?: string): { preprocessStatus: PreprocessStatus; poseStatus: PoseStatus } {
+  if (status === 'created' || stage === 'upload_pending' || !stage) {
+    return { preprocessStatus: 'idle', poseStatus: 'idle' }
+  }
+  if (stage === 'uploaded') {
+    return { preprocessStatus: 'queued', poseStatus: 'idle' }
+  }
+  if (stage === 'validating' || stage === 'extracting_frames') {
+    return { preprocessStatus: 'processing', poseStatus: 'idle' }
+  }
+  if (stage === 'estimating_pose') {
+    return { preprocessStatus: 'completed', poseStatus: 'processing' }
+  }
+  if (stage === 'generating_report' || stage === 'completed') {
+    return { preprocessStatus: 'completed', poseStatus: 'completed' }
+  }
+
+  if (errorCode === 'pose_failed') {
+    return { preprocessStatus: 'completed', poseStatus: 'failed' }
+  }
+  if (errorCode === 'report_generation_failed') {
+    return { preprocessStatus: 'completed', poseStatus: 'completed' }
+  }
+  return { preprocessStatus: 'failed', poseStatus: 'idle' }
+}
+
 export function getErrorRouteActions(errorState: ErrorState) {
   if (!errorState) {
     return {
@@ -210,6 +247,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const [taskId, setTaskId] = useState(initialSession.taskId)
   const [latestCompletedTaskId, setLatestCompletedTaskId] = useState(initialSession.latestCompletedTaskId)
   const [status, setStatus] = useState<TaskStatus | ''>('')
+  const [stage, setStage] = useState<TaskStage | ''>('')
+  const [progressPercent, setProgressPercent] = useState(0)
   const [preprocessStatus, setPreprocessStatus] = useState<PreprocessStatus>('idle')
   const [poseStatus, setPoseStatus] = useState<PoseStatus>('idle')
   const [report, setReport] = useState<ReportResult | null>(null)
@@ -261,35 +300,59 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     appendLog(`${copy.title}：${copy.summary}`)
   }, [appendLog])
 
+  const applyTaskSnapshot = useCallback((snapshot: TaskStatusResponse, silent = false) => {
+    setTaskId(snapshot.taskId)
+    setStatus((prev) => {
+      if (!silent && prev !== snapshot.status) {
+        appendLog(`状态更新：${STATUS_LABELS[snapshot.status]}`)
+      }
+      return snapshot.status
+    })
+    setStage(snapshot.stage)
+    setProgressPercent(snapshot.progressPercent ?? 0)
+    const derivedStatuses = deriveStageStatuses(snapshot.stage, snapshot.status, snapshot.error?.code)
+    setPreprocessStatus(derivedStatuses.preprocessStatus)
+    setPoseStatus(derivedStatuses.poseStatus)
+
+    if (snapshot.status === 'completed') {
+      setLatestCompletedTaskId(snapshot.taskId)
+    }
+
+    if (snapshot.error) {
+      setFriendlyError(snapshot.error.code, snapshot.error.message)
+    }
+  }, [appendLog, setFriendlyError])
+
   const fetchHistory = useCallback(async (nextActionType?: ActionType) => {
     const nextType = nextActionType ?? actionType
     const response = await fetch(`${API_BASE}/api/history?actionType=${nextType}`)
-    const data = await response.json() as HistoryListResponse
+    const data = await response.json() as HistoryListResponse | ErrorResponse
     if (!response.ok) {
       appendLog('获取历史记录失败')
       return []
     }
-    setHistory(data.items ?? [])
-    return data.items ?? []
+    const payload = data as HistoryListResponse
+    setHistory(payload.items ?? [])
+    return payload.items ?? []
   }, [actionType, appendLog])
 
   const fetchPoseResult = useCallback(async (targetTaskId?: string, silent = false) => {
     const currentTaskId = targetTaskId ?? taskId
     if (!currentTaskId) return null
 
-    const response = await fetch(`${API_BASE}/api/tasks/${currentTaskId}/pose`)
-    const data = await response.json() as PoseAnalysisResult & { error?: string }
+    const response = await fetch(`${API_BASE}/api/debug/tasks/${currentTaskId}/pose`)
+    const data = await response.json() as PoseAnalysisResult | ErrorResponse
     if (!response.ok) {
       if (!silent && poseStatus === 'failed') {
-        setFriendlyError('pose_failed', data.error)
+        const error = parseErrorPayload(data as ErrorResponse)
+        setFriendlyError(error?.code ?? 'pose_failed', error?.message)
       }
       return null
     }
 
-    setPoseResult(data)
-    setPoseStatus('completed')
+    setPoseResult(data as PoseAnalysisResult)
     if (!silent) appendLog('已获取姿态摘要结果')
-    return data
+    return data as PoseAnalysisResult
   }, [appendLog, poseStatus, setFriendlyError, taskId])
 
   const fetchComparison = useCallback(async (currentTaskId?: string, previousTaskId?: string) => {
@@ -297,23 +360,22 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     if (!activeTaskId) return null
 
     const url = previousTaskId
-      ? `${API_BASE}/api/tasks/${activeTaskId}/comparison?previousTaskId=${previousTaskId}`
+      ? `${API_BASE}/api/tasks/${activeTaskId}/comparison?baselineTaskId=${previousTaskId}`
       : `${API_BASE}/api/tasks/${activeTaskId}/comparison`
 
     const response = await fetch(url)
-    const data = await response.json() as ComparisonResponse & { error?: string }
+    const data = await response.json() as ComparisonResponse | ErrorResponse
     if (!response.ok) {
       setComparison(null)
-      if (previousTaskId) appendLog(`自定义对比失败：${data.error ?? '未知错误'}`)
+      const error = parseErrorPayload(data as ErrorResponse)
+      if (previousTaskId) appendLog(`自定义对比失败：${error?.message ?? '未知错误'}`)
       return null
     }
 
-    setComparison(data.comparison ?? null)
-    if (data.history) setHistory(data.history)
-    if (data.comparison?.previousTaskId) {
-      setSelectedCompareTaskId(data.comparison.previousTaskId)
-    }
-    return data.comparison ?? null
+    const payload = data as ComparisonResponse
+    setComparison(payload.comparison ?? null)
+    setSelectedCompareTaskId(payload.baselineTask.taskId)
+    return payload.comparison ?? null
   }, [appendLog, latestCompletedTaskId, report?.taskId, taskId])
 
   const fetchResult = useCallback(async (targetTaskId?: string, showSuccessLog = true) => {
@@ -324,25 +386,27 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     }
 
     const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/result`)
-    const data = await response.json() as ReportResult & { error?: string }
+    const data = await response.json() as ReportResult | ErrorResponse
     if (!response.ok) {
-      setFriendlyError('result_not_ready', data.error)
+      const error = parseErrorPayload(data as ErrorResponse)
+      setFriendlyError(error?.code ?? 'result_not_ready', error?.message)
       return null
     }
 
+    const reportPayload = data as ReportResult
     setTaskId(activeTaskId)
     setStatus('completed')
-    setReport(data)
+    setStage('completed')
+    setProgressPercent(100)
+    setReport(reportPayload)
     setErrorState(null)
-    setComparison(data.comparison ?? null)
-    setHistory(data.history ?? [])
     setLatestCompletedTaskId(activeTaskId)
-    setSelectedCompareTaskId(data.comparison?.previousTaskId ?? selectedCompareTaskId)
     if (showSuccessLog) appendLog('已获取分析结果')
+    await fetchHistory(reportPayload.actionType)
     await fetchPoseResult(activeTaskId, true)
-    await fetchComparison(activeTaskId, data.comparison?.previousTaskId)
-    return data
-  }, [appendLog, fetchComparison, fetchPoseResult, selectedCompareTaskId, setFriendlyError, taskId])
+    await fetchComparison(activeTaskId)
+    return reportPayload
+  }, [appendLog, fetchComparison, fetchHistory, fetchPoseResult, setFriendlyError, taskId])
 
   const refreshStatus = useCallback(async (options?: { silent?: boolean; targetTaskId?: string }) => {
     const activeTaskId = options?.targetTaskId ?? taskId
@@ -352,32 +416,16 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     }
 
     const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}`)
-    const data = await response.json() as TaskStatusResponse & { error?: string }
+    const data = await response.json() as TaskStatusResponse | ErrorResponse
     if (!response.ok) {
-      if (!options?.silent) appendLog(`查询状态失败：${data.error ?? '未知错误'}`)
+      const error = parseErrorPayload(data)
+      if (!options?.silent) appendLog(`查询状态失败：${error?.message ?? '未知错误'}`)
       return null
     }
 
-    setTaskId(activeTaskId)
-    setStatus((prev) => {
-      if (!options?.silent && prev !== data.status) {
-        appendLog(`状态更新：${STATUS_LABELS[data.status]}`)
-      }
-      return data.status
-    })
-    setPreprocessStatus(data.preprocessStatus ?? 'idle')
-    setPoseStatus(data.poseStatus ?? 'idle')
-
-    if (data.status === 'failed' && data.errorCode) {
-      setFriendlyError(data.errorCode, data.errorMessage)
-    }
-
-    if (data.status === 'completed') {
-      setLatestCompletedTaskId(activeTaskId)
-    }
-
-    return data.status
-  }, [appendLog, setFriendlyError, taskId])
+    applyTaskSnapshot(data as TaskStatusResponse, Boolean(options?.silent))
+    return (data as TaskStatusResponse).status
+  }, [appendLog, applyTaskSnapshot, taskId])
 
   const startPolling = useCallback((nextTaskId: string) => {
     stopPolling()
@@ -414,19 +462,17 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actionType } satisfies CreateTaskRequest),
       })
-      const data = await response.json() as CreateTaskResponse & { error?: string }
+      const data = await response.json() as TaskStatusResponse | ErrorResponse
       if (!response.ok) {
-        appendLog(`创建任务失败：${data.error ?? '未知错误'}`)
+        const error = parseErrorPayload(data)
+        appendLog(`创建任务失败：${error?.message ?? '未知错误'}`)
         return null
       }
 
-      setTaskId(data.taskId)
-      setStatus(data.status)
-      setPreprocessStatus('idle')
-      setPoseStatus('idle')
-      appendLog(`任务已创建：${data.taskId}（${selectedActionLabel}）`)
+      applyTaskSnapshot(data as TaskStatusResponse, true)
+      appendLog(`任务已创建：${(data as TaskStatusResponse).taskId}（${selectedActionLabel}）`)
       await fetchHistory(actionType)
-      return data.taskId
+      return (data as TaskStatusResponse).taskId
     } catch (error) {
       lastFailureReasonRef.current = 'network'
       appendLog(`创建任务失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -434,7 +480,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsBusy(false)
     }
-  }, [actionType, appendLog, fetchHistory, selectedActionLabel, stopPolling])
+  }, [actionType, appendLog, applyTaskSnapshot, fetchHistory, selectedActionLabel, stopPolling])
 
   const uploadVideo = useCallback(async (targetTaskId?: string) => {
     const activeTaskId = targetTaskId ?? taskId
@@ -450,17 +496,15 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         body: form,
       })
-      const data = await response.json() as UploadTaskResponse & { error?: string; errorCode?: string }
+      const data = await response.json() as UploadTaskResponse | ErrorResponse
       if (!response.ok) {
-        setFriendlyError(data.errorCode, data.error)
+        const error = parseErrorPayload(data)
+        setFriendlyError(error?.code, error?.message)
         return false
       }
 
-      setTaskId(activeTaskId)
-      setStatus(data.status)
-      setPreprocessStatus(data.preprocessStatus ?? 'idle')
-      setPoseStatus('idle')
-      appendLog(`上传完成：${data.fileName ?? file.name}`)
+      applyTaskSnapshot(data as TaskStatusResponse, true)
+      appendLog(`上传完成：${(data as UploadTaskResponse).fileName ?? file.name}`)
       return true
     } catch (error) {
       lastFailureReasonRef.current = 'network'
@@ -469,7 +513,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, file, setFriendlyError, taskId])
+  }, [appendLog, applyTaskSnapshot, file, setFriendlyError, taskId])
 
   const analyze = useCallback(async (targetTaskId?: string) => {
     const activeTaskId = targetTaskId ?? taskId
@@ -479,25 +523,18 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       lastFailureReasonRef.current = null
       setIsBusy(true)
       setErrorState(null)
-      const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/analyze`, { method: 'POST' })
-      const data = await response.json() as {
-        status?: TaskStatus
-        preprocessStatus?: PreprocessStatus
-        error?: string
-        errorCode?: string
-      }
+      const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/start`, { method: 'POST' })
+      const data = await response.json() as TaskStatusResponse | ErrorResponse
 
       if (!response.ok) {
+        const error = parseErrorPayload(data)
         setStatus('failed')
-        setPreprocessStatus(data.preprocessStatus ?? 'failed')
-        setFriendlyError(data.errorCode ?? 'preprocess_failed', data.error)
+        setStage('failed')
+        setFriendlyError(error?.code ?? 'internal_error', error?.message)
         return false
       }
 
-      setTaskId(activeTaskId)
-      setStatus(data.status ?? 'processing')
-      setPreprocessStatus(data.preprocessStatus ?? 'idle')
-      setPoseStatus('idle')
+      applyTaskSnapshot(data as TaskStatusResponse, true)
       appendLog('已启动分析')
       startPolling(activeTaskId)
       return true
@@ -508,7 +545,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, setFriendlyError, startPolling, taskId])
+  }, [appendLog, applyTaskSnapshot, setFriendlyError, startPolling, taskId])
 
   const startAnalysisFlow = useCallback(async (): Promise<FlowResult> => {
     if (!file) {
@@ -543,15 +580,17 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
 
   const fetchHistoryReport = useCallback(async (targetTaskId: string) => {
     const response = await fetch(`${API_BASE}/api/history/${targetTaskId}`)
-    const data = await response.json() as HistoryDetailResponse & { error?: string }
+    const data = await response.json() as HistoryDetailResponse | ErrorResponse
     if (!response.ok) {
-      appendLog(`历史样本详情获取失败：${data.error ?? '未知错误'}`)
+      const error = parseErrorPayload(data as ErrorResponse)
+      appendLog(`历史样本详情获取失败：${error?.message ?? '未知错误'}`)
       return null
     }
 
-    setSelectedHistoryReport(data.report ?? null)
+    const payload = data as HistoryDetailResponse
+    setSelectedHistoryReport(payload.report ?? null)
     appendLog('已打开历史样本详情')
-    return data.report
+    return payload.report
   }, [appendLog])
 
   const applyCustomComparison = useCallback(async (previousTaskId: string) => {
@@ -648,6 +687,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     taskId,
     latestCompletedTaskId,
     status,
+    stage,
+    progressPercent,
     preprocessStatus,
     poseStatus,
     report,

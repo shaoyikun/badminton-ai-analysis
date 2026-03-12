@@ -10,6 +10,8 @@ export function DebugDrawer({ open, onClose }: { open: boolean; onClose: () => v
     taskId,
     latestCompletedTaskId,
     status,
+    stage,
+    progressPercent,
     preprocessStatus,
     poseStatus,
     errorState,
@@ -39,6 +41,8 @@ export function DebugDrawer({ open, onClose }: { open: boolean; onClose: () => v
           <div className="debug-kv"><span>Task ID</span><strong>{taskId || '未创建'}</strong></div>
           <div className="debug-kv"><span>最近完成</span><strong>{latestCompletedTaskId || '—'}</strong></div>
           <div className="debug-kv"><span>主状态</span><StatusPill label={status || 'idle'} tone={statusTone} /></div>
+          <div className="debug-kv"><span>阶段</span><strong>{stage || '—'}</strong></div>
+          <div className="debug-kv"><span>进度</span><strong>{progressPercent}%</strong></div>
           <div className="debug-kv"><span>预处理</span><strong>{preprocessStatus}</strong></div>
           <div className="debug-kv"><span>Pose</span><strong>{poseStatus}</strong></div>
           <div className="debug-kv"><span>对比基线</span><strong>{selectedCompareTaskId || '—'}</strong></div>

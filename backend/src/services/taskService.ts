@@ -1,20 +1,28 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { saveResult, readResultByTaskId } from './store';
-import { ActionType, ReportResult, RetestComparison, RetestCoachReview, TaskHistoryItem, TaskRecord } from '../types/task';
-import { runPreprocess } from './preprocessService';
-import { runPoseAnalysis } from './poseService';
+import type {
+  ActionType,
+  AnalysisTaskRecord,
+  ComparisonResponse,
+  HistoryDetailResponse,
+  HistoryListQuery,
+  HistoryListResponse,
+  PoseAnalysisResult,
+  ReportResult,
+  RetestComparison,
+  RetestCoachReview,
+  TaskHistoryItem,
+  TaskResource,
+} from '../types/task';
+import { createTaskRecord, enterStage, failTask, markTaskStarted, markTaskUploaded, mergeArtifacts, completeTask } from '../domain/analysisTask';
+import { fileExists, prepareTaskArtifactsDir, readJsonFile, storeUploadedVideo, writePoseResult, writePreprocessManifest, writeReportFile } from './artifactStore';
 import { buildMockResult } from './reportScoringService';
-import { createTaskRecord, getTask, listTasks, updateTask } from './taskRepository';
-
-function now() {
-  return new Date().toISOString();
-}
-
-const activeAnalysisTasks = new Map<string, Promise<void>>();
-
-type AnalysisWorker = (taskId: string) => Promise<void>;
+import { getMaxFileSizeBytes, extractFrames, probeVideo, validateUploadedVideo } from './preprocessService';
+import { buildPoseSummary, readPoseResult, runPoseAnalysis } from './poseService';
+import { buildErrorSnapshot } from './errorCatalog';
+import { createTask as createTaskEntry, findLatestCompletedTask, getReportRow, getTask, listCompletedHistory, listProcessingTasks, saveReport, saveTask } from './taskRepository';
+import { toTaskResource } from '../types/task';
 
 function clampDelta(value: number) {
   return Math.round(value);
@@ -27,70 +35,26 @@ function delay(ms: number) {
 }
 
 function getAnalysisDelayMs() {
-  const configured = Number(process.env.MOCK_ANALYSIS_DELAY_MS ?? 2500);
+  const configured = Number(process.env.MOCK_ANALYSIS_DELAY_MS ?? 800);
   if (!Number.isFinite(configured) || configured < 0) {
-    return 2500;
+    return 800;
   }
   return Math.round(configured);
-}
-
-function getUploadsDir() {
-  return path.resolve(process.cwd(), 'uploads');
 }
 
 function getUploadBaseName(fileName: string) {
   const normalized = fileName.replace(/\\/g, '/');
   const baseName = path.posix.basename(normalized).trim();
-  return baseName || 'upload.bin';
-}
-
-function getSafeUploadExtension(fileName: string) {
-  const extension = path.extname(fileName).toLowerCase();
-  return /^[.a-z0-9]+$/.test(extension) ? extension : '';
-}
-
-function removeFileIfExists(target?: string) {
-  if (target && fs.existsSync(target)) {
-    fs.rmSync(target, { force: true });
-  }
-}
-
-function moveFile(sourcePath: string, targetPath: string) {
-  try {
-    fs.renameSync(sourcePath, targetPath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') {
-      throw error;
-    }
-
-    fs.copyFileSync(sourcePath, targetPath);
-    fs.rmSync(sourcePath, { force: true });
-  }
+  return baseName || `upload-${randomUUID().slice(0, 6)}.bin`;
 }
 
 function getActionLabel(actionType: ActionType) {
   return actionType === 'smash' ? '杀球' : '正手高远球';
 }
 
-function buildTaskHistory(actionType: ActionType, currentTaskId?: string): TaskHistoryItem[] {
-  return listTasks()
-    .filter((task) => task.actionType === actionType && task.status === 'completed' && task.resultPath)
-    .map((task) => {
-      const result = readResultByTaskId(task.taskId);
-      return {
-        taskId: task.taskId,
-        actionType: task.actionType,
-        status: task.status,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        totalScore: result?.totalScore,
-        summaryText: result?.summaryText,
-        poseBased: result?.poseBased,
-      } satisfies TaskHistoryItem;
-    })
-    .filter((item) => item.taskId !== currentTaskId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-}
+const activeAnalysisTasks = new Map<string, Promise<void>>();
+
+type AnalysisWorker = (taskId: string) => Promise<void>;
 
 function buildCoachReview(actionType: ActionType, comparison: Omit<RetestComparison, 'coachReview'>): RetestCoachReview {
   const actionLabel = getActionLabel(actionType);
@@ -191,187 +155,233 @@ function buildRetestComparison(actionType: ActionType, previous: ReportResult, c
   };
 }
 
-function enrichResultWithHistory(task: TaskRecord, result: ReportResult): ReportResult {
-  const history = buildTaskHistory(task.actionType, task.taskId);
-  const previousTaskId = task.previousCompletedTaskId ?? history[0]?.taskId;
-  const previousResult = previousTaskId ? readResultByTaskId(previousTaskId) : undefined;
-
-  return {
-    ...result,
-    history,
-    comparison: previousResult ? buildRetestComparison(task.actionType, previousResult, result) : undefined,
-  };
+function readReport(taskId: string) {
+  const row = getReportRow(taskId);
+  return row ? JSON.parse(row.report_json) as ReportResult : undefined;
 }
 
-function findLatestCompletedTaskId(actionType: ActionType, excludeTaskId?: string) {
-  return listTasks()
-    .filter((task) => task.actionType === actionType && task.status === 'completed' && task.resultPath && task.taskId !== excludeTaskId)
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]?.taskId;
+function validateActionType(actionType: string): actionType is ActionType {
+  return actionType === 'clear' || actionType === 'smash';
 }
 
-function getComparableResult(taskId: string) {
-  const task = getTask(taskId);
-  const result = readResultByTaskId(taskId);
-  if (!task || !result) return undefined;
-  return { task, result };
-}
-
-export function createTask(actionType: ActionType): TaskRecord {
-  const task: TaskRecord = {
-    taskId: `task_${randomUUID().slice(0, 8)}`,
-    actionType,
-    status: 'created',
-    preprocess: {
-      status: 'idle',
-    },
-    pose: {
-      status: 'idle',
-    },
-    previousCompletedTaskId: findLatestCompletedTaskId(actionType),
-    createdAt: now(),
-    updatedAt: now(),
-  };
-  return createTaskRecord(task);
-}
-
-export function listTaskHistory(actionType?: ActionType): TaskHistoryItem[] {
-  const tasks = listTasks()
-    .filter((task) => task.status === 'completed' && task.resultPath)
-    .filter((task) => !actionType || task.actionType === actionType)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  return tasks.map((task) => {
-    const result = readResultByTaskId(task.taskId);
-    return {
-      taskId: task.taskId,
-      actionType: task.actionType,
-      status: task.status,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-      totalScore: result?.totalScore,
-      summaryText: result?.summaryText,
-      poseBased: result?.poseBased,
-    } satisfies TaskHistoryItem;
-  });
-}
-
-export function getRetestComparison(taskId: string) {
-  const task = getTask(taskId);
-  if (!task?.resultPath) return undefined;
-  const current = readResultByTaskId(taskId);
-  if (!current) return undefined;
-
-  const previousTaskId = task.previousCompletedTaskId ?? buildTaskHistory(task.actionType, taskId)[0]?.taskId;
-  if (!previousTaskId) {
-    return {
-      current,
-      previous: undefined,
-      comparison: undefined,
-      history: buildTaskHistory(task.actionType, taskId),
-    };
+export function assertActionType(actionType: string): asserts actionType is ActionType {
+  if (!validateActionType(actionType)) {
+    throw Object.assign(new Error('invalid action type'), { code: 'invalid_action_type' as const });
   }
+}
 
-  const previous = readResultByTaskId(previousTaskId);
+export function createAnalysisTask(actionType: ActionType) {
+  const baselineTaskId = findLatestCompletedTask(actionType)?.taskId;
+  const task = createTaskRecord(actionType, baselineTaskId);
+  return createTaskEntry(task);
+}
+
+export const createTask = createAnalysisTask;
+
+export function listTaskHistory(query: HistoryListQuery): HistoryListResponse {
+  const items = listCompletedHistory(query);
+  const nextCursor = items.length > 0 ? items[items.length - 1]?.completedAt : undefined;
+  return { items, nextCursor };
+}
+
+export function getHistoryDetail(taskId: string): HistoryDetailResponse | undefined {
+  const task = getTask(taskId);
+  const report = readReport(taskId);
+  if (!task || !report || task.status !== 'completed') return undefined;
   return {
-    current,
-    previous,
-    comparison: previous ? buildRetestComparison(task.actionType, previous, current) : undefined,
-    history: buildTaskHistory(task.actionType, taskId),
+    task: toTaskResource(task),
+    report,
   };
 }
 
-export function getCustomRetestComparison(currentTaskId: string, previousTaskId: string) {
-  const currentPayload = getComparableResult(currentTaskId);
-  const previousPayload = getComparableResult(previousTaskId);
-  if (!currentPayload || !previousPayload) return undefined;
-  if (currentPayload.task.actionType !== previousPayload.task.actionType) return null;
+export function getRetestComparison(taskId: string, baselineTaskId?: string): ComparisonResponse | undefined | null {
+  const currentTask = getTask(taskId);
+  const currentReport = readReport(taskId);
+  if (!currentTask || !currentReport || currentTask.status !== 'completed') return undefined;
+
+  const baseline = baselineTaskId
+    ? getTask(baselineTaskId)
+    : currentTask.baselineTaskId
+      ? getTask(currentTask.baselineTaskId)
+      : findLatestCompletedTask(currentTask.actionType, taskId);
+
+  if (!baseline || baseline.status !== 'completed') return undefined;
+  if (baseline.actionType !== currentTask.actionType) return null;
+
+  const baselineReport = readReport(baseline.taskId);
+  if (!baselineReport) return undefined;
 
   return {
-    current: currentPayload.result,
-    previous: previousPayload.result,
-    comparison: buildRetestComparison(currentPayload.task.actionType, previousPayload.result, currentPayload.result),
-    history: buildTaskHistory(currentPayload.task.actionType),
+    currentTask: toTaskResource(currentTask),
+    baselineTask: toTaskResource(baseline),
+    comparison: buildRetestComparison(currentTask.actionType, baselineReport, currentReport),
   };
+}
+
+export function getPoseResultForDebug(taskId: string): PoseAnalysisResult | undefined {
+  const task = getTask(taskId);
+  if (!task) return undefined;
+  return readPoseResult(task.artifacts.poseResultPath);
 }
 
 export function saveUpload(taskId: string, fileName: string, stagedUploadPath: string, mimeType?: string) {
-  const current = getTask(taskId);
-  if (!current) {
-    removeFileIfExists(stagedUploadPath);
+  const task = getTask(taskId);
+  if (!task) {
+    fs.rmSync(stagedUploadPath, { force: true });
     return undefined;
   }
 
-  const uploadsDir = getUploadsDir();
-  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-  const baseFileName = getUploadBaseName(fileName);
-  const uploadPath = path.join(uploadsDir, `${taskId}-${randomUUID().slice(0, 8)}${getSafeUploadExtension(baseFileName)}`);
+  const normalizedName = getUploadBaseName(fileName);
+  const stat = fs.statSync(stagedUploadPath);
+  const stored = storeUploadedVideo(taskId, stagedUploadPath, normalizedName);
+  const upload = {
+    fileName: normalizedName,
+    fileSizeBytes: stat.size,
+    mimeType,
+    extension: path.extname(normalizedName).toLowerCase(),
+  };
 
-  moveFile(stagedUploadPath, uploadPath);
-  if (current.uploadPath && current.uploadPath !== uploadPath) {
-    removeFileIfExists(current.uploadPath);
+  const updated = markTaskUploaded(task, upload, stored.absolutePath);
+  return saveTask(updated);
+}
+
+async function executeValidatingStage(task: AnalysisTaskRecord) {
+  const sourcePath = task.artifacts.sourceFilePath;
+  const upload = task.artifacts.upload;
+  if (!sourcePath || !upload || !fileExists(sourcePath)) {
+    throw buildErrorSnapshot('upload_failed', 'upload file not found');
   }
 
-  return updateTask(taskId, {
-    fileName: baseFileName,
-    mimeType,
-    uploadPath,
-    status: 'uploaded',
+  if (task.artifacts.preprocess?.metadata) {
+    return task;
+  }
+
+  const metadata = await probeVideo(sourcePath, {
+    fileName: upload.fileName,
+    mimeType: upload.mimeType,
+  });
+  const validation = validateUploadedVideo(metadata);
+  if (validation) {
+    throw buildErrorSnapshot(validation.errorCode, validation.errorMessage);
+  }
+
+  return mergeArtifacts(task, {
+    upload: metadata,
     preprocess: {
-      status: 'idle',
-      startedAt: undefined,
-      completedAt: undefined,
-      errorCode: undefined,
-      metadata: undefined,
-      artifacts: undefined,
-      errorMessage: undefined,
+      status: 'completed',
+      startedAt: task.startedAt,
+      completedAt: new Date().toISOString(),
+      metadata,
     },
-    pose: {
-      status: 'idle',
-      startedAt: undefined,
-      completedAt: undefined,
-      errorMessage: undefined,
-      resultPath: undefined,
-      summary: undefined,
+  });
+}
+
+async function executePreprocessStage(task: AnalysisTaskRecord) {
+  const sourcePath = task.artifacts.sourceFilePath;
+  const metadata = task.artifacts.upload;
+  if (!sourcePath || !metadata || !fileExists(sourcePath)) {
+    throw buildErrorSnapshot('preprocess_failed', 'source file missing before preprocess');
+  }
+
+  if (task.artifacts.preprocess?.artifacts && fileExists(path.resolve(process.cwd(), task.artifacts.preprocess.artifacts.manifestPath))) {
+    return task;
+  }
+
+  const artifacts = await extractFrames(task.taskId, sourcePath, metadata);
+  const manifest = writePreprocessManifest(task.taskId, artifacts);
+  return mergeArtifacts(task, {
+    preprocessManifestPath: manifest.absolutePath,
+    preprocess: {
+      status: 'completed',
+      startedAt: task.startedAt,
+      completedAt: new Date().toISOString(),
+      metadata,
+      artifacts,
     },
+  });
+}
+
+async function executePoseStage(task: AnalysisTaskRecord) {
+  const preprocess = task.artifacts.preprocess?.artifacts;
+  if (!preprocess?.artifactsDir) {
+    throw buildErrorSnapshot('pose_failed', 'preprocess artifacts not found');
+  }
+
+  if (task.artifacts.poseResultPath && fileExists(task.artifacts.poseResultPath)) {
+    return task;
+  }
+
+  const result = await runPoseAnalysis(preprocess.artifactsDir);
+  const stored = writePoseResult(task.taskId, result);
+  return mergeArtifacts(task, {
+    poseResultPath: stored.absolutePath,
+    poseSummary: buildPoseSummary(result),
+  });
+}
+
+async function executeReportStage(task: AnalysisTaskRecord) {
+  const reportRow = getReportRow(task.taskId);
+  if (reportRow) {
+    return mergeArtifacts(task, {
+      reportPath: task.artifacts.reportPath,
+    });
+  }
+
+  await delay(getAnalysisDelayMs());
+  const report = buildMockResult(task);
+  const reportFile = writeReportFile(task.taskId, report);
+  saveReport(task.taskId, JSON.stringify(report), report.totalScore, report.summaryText, report.poseBased);
+  return mergeArtifacts(task, {
+    reportPath: reportFile.absolutePath,
   });
 }
 
 async function runAnalysisPipeline(taskId: string) {
   let task = getTask(taskId);
-  if (!task?.uploadPath) return;
+  if (!task) return;
 
-  if (task.preprocess?.status !== 'completed') {
-    const preprocessed = await runPreprocess(taskId);
-    if (!preprocessed || preprocessed.preprocess?.status !== 'completed') {
-      updateTask(taskId, {
-        status: 'failed',
-        errorCode: preprocessed?.preprocess?.errorCode ?? 'preprocess_failed',
-      });
-      return;
-    }
-    task = preprocessed;
+  if (task.status === 'uploaded' && task.stage === 'uploaded') {
+    task = saveTask(markTaskStarted(task));
   }
 
-  if (task.pose?.status !== 'completed') {
-    const posed = await runPoseAnalysis(taskId);
-    if (!posed || posed.pose?.status !== 'completed') {
-      updateTask(taskId, {
-        status: 'failed',
-        errorCode: posed?.pose?.errorCode ?? 'pose_failed',
-      });
-      return;
+  if (!task || task.status !== 'processing') return;
+
+  try {
+    if (task.stage === 'validating') {
+      task = saveTask(await executeValidatingStage(task));
+      task = saveTask(enterStage(task, 'extracting_frames'));
     }
-    task = posed;
+
+    if (task.stage === 'extracting_frames') {
+      task = saveTask(await executePreprocessStage(task));
+      task = saveTask(enterStage(task, 'estimating_pose'));
+    }
+
+    if (task.stage === 'estimating_pose') {
+      task = saveTask(await executePoseStage(task));
+      task = saveTask(enterStage(task, 'generating_report'));
+    }
+
+    if (task.stage === 'generating_report') {
+      task = saveTask(await executeReportStage(task));
+      if (!task.artifacts.reportPath) {
+        throw buildErrorSnapshot('report_generation_failed', 'report file missing after generation');
+      }
+      saveTask(completeTask(task, task.artifacts.reportPath));
+    }
+  } catch (error) {
+    const snapshot = isErrorSnapshot(error)
+      ? error
+      : buildErrorSnapshot('internal_error', error instanceof Error ? error.message : 'analysis failed unexpectedly');
+    const latest = getTask(taskId);
+    if (latest) {
+      saveTask(failTask(latest, snapshot));
+    }
   }
+}
 
-  await delay(getAnalysisDelayMs());
-
-  const latest = getTask(taskId);
-  if (!latest || latest.status === 'failed') return;
-  const rawResult = buildMockResult(latest);
-  const enrichedResult = enrichResultWithHistory(latest, rawResult);
-  const resultPath = saveResult(taskId, enrichedResult);
-  updateTask(taskId, { status: 'completed', resultPath });
+function isErrorSnapshot(value: unknown): value is ReturnType<typeof buildErrorSnapshot> {
+  return Boolean(value) && typeof value === 'object' && 'code' in (value as object) && 'category' in (value as object);
 }
 
 let analysisWorker: AnalysisWorker = runAnalysisPipeline;
@@ -379,67 +389,93 @@ let analysisWorker: AnalysisWorker = runAnalysisPipeline;
 function queueAnalysisTask(taskId: string) {
   if (activeAnalysisTasks.has(taskId)) return;
 
-  const taskPromise = analysisWorker(taskId)
-    .catch((error) => {
-      const current = getTask(taskId);
-      updateTask(taskId, {
-        status: 'failed',
-        errorCode: 'preprocess_failed',
-        preprocess: {
-          ...(current?.preprocess ?? { status: 'failed' }),
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'analysis failed unexpectedly',
-        },
-      });
-    })
-    .finally(() => {
-      activeAnalysisTasks.delete(taskId);
-    });
+  const taskPromise = analysisWorker(taskId).finally(() => {
+    activeAnalysisTasks.delete(taskId);
+  });
 
   activeAnalysisTasks.set(taskId, taskPromise);
 }
 
-export async function startMockAnalysis(taskId: string) {
-  const current = getTask(taskId);
-  if (!current) return undefined;
-  if (!current.uploadPath) return undefined;
+export async function startAnalysis(taskId: string) {
+  const task = getTask(taskId);
+  if (!task) return undefined;
+  if (task.status === 'processing') return task;
 
-  if (activeAnalysisTasks.has(taskId) && current.status === 'processing') {
-    return current;
-  }
-
-  const processingTask = updateTask(taskId, {
-    status: 'processing',
-    errorCode: undefined,
-    preprocess: current.preprocess?.status === 'completed'
-      ? current.preprocess
-      : {
-          ...(current.preprocess ?? { status: 'idle' }),
-          status: 'queued',
-          startedAt: undefined,
-          completedAt: undefined,
-          errorCode: undefined,
-          errorMessage: undefined,
-          metadata: undefined,
-          artifacts: undefined,
-        },
-    pose: current.pose?.status === 'completed'
-      ? current.pose
-      : {
-          ...(current.pose ?? { status: 'idle' }),
-          status: 'idle',
-          startedAt: undefined,
-          completedAt: undefined,
-          errorCode: undefined,
-          errorMessage: undefined,
-          resultPath: undefined,
-          summary: undefined,
-        },
-  });
-  if (!processingTask) return undefined;
-
+  const started = saveTask(markTaskStarted(task));
   queueAnalysisTask(taskId);
-  return processingTask;
+  return started;
+}
+
+export const startMockAnalysis = startAnalysis;
+
+export function recoverStaleTasks() {
+  const staleTasks = listProcessingTasks();
+  for (const task of staleTasks) {
+    if (!task.artifacts.sourceFilePath || !fileExists(task.artifacts.sourceFilePath)) {
+      saveTask(failTask(task, buildErrorSnapshot('task_recovery_failed', 'source file missing during recovery')));
+      continue;
+    }
+    queueAnalysisTask(task.taskId);
+  }
+}
+
+export async function migrateLegacyStoreIfNeeded() {
+  const legacyTasksPath = path.resolve(process.cwd(), 'data', 'tasks.json');
+  if (!fs.existsSync(legacyTasksPath)) return;
+  if (listCompletedHistory({ limit: 1 }).length > 0 || listProcessingTasks().length > 0) return;
+
+  const rawTasks = JSON.parse(fs.readFileSync(legacyTasksPath, 'utf8')) as Array<{
+    taskId: string;
+    actionType: ActionType;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    fileName?: string;
+    mimeType?: string;
+    uploadPath?: string;
+    resultPath?: string;
+    previousCompletedTaskId?: string;
+  }>;
+
+  for (const legacy of rawTasks) {
+    if (getTask(legacy.taskId)) continue;
+    const base: AnalysisTaskRecord = {
+      taskId: legacy.taskId,
+      actionType: legacy.actionType,
+      status: legacy.status === 'completed' ? 'completed' : legacy.status === 'failed' ? 'failed' : legacy.status === 'uploaded' ? 'uploaded' : legacy.status === 'processing' ? 'processing' : 'created',
+      stage: legacy.status === 'completed' ? 'completed' : legacy.status === 'failed' ? 'failed' : legacy.status === 'uploaded' ? 'uploaded' : legacy.status === 'processing' ? 'generating_report' : 'upload_pending',
+      progressPercent: legacy.status === 'completed' || legacy.status === 'failed' ? 100 : legacy.status === 'uploaded' ? 10 : legacy.status === 'processing' ? 90 : 0,
+      baselineTaskId: legacy.previousCompletedTaskId,
+      createdAt: legacy.createdAt,
+      updatedAt: legacy.updatedAt,
+      completedAt: legacy.status === 'completed' || legacy.status === 'failed' ? legacy.updatedAt : undefined,
+      artifacts: {},
+    };
+
+    let task = createTaskEntry(base);
+    if (legacy.uploadPath && fs.existsSync(legacy.uploadPath)) {
+      prepareTaskArtifactsDir(task.taskId);
+      const stored = storeUploadedVideo(task.taskId, legacy.uploadPath, legacy.fileName ?? path.basename(legacy.uploadPath));
+      task = saveTask(mergeArtifacts(task, {
+        sourceFilePath: stored.absolutePath,
+        upload: {
+          fileName: legacy.fileName ?? path.basename(legacy.uploadPath),
+          fileSizeBytes: fs.statSync(stored.absolutePath).size,
+          mimeType: legacy.mimeType,
+          extension: path.extname(legacy.fileName ?? stored.absolutePath).toLowerCase(),
+        },
+      }));
+    }
+
+    if (legacy.resultPath && fs.existsSync(legacy.resultPath)) {
+      const report = readJsonFile<ReportResult>(legacy.resultPath);
+      const reportFile = writeReportFile(task.taskId, report);
+      saveReport(task.taskId, JSON.stringify(report), report.totalScore, report.summaryText, report.poseBased);
+      task = saveTask(mergeArtifacts(task, { reportPath: reportFile.absolutePath }));
+    }
+
+    saveTask(task);
+  }
 }
 
 export function setAnalysisWorkerForTests(worker?: AnalysisWorker) {
