@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { BottomCTA } from '../../components/ui/BottomCTA'
 import { ReportView } from '../../components/result-views/ReportView'
-import { getValidBaselineItem } from '../../components/result-views/insights'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 export function ReportPage() {
@@ -11,16 +10,10 @@ export function ReportPage() {
   const {
     report,
     comparison,
-    history,
-    selectedCompareTaskId,
-    analyzeHistoryTrend,
     latestCompletedTaskId,
     isHydratingReport,
     ensureLatestReportLoaded,
   } = useAnalysisTask()
-
-  const baselineItem = getValidBaselineItem(history, selectedCompareTaskId)
-  const historyTrend = analyzeHistoryTrend()
 
   useEffect(() => {
     if (report) return
@@ -59,23 +52,20 @@ export function ReportPage() {
   }
 
   return (
-    <div className="page-stack">
-      <ReportView
-        report={report}
-        comparison={comparison}
-        history={history}
-        historyTrend={historyTrend}
-        baselineItem={baselineItem}
-      />
+    <div className="page-stack report-page-stack">
+      <ReportView report={report} comparison={comparison} />
 
-      <section className="surface-card">
+      <section className="surface-card report-cta-shell">
         <div className="section-head">
-          <h2>继续动作</h2>
+          <div>
+            <h2>准备好了就回来测一次</h2>
+            <p className="muted-copy">练完当前重点，再来复测或回看历史，最容易判断你的训练方向有没有起作用。</p>
+          </div>
         </div>
         <BottomCTA
           sticky={false}
-          primary={{ label: '再次上传', to: '/upload' }}
-          secondary={{ label: '去历史里换对比基线', to: '/history', tone: 'secondary' }}
+          primary={{ label: '再次测试', to: '/upload' }}
+          secondary={{ label: '查看历史', to: '/history', tone: 'secondary' }}
         />
       </section>
     </div>

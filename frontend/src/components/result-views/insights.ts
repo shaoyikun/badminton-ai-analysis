@@ -27,6 +27,46 @@ export function getComparisonRiskLabel(comparison: RetestComparison) {
   return '当前没有明显回落项'
 }
 
+export function getReportLevel(score: number) {
+  if (score >= 80) {
+    return {
+      label: '动作框架稳定',
+      tone: 'positive' as const,
+      summary: '这次动作已经比较成型，接下来更重要的是继续把稳定性守住。',
+    }
+  }
+
+  if (score >= 65) {
+    return {
+      label: '有基础，正在进步',
+      tone: 'steady' as const,
+      summary: '整体已经有基础框架，现在最值得做的是把核心短板收得更稳一点。',
+    }
+  }
+
+  return {
+    label: '先稳住基础动作',
+    tone: 'caution' as const,
+    summary: '先别同时改太多，先把最影响结果的那一环动作收住，进步会更明显。',
+  }
+}
+
+export function getBestDimension(report: ReportResult) {
+  return [...report.dimensionScores].sort((left, right) => right.score - left.score)[0] ?? null
+}
+
+export function getDimensionStatus(score: number) {
+  if (score >= 80) {
+    return { label: '稳定', tone: 'positive' as const }
+  }
+
+  if (score >= 65) {
+    return { label: '还可以', tone: 'steady' as const }
+  }
+
+  return { label: '优先改', tone: 'caution' as const }
+}
+
 export function getTrainingFocus(report: ReportResult) {
   const primaryIssue = report.issues[0]
   const leadSuggestion = report.suggestions[0]

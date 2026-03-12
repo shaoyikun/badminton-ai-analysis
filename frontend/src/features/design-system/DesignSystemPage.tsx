@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { BottomCTA } from '../../components/ui/BottomCTA'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Notice } from '../../components/ui/Notice'
@@ -55,6 +56,7 @@ const TYPE_STYLES = [
 ]
 
 const SPACING_SCALE = ['4', '8', '12', '16', '20', '24', '32']
+const DIMENSION_SCORE_SAMPLE_STYLE = { '--score-width': '82%' } as CSSProperties
 const STEP_ITEMS = [
   { title: '视频已上传', description: '文件已经入队，系统会先做基础校验。', state: 'done' as const },
   { title: '正在校验与抽帧', description: '读取视频信息并准备关键帧。', state: 'done' as const },
@@ -219,60 +221,82 @@ function ComponentsBoard() {
 
       <section className="design-section">
         <div className="token-grid">
-          <div className="surface-card report-score-summary-card">
-            <span className="eyebrow-copy">总评分卡</span>
+          <div className="hero-panel report-conclusion-card">
+            <div className="report-hero-top">
+              <span className="badge badge-inverse">正手高远球</span>
+              <span className="report-status-pill positive">正在进步</span>
+            </div>
+            <span className="eyebrow-copy hero-eyebrow">Hero Conclusion</span>
+            <h1>这次动作已经有基础，先把击球点和身体打开再收得更稳一点。</h1>
+            <p className="hero-support-copy">首屏先让用户知道这次好不好，再告诉他接下来最值得先改什么。</p>
+            <div className="hero-summary-grid">
+              <div className="hero-score-card report-score-summary-card">
+                <span>总评分</span>
+                <ScoreBadge label="总分" value="76" tone="good" size="l" />
+                <p>总分只是辅助位，主角仍然是一句话结论和当前最该先练的动作点。</p>
+              </div>
+              <div className="hero-overview-stack">
+                <div className="hero-overview-item">
+                  <span>动作等级</span>
+                  <strong>有基础，正在进步</strong>
+                  <p>当前已经有框架，但还没有完全稳定下来。</p>
+                </div>
+                <div className="hero-overview-item">
+                  <span>当前最好的一项</span>
+                  <strong>准备姿态</strong>
+                  <p>这块已经有基础，可以继续保持。</p>
+                </div>
+                <div className="hero-overview-item">
+                  <span>当前复测状态</span>
+                  <strong>这次整体在变好</strong>
+                  <p>用户一眼就能看到训练方向是不是起作用。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="surface-card report-advice-card training-focus-card">
+            <div className="training-focus-header">
+              <div>
+                <span className="eyebrow-copy">Core Advice</span>
+                <h2>这次先练击球点再往前、往高一点</h2>
+              </div>
+              <span className="focus-lock-pill">先改这一项</span>
+            </div>
+            <div className="focus-lead-panel">
+              <strong>击球点还是偏晚，所以后场深度和动作连贯性都还没完全打开。</strong>
+              <p>这里先收住，后面的挥拍路径和发力节奏才更容易一起稳定。</p>
+            </div>
+            <div className="training-outline-grid training-focus-grid">
+              <div className="focus-support-card">
+                <span>下次练习先做到</span>
+                <strong>把击球点提到更靠前的位置</strong>
+                <p>先别追求太多变化，只盯这一件事。</p>
+              </div>
+              <div className="focus-support-card">
+                <span>下次复测怎么看</span>
+                <strong>看击球点有没有更早</strong>
+                <p>用户能快速知道“怎么才算变好”。</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="surface-card issue-breakdown-section">
             <div className="section-head">
               <div>
-                <h2>这次动作已经有基础，但核心短板还没完全收住</h2>
-                <p className="muted-copy">总分只是辅助位，先看结论和最该先练的动作点。</p>
-              </div>
-              <ScoreBadge label="总分" value="76" tone="good" size="l" />
-            </div>
-          </div>
-          <div className="surface-card report-issue-card primary-issue-card">
-            <span className="eyebrow-copy">问题项卡片</span>
-            <h2>侧身展开不足</h2>
-            <p className="body-copy">准备到出手前身体打开得还不够早，会直接压缩击球准备空间。</p>
-            <div className="key-point-panel">
-              <span>影响</span>
-              <p>出球深度和动作稳定性都会受影响，下次复测也更难出现稳定提升。</p>
-            </div>
-          </div>
-          <div className="surface-card report-advice-card training-focus-card">
-            <span className="eyebrow-copy">建议项卡片</span>
-            <h2>下次练习先做到更早侧身打开</h2>
-            <div className="training-outline-grid">
-              <div className="key-point-panel">
-                <span>为什么做</span>
-                <p>先把准备空间打开，后面挥拍和击球点才更容易稳定。</p>
-              </div>
-              <div className="key-point-panel">
-                <span>怎么观察</span>
-                <p>下次保持同机位上传，优先看准备到击球前的身体朝向变化。</p>
+                <h2>Issue Card</h2>
+                <p className="muted-copy">把问题拆成用户能读懂、能执行的短卡片。</p>
               </div>
             </div>
-          </div>
-          <div className="surface-card report-history-compare-card comparison-summary-card">
-            <span className="eyebrow-copy">历史对比卡</span>
-            <h2>和上一条同动作样本相比，有进步但还没完全稳住</h2>
-            <div className="comparison-vs-strip">
-              <div>
-                <span>当前样本</span>
-                <strong>2026/03/12</strong>
-              </div>
-              <div>
-                <span>当前基线</span>
-                <strong>2026/03/08</strong>
-              </div>
-            </div>
-            <div className="compare-grid">
-              <div className="compare-tile">
-                <span>最明显改善</span>
-                <strong>准备阶段更早展开</strong>
-              </div>
-              <div className="compare-tile">
-                <span>最该防回落</span>
-                <strong>击球前的上举稳定性</strong>
+            <div className="issue-breakdown-grid">
+              <div className="issue-digest-card">
+                <span className="issue-rank-badge">01</span>
+                <strong>击球点偏晚</strong>
+                <p>接触球时机还靠后，所以出球深度和压制感都受影响。</p>
+                <div className="issue-impact-note">
+                  <span>为什么要在意</span>
+                  <p>如果这里没变稳，很多后续动作会一直显得吃力。</p>
+                </div>
               </div>
             </div>
           </div>
@@ -281,6 +305,26 @@ function ComponentsBoard() {
 
       <section className="design-section">
         <div className="token-grid two-up">
+          <div className="surface-card dimension-score-section">
+            <strong>Dimension Row</strong>
+              <div className="dimension-score-list">
+              <div className="dimension-score-row positive" style={DIMENSION_SCORE_SAMPLE_STYLE}>
+                <div className="dimension-score-main">
+                  <div>
+                    <strong>准备姿态</strong>
+                  </div>
+                  <div className="dimension-score-meta">
+                    <span className="dimension-state-pill positive">稳定</span>
+                    <strong>82</strong>
+                  </div>
+                </div>
+                <div className="dimension-score-track">
+                  <div className="dimension-score-fill" />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <EmptyState
             badge="Empty State"
             title="你还没有可回看的分析记录"
@@ -288,12 +332,35 @@ function ComponentsBoard() {
             primary={{ label: '开始第一次分析', to: '/guide' }}
             secondary={{ label: '返回首页', to: '/' }}
           />
-          <div className="surface-card token-card">
-            <strong>Bottom CTA</strong>
+        </div>
+      </section>
+
+      <section className="design-section">
+        <div className="token-grid two-up">
+          <div className="surface-card training-kickoff-card">
+            <span className="eyebrow-copy">Training Kickoff</span>
+            <h2>先围绕一个动作点练一个短周期</h2>
+            <p className="body-copy">在 MVP 里不做训练计划页，而是用轻量训练卡把用户自然带向下一步。</p>
+            <div className="training-kickoff-grid">
+              <div className="training-kickoff-item">
+                <span>训练目标</span>
+                <strong>先把击球点再往前一点</strong>
+                <p>直接承接报告里的第一优先级建议。</p>
+              </div>
+              <div className="training-kickoff-item">
+                <span>训练后回来确认</span>
+                <strong>看这件事有没有变稳</strong>
+                <p>保持“训练 - 复测 - 进步跟踪”的闭环。</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="surface-card report-cta-shell">
+            <strong>CTA Stack</strong>
             <BottomCTA
               sticky={false}
-              primary={{ label: '确认并开始分析' }}
-              secondary={{ label: '查看拍摄规范', tone: 'secondary' }}
+              primary={{ label: '再次测试' }}
+              secondary={{ label: '查看历史', tone: 'secondary' }}
             />
           </div>
         </div>

@@ -201,6 +201,53 @@ function parseErrorPayload(data: ErrorResponse | { error?: ErrorResponse['error'
   return typeof data.error === 'string' ? undefined : data.error
 }
 
+function summarizeResponseText(rawText: string) {
+  return rawText
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160)
+}
+
+function buildHttpErrorResponse(response: Response, rawText?: string): ErrorResponse {
+  const summary = rawText ? summarizeResponseText(rawText) : ''
+  return {
+    error: {
+      code: 'internal_error',
+      category: 'internal_recovery',
+      retryable: response.status >= 500,
+      message: summary
+        ? `HTTP ${response.status} ${response.statusText}: ${summary}`
+        : `HTTP ${response.status} ${response.statusText}`,
+      occurredAt: new Date().toISOString(),
+    },
+  }
+}
+
+async function readApiPayload<T>(response: Response): Promise<T | ErrorResponse> {
+  const rawText = await response.text()
+
+  if (!rawText) {
+    if (response.ok) {
+      throw new Error(`empty response body (${response.status})`)
+    }
+    return buildHttpErrorResponse(response)
+  }
+
+  try {
+    return JSON.parse(rawText) as T | ErrorResponse
+  } catch {
+    if (response.ok) {
+      throw new Error(`unexpected response format (${response.status})`)
+    }
+    return buildHttpErrorResponse(response, rawText)
+  }
+}
+
+function getFallbackErrorCode(error: ReturnType<typeof parseErrorPayload>, fallbackCode: FlowErrorCode) {
+  return !error?.code || error.code === 'internal_error' ? fallbackCode : error.code
+}
+
 function deriveStageStatuses(stage: TaskStage | '', status: TaskStatus | '', errorCode?: string): { preprocessStatus: PreprocessStatus; poseStatus: PoseStatus } {
   if (status === 'created' || stage === 'upload_pending' || !stage) {
     return { preprocessStatus: 'idle', poseStatus: 'idle' }
@@ -326,9 +373,10 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const fetchHistory = useCallback(async (nextActionType?: ActionType) => {
     const nextType = nextActionType ?? actionType
     const response = await fetch(`${API_BASE}/api/history?actionType=${nextType}`)
-    const data = await response.json() as HistoryListResponse | ErrorResponse
+    const data = await readApiPayload<HistoryListResponse>(response)
     if (!response.ok) {
-      appendLog('获取历史记录失败')
+      const error = parseErrorPayload(data as ErrorResponse)
+      appendLog(`获取历史记录失败：${error?.message ?? '未知错误'}`)
       return []
     }
     const payload = data as HistoryListResponse
@@ -341,11 +389,11 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     if (!currentTaskId) return null
 
     const response = await fetch(`${API_BASE}/api/debug/tasks/${currentTaskId}/pose`)
-    const data = await response.json() as PoseAnalysisResult | ErrorResponse
+    const data = await readApiPayload<PoseAnalysisResult>(response)
     if (!response.ok) {
       if (!silent && poseStatus === 'failed') {
         const error = parseErrorPayload(data as ErrorResponse)
-        setFriendlyError(error?.code ?? 'pose_failed', error?.message)
+        setFriendlyError(getFallbackErrorCode(error, 'pose_failed'), error?.message)
       }
       return null
     }
@@ -364,7 +412,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       : `${API_BASE}/api/tasks/${activeTaskId}/comparison`
 
     const response = await fetch(url)
-    const data = await response.json() as ComparisonResponse | ErrorResponse
+    const data = await readApiPayload<ComparisonResponse>(response)
     if (!response.ok) {
       setComparison(null)
       const error = parseErrorPayload(data as ErrorResponse)
@@ -386,10 +434,10 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     }
 
     const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/result`)
-    const data = await response.json() as ReportResult | ErrorResponse
+    const data = await readApiPayload<ReportResult>(response)
     if (!response.ok) {
       const error = parseErrorPayload(data as ErrorResponse)
-      setFriendlyError(error?.code ?? 'result_not_ready', error?.message)
+      setFriendlyError(getFallbackErrorCode(error, 'result_not_ready'), error?.message)
       return null
     }
 
@@ -416,7 +464,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     }
 
     const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}`)
-    const data = await response.json() as TaskStatusResponse | ErrorResponse
+    const data = await readApiPayload<TaskStatusResponse>(response)
     if (!response.ok) {
       const error = parseErrorPayload(data)
       if (!options?.silent) appendLog(`查询状态失败：${error?.message ?? '未知错误'}`)
@@ -462,11 +510,11 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actionType } satisfies CreateTaskRequest),
       })
-      const data = await response.json() as TaskStatusResponse | ErrorResponse
+      const data = await readApiPayload<TaskStatusResponse>(response)
       if (!response.ok) {
         const error = parseErrorPayload(data)
         lastFailureReasonRef.current = 'server'
-        setFriendlyError(error?.code, error?.message)
+        setFriendlyError(getFallbackErrorCode(error, 'internal_error'), error?.message)
         appendLog(`创建任务失败：${error?.message ?? '未知错误'}`)
         return null
       }
@@ -498,10 +546,10 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         body: form,
       })
-      const data = await response.json() as UploadTaskResponse | ErrorResponse
+      const data = await readApiPayload<UploadTaskResponse>(response)
       if (!response.ok) {
         const error = parseErrorPayload(data)
-        setFriendlyError(error?.code, error?.message)
+        setFriendlyError(getFallbackErrorCode(error, 'upload_failed'), error?.message)
         return false
       }
 
@@ -526,13 +574,13 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       setIsBusy(true)
       setErrorState(null)
       const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/start`, { method: 'POST' })
-      const data = await response.json() as TaskStatusResponse | ErrorResponse
+      const data = await readApiPayload<TaskStatusResponse>(response)
 
       if (!response.ok) {
         const error = parseErrorPayload(data)
         setStatus('failed')
         setStage('failed')
-        setFriendlyError(error?.code ?? 'internal_error', error?.message)
+        setFriendlyError(getFallbackErrorCode(error, 'internal_error'), error?.message)
         return false
       }
 
@@ -586,7 +634,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
 
   const fetchHistoryReport = useCallback(async (targetTaskId: string) => {
     const response = await fetch(`${API_BASE}/api/history/${targetTaskId}`)
-    const data = await response.json() as HistoryDetailResponse | ErrorResponse
+    const data = await readApiPayload<HistoryDetailResponse>(response)
     if (!response.ok) {
       const error = parseErrorPayload(data as ErrorResponse)
       appendLog(`历史样本详情获取失败：${error?.message ?? '未知错误'}`)
