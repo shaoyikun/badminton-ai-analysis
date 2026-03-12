@@ -1,5 +1,5 @@
 import './App.css'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ErrorStateCard } from './components/ErrorStateCard'
 import { ReportView } from './components/result-views/ReportView'
 import { HistoryView } from './components/result-views/HistoryView'
@@ -28,6 +28,7 @@ function App() {
     history,
     comparison,
     selectedCompareTaskId,
+    selectedHistoryReport,
     file,
     setFile,
     log,
@@ -43,8 +44,14 @@ function App() {
     analyze,
     refreshStatus,
     fetchResult,
+    fetchHistoryReport,
     applyCustomComparison,
   } = useAnalysisTask()
+
+  const handleUseHistoryAsComparisonBaseline = useCallback(async (historyTaskId: string) => {
+    await applyCustomComparison(historyTaskId)
+    setResultView('retest')
+  }, [applyCustomComparison])
 
   return (
     <div className="app">
@@ -154,7 +161,10 @@ function App() {
                     report={report}
                     history={history}
                     selectedCompareTaskId={selectedCompareTaskId}
+                    selectedHistoryReport={selectedHistoryReport}
                     onSelectCompare={applyCustomComparison}
+                    onOpenHistoryDetail={fetchHistoryReport}
+                    onUseAsComparisonBaseline={handleUseHistoryAsComparisonBaseline}
                     disabled={isBusy || isPolling || !taskId}
                   />
                 ) : null}

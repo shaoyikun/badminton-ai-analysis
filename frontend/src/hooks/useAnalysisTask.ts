@@ -209,6 +209,7 @@ export function useAnalysisTask() {
   const [history, setHistory] = useState<TaskHistoryItem[]>([])
   const [comparison, setComparison] = useState<RetestComparison | null>(null)
   const [selectedCompareTaskId, setSelectedCompareTaskId] = useState('')
+  const [selectedHistoryReport, setSelectedHistoryReport] = useState<ReportResult | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [log, setLog] = useState<string[]>([])
   const [isBusy, setIsBusy] = useState(false)
@@ -275,6 +276,18 @@ export function useAnalysisTask() {
     appendLog('已切换到自定义历史样本对比')
   }
 
+  async function fetchHistoryReport(targetTaskId: string) {
+    const res = await fetch(`${API_BASE}/api/history/${targetTaskId}`)
+    const data = await res.json()
+    if (!res.ok) {
+      appendLog(`历史样本详情获取失败：${data.error ?? '未知错误'}`)
+      return null
+    }
+    setSelectedHistoryReport(data.report ?? null)
+    appendLog('已打开历史样本详情')
+    return data.report as ReportResult | null
+  }
+
   async function createTask() {
     try {
       setIsBusy(true)
@@ -298,6 +311,7 @@ export function useAnalysisTask() {
       setPoseResult(null)
       setComparison(null)
       setSelectedCompareTaskId('')
+      setSelectedHistoryReport(null)
       await fetchHistory(actionType)
       appendLog(`任务已创建：${data.taskId}（${selectedActionLabel}）`)
     } catch (error) {
@@ -331,6 +345,7 @@ export function useAnalysisTask() {
       setPoseResult(null)
       setComparison(null)
       setSelectedCompareTaskId('')
+      setSelectedHistoryReport(null)
       appendLog(`上传完成：${data.fileName}`)
     } catch (error) {
       appendLog(`上传失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -439,6 +454,7 @@ export function useAnalysisTask() {
       setPoseResult(null)
       setComparison(null)
       setSelectedCompareTaskId('')
+      setSelectedHistoryReport(null)
       setErrorState(null)
       const res = await fetch(`${API_BASE}/api/tasks/${taskId}/analyze`, { method: 'POST' })
       const data = await res.json()
@@ -480,6 +496,7 @@ export function useAnalysisTask() {
     comparison,
     selectedCompareTaskId,
     setSelectedCompareTaskId,
+    selectedHistoryReport,
     file,
     setFile,
     log,
@@ -497,6 +514,7 @@ export function useAnalysisTask() {
     fetchResult,
     fetchHistory,
     fetchComparison,
+    fetchHistoryReport,
     applyCustomComparison,
   }
 }

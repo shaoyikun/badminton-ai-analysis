@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static';
 import { createTask, getCustomRetestComparison, getRetestComparison, getTask, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
 import { getPreprocessSummary, runPreprocess } from './services/preprocessService';
 import { getPoseResult, getPoseSummary, runPoseAnalysis } from './services/poseService';
-import { readResult } from './services/store';
+import { readResult, readResultByTaskId } from './services/store';
 
 async function buildServer() {
   const app = Fastify({ logger: true });
@@ -195,6 +195,22 @@ async function buildServer() {
       return reply.status(409).send({ error: 'result not ready' });
     }
     return readResult(task.resultPath);
+  });
+
+  app.get('/api/history/:taskId', async (request, reply) => {
+    const params = request.params as { taskId: string };
+    const task = getTask(params.taskId);
+    const result = readResultByTaskId(params.taskId);
+    if (!task || !result) {
+      return reply.status(404).send({ error: 'history item not found' });
+    }
+    return {
+      taskId: task.taskId,
+      actionType: task.actionType,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      report: result,
+    };
   });
 
   app.get('/api/tasks/:taskId/comparison', async (request, reply) => {

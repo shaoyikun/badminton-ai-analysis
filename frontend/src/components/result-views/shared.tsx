@@ -61,7 +61,7 @@ export function PrimaryIssueCard({ report }: { report: ReportResult }) {
   )
 }
 
-export function HistoryCard({ history, selectedCompareTaskId, onSelectCompare, disabled }: { history: TaskHistoryItem[]; selectedCompareTaskId: string; onSelectCompare: (taskId: string) => void; disabled?: boolean }) {
+export function HistoryCard({ history, selectedCompareTaskId, onSelectCompare, onOpenHistoryDetail, disabled }: { history: TaskHistoryItem[]; selectedCompareTaskId: string; onSelectCompare: (taskId: string) => void; onOpenHistoryDetail?: (taskId: string) => void; disabled?: boolean }) {
   return (
     <div className="result-card history-entry-card">
       <h3>历史记录与复测入口</h3>
@@ -91,6 +91,7 @@ export function HistoryCard({ history, selectedCompareTaskId, onSelectCompare, d
                 <span>{formatTime(item.createdAt)}</span>
                 <strong>{item.totalScore ?? '—'} 分</strong>
                 <p>{item.summaryText ?? `${item.actionType} 已完成分析`}</p>
+                {onOpenHistoryDetail ? <button className="ghost-button" onClick={() => onOpenHistoryDetail(item.taskId)} disabled={disabled}>查看这次详情</button> : null}
               </li>
             ))}
           </ul>
