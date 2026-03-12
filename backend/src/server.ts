@@ -7,10 +7,12 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { createTask, getCustomRetestComparison, getRetestComparison, getTask, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
+import { CreateTaskRequest, HistoryListQuery } from './types/task';
+import { createTask, getCustomRetestComparison, getRetestComparison, listTaskHistory, saveUpload, startMockAnalysis } from './services/taskService';
 import { getMaxFileSizeBytes, getPreprocessSummary, runPreprocess } from './services/preprocessService';
 import { getPoseResult, getPoseSummary, runPoseAnalysis } from './services/poseService';
 import { readResult, readResultByTaskId } from './services/store';
+import { getTask } from './services/taskRepository';
 
 export async function buildServer() {
   const app = Fastify({ logger: true });
@@ -34,7 +36,7 @@ export async function buildServer() {
   app.get('/health', async () => ({ ok: true }));
 
   app.post('/api/tasks', async (request, reply) => {
-    const body = request.body as { actionType?: string };
+    const body = request.body as Partial<CreateTaskRequest>;
     const actionType = body?.actionType;
     if (!actionType) {
       return reply.status(400).send({ error: 'actionType is required' });
@@ -44,7 +46,7 @@ export async function buildServer() {
   });
 
   app.get('/api/history', async (request) => {
-    const query = request.query as { actionType?: string };
+    const query = request.query as HistoryListQuery;
     return {
       items: listTaskHistory(query.actionType),
     };

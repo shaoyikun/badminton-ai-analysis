@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readTasks, writeTasks, saveResult, readResultByTaskId } from './store';
-import { ReportResult, RetestComparison, RetestCoachReview, TaskHistoryItem, TaskRecord } from '../types/task';
+import { saveResult, readResultByTaskId } from './store';
+import { ActionType, ReportResult, RetestComparison, RetestCoachReview, TaskHistoryItem, TaskRecord } from '../types/task';
 import { runPreprocess } from './preprocessService';
 import { runPoseAnalysis } from './poseService';
 import { buildMockResult } from './reportScoringService';
+import { createTaskRecord, getTask, listTasks, updateTask } from './taskRepository';
 
 function now() {
   return new Date().toISOString();
@@ -67,12 +68,12 @@ function moveFile(sourcePath: string, targetPath: string) {
   }
 }
 
-function getActionLabel(actionType: string) {
+function getActionLabel(actionType: ActionType) {
   return actionType === 'smash' ? '杀球' : '正手高远球';
 }
 
-function buildTaskHistory(actionType: string, currentTaskId?: string): TaskHistoryItem[] {
-  return readTasks()
+function buildTaskHistory(actionType: ActionType, currentTaskId?: string): TaskHistoryItem[] {
+  return listTasks()
     .filter((task) => task.actionType === actionType && task.status === 'completed' && task.resultPath)
     .map((task) => {
       const result = readResultByTaskId(task.taskId);
@@ -91,7 +92,7 @@ function buildTaskHistory(actionType: string, currentTaskId?: string): TaskHisto
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-function buildCoachReview(actionType: string, comparison: Omit<RetestComparison, 'coachReview'>): RetestCoachReview {
+function buildCoachReview(actionType: ActionType, comparison: Omit<RetestComparison, 'coachReview'>): RetestCoachReview {
   const actionLabel = getActionLabel(actionType);
   const topImprovement = comparison.improvedDimensions[0];
   const topRegression = comparison.declinedDimensions[0];
@@ -146,7 +147,7 @@ function buildCoachReview(actionType: string, comparison: Omit<RetestComparison,
   };
 }
 
-function buildRetestComparison(actionType: string, previous: ReportResult, current: ReportResult): RetestComparison {
+function buildRetestComparison(actionType: ActionType, previous: ReportResult, current: ReportResult): RetestComparison {
   const deltas = current.dimensionScores.map((dimension) => {
     const previousDimension = previous.dimensionScores.find((item) => item.name === dimension.name);
     const previousScore = previousDimension?.score ?? 0;
@@ -202,8 +203,8 @@ function enrichResultWithHistory(task: TaskRecord, result: ReportResult): Report
   };
 }
 
-function findLatestCompletedTaskId(actionType: string, excludeTaskId?: string) {
-  return readTasks()
+function findLatestCompletedTaskId(actionType: ActionType, excludeTaskId?: string) {
+  return listTasks()
     .filter((task) => task.actionType === actionType && task.status === 'completed' && task.resultPath && task.taskId !== excludeTaskId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]?.taskId;
 }
@@ -215,8 +216,7 @@ function getComparableResult(taskId: string) {
   return { task, result };
 }
 
-export function createTask(actionType: string): TaskRecord {
-  const tasks = readTasks();
+export function createTask(actionType: ActionType): TaskRecord {
   const task: TaskRecord = {
     taskId: `task_${randomUUID().slice(0, 8)}`,
     actionType,
@@ -231,17 +231,11 @@ export function createTask(actionType: string): TaskRecord {
     createdAt: now(),
     updatedAt: now(),
   };
-  tasks.push(task);
-  writeTasks(tasks);
-  return task;
+  return createTaskRecord(task);
 }
 
-export function getTask(taskId: string): TaskRecord | undefined {
-  return readTasks().find((task) => task.taskId === taskId);
-}
-
-export function listTaskHistory(actionType?: string): TaskHistoryItem[] {
-  const tasks = readTasks()
+export function listTaskHistory(actionType?: ActionType): TaskHistoryItem[] {
+  const tasks = listTasks()
     .filter((task) => task.status === 'completed' && task.resultPath)
     .filter((task) => !actionType || task.actionType === actionType)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -298,21 +292,6 @@ export function getCustomRetestComparison(currentTaskId: string, previousTaskId:
     comparison: buildRetestComparison(currentPayload.task.actionType, previousPayload.result, currentPayload.result),
     history: buildTaskHistory(currentPayload.task.actionType),
   };
-}
-
-export function updateTask(taskId: string, patch: Partial<TaskRecord>): TaskRecord | undefined {
-  const tasks = readTasks();
-  const index = tasks.findIndex((task) => task.taskId === taskId);
-  if (index === -1) return undefined;
-  tasks[index] = {
-    ...tasks[index],
-    ...patch,
-    preprocess: patch.preprocess ? { ...(tasks[index].preprocess ?? { status: 'idle' }), ...patch.preprocess } : tasks[index].preprocess,
-    pose: patch.pose ? { ...(tasks[index].pose ?? { status: 'idle' }), ...patch.pose } : tasks[index].pose,
-    updatedAt: now(),
-  };
-  writeTasks(tasks);
-  return tasks[index];
 }
 
 export function saveUpload(taskId: string, fileName: string, stagedUploadPath: string, mimeType?: string) {

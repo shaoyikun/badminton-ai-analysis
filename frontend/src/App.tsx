@@ -8,6 +8,7 @@ import {
   POSE_LABELS,
   PREPROCESS_LABELS,
   STATUS_LABELS,
+  type ActionType,
   type PreprocessStatus,
   type TaskStatus,
   useAnalysisTask,
@@ -77,7 +78,7 @@ function App() {
             </div>
 
             <label className="field-label">动作类型</label>
-            <select value={actionType} onChange={(e) => setActionType(e.target.value)} disabled={isBusy || isPolling}>
+            <select value={actionType} onChange={(e) => setActionType(e.target.value as ActionType)} disabled={isBusy || isPolling}>
               <option value="clear">正手高远球</option>
               <option value="smash">杀球</option>
             </select>

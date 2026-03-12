@@ -1,10 +1,6 @@
-import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { getTask, updateTask } from './taskService';
+import { getTask, updateTask } from './taskRepository';
+import { estimatePoseForArtifacts } from './analysisService';
 import { readPoseResult, savePoseResult } from './store';
-
-const execFileAsync = promisify(execFile);
 
 function now() {
   return new Date().toISOString();
@@ -35,18 +31,8 @@ export async function runPoseAnalysis(taskId: string) {
   });
 
   try {
-    const repoRoot = path.resolve(process.cwd(), '..');
-    const analysisEntry = path.join(repoRoot, 'analysis-service', 'app.py');
-    const taskDir = path.join(process.cwd(), task.preprocess.artifacts.artifactsDir);
-
-    const pythonBin = process.env.PYTHON_BIN || 'python3';
-    const { stdout } = await execFileAsync(pythonBin, [analysisEntry, taskDir], {
-      encoding: 'utf8',
-    });
-    const output = stdout.trim();
-
-    const parsed = JSON.parse(output) as { result: import('../types/task').PoseAnalysisResult };
-    const resultPath = savePoseResult(taskId, parsed.result);
+    const result = await estimatePoseForArtifacts(task.preprocess.artifacts.artifactsDir);
+    const resultPath = savePoseResult(taskId, result);
 
     return updateTask(taskId, {
       pose: {
@@ -55,11 +41,11 @@ export async function runPoseAnalysis(taskId: string) {
         completedAt: now(),
         resultPath,
         summary: {
-          engine: parsed.result.engine,
-          frameCount: parsed.result.frameCount,
-          detectedFrameCount: parsed.result.detectedFrameCount,
-          bestFrameIndex: parsed.result.summary?.bestFrameIndex,
-          humanSummary: parsed.result.summary?.humanSummary,
+          engine: result.engine,
+          frameCount: result.frameCount,
+          detectedFrameCount: result.detectedFrameCount,
+          bestFrameIndex: result.summary?.bestFrameIndex,
+          humanSummary: result.summary?.humanSummary,
         },
       },
     });

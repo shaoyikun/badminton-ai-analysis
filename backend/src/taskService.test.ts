@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createTask, getActiveAnalysisTaskForTests, getTask, saveUpload, setAnalysisWorkerForTests, startMockAnalysis } from './services/taskService';
+import { getTask } from './services/taskRepository';
+import { createTask, getActiveAnalysisTaskForTests, saveUpload, setAnalysisWorkerForTests, startMockAnalysis } from './services/taskService';
 
 async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
   const originalCwd = process.cwd();

@@ -1,134 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-export type TaskStatus = 'created' | 'uploaded' | 'processing' | 'completed' | 'failed'
-export type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
-export type PoseStatus = 'idle' | 'processing' | 'completed' | 'failed'
-
-export type TaskHistoryItem = {
-  taskId: string
-  actionType: string
-  status: TaskStatus
-  createdAt: string
-  updatedAt: string
-  totalScore?: number
-  summaryText?: string
-  poseBased?: boolean
-}
-
-export type RetestDeltaItem = {
-  name: string
-  previousScore: number
-  currentScore: number
-  delta: number
-}
-
-export type RetestComparison = {
-  previousTaskId: string
-  previousCreatedAt?: string
-  currentTaskId: string
-  currentCreatedAt?: string
-  totalScoreDelta: number
-  improvedDimensions: RetestDeltaItem[]
-  declinedDimensions: RetestDeltaItem[]
-  unchangedDimensions: RetestDeltaItem[]
-  summaryText: string
-  coachReview: {
-    headline: string
-    progressNote: string
-    keepDoing?: string
-    regressionNote?: string
-    nextFocus: string
-    nextCheck: string
-  }
-}
-
-export type ReportResult = {
-  taskId: string
-  actionType: string
-  totalScore: number
-  summaryText?: string
-  poseBased?: boolean
-  compareSummary?: string
-  comparison?: RetestComparison
-  history?: TaskHistoryItem[]
-  standardComparison?: {
-    sectionTitle: string
-    summaryText: string
-    currentFrameLabel: string
-    standardFrameLabel: string
-    standardReference: {
-      title: string
-      cue: string
-      imageLabel: string
-      imagePath?: string
-      sourceType?: 'illustration' | 'real-sample'
-    }
-    phaseFrames?: {
-      phase: string
-      title: string
-      imagePath: string
-      cue: string
-    }[]
-    differences: string[]
-  }
-  scoringEvidence?: {
-    detectedFrameCount?: number
-    frameCount?: number
-    avgStabilityScore?: number
-    avgBodyTurnScore?: number
-    avgRacketArmLiftScore?: number
-    bestFrameIndex?: number | null
-    humanSummary?: string
-  }
-  dimensionScores: { name: string; score: number }[]
-  issues: { title: string; description: string; impact: string }[]
-  suggestions: { title: string; description: string }[]
-  retestAdvice: string
-  preprocess?: {
-    metadata?: {
-      fileName: string
-      fileSizeBytes: number
-      durationSeconds?: number
-      estimatedFrames?: number
-      width?: number
-      height?: number
-      frameRate?: number
-      metadataSource?: string
-    }
-    artifacts?: {
-      framePlan?: {
-        strategy: string
-        targetFrameCount: number
-      }
-      sampledFrames?: { index: number; timestampSeconds: number; fileName: string; relativePath?: string }[]
-    }
-  }
-}
-
-export type PoseResult = {
-  engine: string
-  frameCount: number
-  detectedFrameCount: number
-  summary: {
-    bestFrameIndex: number | null
-    stableFrameCount: number
-    avgStabilityScore: number
-    avgBodyTurnScore: number
-    avgRacketArmLiftScore: number
-    humanSummary: string
-  }
-  frames: {
-    frameIndex: number
-    fileName: string
-    status: string
-    metrics: {
-      stabilityScore: number
-      bodyTurnScore: number | null
-      racketArmLiftScore: number | null
-      summaryText: string
-    } | null
-  }[]
-}
+import type {
+  ActionType,
+  ComparisonResponse,
+  CreateTaskRequest,
+  CreateTaskResponse,
+  HistoryDetailResponse,
+  HistoryListResponse,
+  PoseAnalysisResult,
+  PoseStatus,
+  PreprocessStatus,
+  ReportResult,
+  RetestComparison,
+  TaskHistoryItem,
+  TaskStatus,
+  TaskStatusResponse,
+  UploadTaskResponse,
+} from '../../../shared/contracts'
+export type {
+  ActionType,
+  PoseAnalysisResult as PoseResult,
+  PoseStatus,
+  PreprocessStatus,
+  ReportResult,
+  RetestComparison,
+  TaskHistoryItem,
+  TaskStatus,
+} from '../../../shared/contracts'
 
 export const API_BASE = import.meta.env.VITE_API_BASE || ''
 export const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -199,13 +96,13 @@ function getErrorCopy(errorCode?: string, fallback?: string) {
 }
 
 export function useAnalysisTask() {
-  const [actionType, setActionType] = useState('clear')
+  const [actionType, setActionType] = useState<ActionType>('clear')
   const [taskId, setTaskId] = useState('')
   const [status, setStatus] = useState<TaskStatus | ''>('')
   const [preprocessStatus, setPreprocessStatus] = useState<PreprocessStatus>('idle')
   const [poseStatus, setPoseStatus] = useState<PoseStatus>('idle')
   const [report, setReport] = useState<ReportResult | null>(null)
-  const [poseResult, setPoseResult] = useState<PoseResult | null>(null)
+  const [poseResult, setPoseResult] = useState<PoseAnalysisResult | null>(null)
   const [history, setHistory] = useState<TaskHistoryItem[]>([])
   const [comparison, setComparison] = useState<RetestComparison | null>(null)
   const [selectedCompareTaskId, setSelectedCompareTaskId] = useState('')
@@ -238,10 +135,10 @@ export function useAnalysisTask() {
     appendLog(`${copy.title}：${copy.message}`)
   }
 
-  const fetchHistory = useCallback(async (nextActionType?: string) => {
+  const fetchHistory = useCallback(async (nextActionType?: ActionType) => {
     const action = nextActionType ?? actionType
     const res = await fetch(`${API_BASE}/api/history?actionType=${action}`)
-    const data = await res.json()
+    const data = await res.json() as HistoryListResponse
     if (!res.ok) return []
     const items = data.items ?? []
     setHistory(items)
@@ -257,7 +154,7 @@ export function useAnalysisTask() {
       : `${API_BASE}/api/tasks/${targetTaskId}/comparison`
 
     const res = await fetch(url)
-    const data = await res.json()
+    const data = await res.json() as ComparisonResponse & { error?: string }
     if (!res.ok) {
       setComparison(null)
       if (previousTaskId) appendLog(`自定义对比失败：${data.error ?? '未知错误'}`)
@@ -278,7 +175,7 @@ export function useAnalysisTask() {
 
   async function fetchHistoryReport(targetTaskId: string) {
     const res = await fetch(`${API_BASE}/api/history/${targetTaskId}`)
-    const data = await res.json()
+    const data = await res.json() as HistoryDetailResponse & { error?: string }
     if (!res.ok) {
       appendLog(`历史样本详情获取失败：${data.error ?? '未知错误'}`)
       return null
@@ -296,9 +193,9 @@ export function useAnalysisTask() {
       const res = await fetch(`${API_BASE}/api/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actionType }),
+        body: JSON.stringify({ actionType } satisfies CreateTaskRequest),
       })
-      const data = await res.json()
+      const data = await res.json() as CreateTaskResponse & { error?: string }
       if (!res.ok) {
         appendLog(`创建任务失败：${data.error ?? '未知错误'}`)
         return
@@ -334,7 +231,7 @@ export function useAnalysisTask() {
         method: 'POST',
         body: form,
       })
-      const data = await res.json()
+      const data = await res.json() as UploadTaskResponse & { error?: string; errorCode?: string }
       if (!res.ok) {
         setFriendlyError(data.errorCode, data.error)
         return
@@ -357,7 +254,7 @@ export function useAnalysisTask() {
   async function fetchPoseResult(silent = false) {
     if (!taskId) return null
     const res = await fetch(`${API_BASE}/api/tasks/${taskId}/pose`)
-    const data = await res.json()
+    const data = await res.json() as PoseAnalysisResult & { error?: string }
     if (!res.ok) {
       if (poseStatus === 'failed') {
         setFriendlyError('pose_failed', data.error)
@@ -369,7 +266,7 @@ export function useAnalysisTask() {
     setPoseResult(data)
     setPoseStatus('completed')
     if (!silent) appendLog('已获取姿态摘要结果')
-    return data as PoseResult
+    return data as PoseAnalysisResult
   }
 
   async function fetchResult(showSuccessLog = true) {
@@ -379,7 +276,7 @@ export function useAnalysisTask() {
     }
 
     const res = await fetch(`${API_BASE}/api/tasks/${taskId}/result`)
-    const data = await res.json()
+    const data = await res.json() as ReportResult & { error?: string }
     if (!res.ok) {
       setFriendlyError('result_not_ready', data.error)
       return null
@@ -402,7 +299,7 @@ export function useAnalysisTask() {
     }
 
     const res = await fetch(`${API_BASE}/api/tasks/${taskId}`)
-    const data = await res.json()
+    const data = await res.json() as TaskStatusResponse & { error?: string }
     if (!res.ok) {
       if (!options?.silent) appendLog(`查询状态失败：${data.error ?? '未知错误'}`)
       return null

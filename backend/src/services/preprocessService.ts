@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PreprocessArtifacts, PreprocessFrameItem, TaskRecord, VideoMetadata } from '../types/task';
-import { getTask, updateTask } from './taskService';
+import { getTask, updateTask } from './taskRepository';
 
 const SUPPORTED_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v', '.webm']);
 const MIN_FILE_SIZE_BYTES = 100 * 1024;
