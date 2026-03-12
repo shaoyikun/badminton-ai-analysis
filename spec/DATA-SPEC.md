@@ -13,6 +13,8 @@
 - retestAdvice
 - createdAt（可选）
 - poseBased（可选）
+- recognitionContext（可选，识别出的拍摄视角 / 挥拍侧等上下文）
+- visualEvidence（可选，最佳帧与全部抽帧骨架叠加图）
 - history（可选，同动作历史样本摘要列表）
 - comparison（默认对比上一条同动作样本的复测结果）
 - standardComparison（可选，标准动作参考区）
@@ -99,6 +101,7 @@
 - summaryText
 - currentFrameLabel
 - standardFrameLabel
+- viewProfile（可选）
 - standardReference
   - title
   - cue
@@ -113,18 +116,49 @@
 - differences
 
 说明：
+- 当前实现会根据识别出的 `viewProfile` 切换参考说明文案；第一版仍允许复用同一套静态参考图
 - MVP 第一版允许先返回“本地静态参考素材 + 差异说明文案”，不强制要求一开始就接真人标准图片库
 - 若已有可用素材，可以进一步返回阶段性关键帧（如准备 / 引拍 / 击球），当前字段为 `phaseFrames`
 - 后续可再把 `imagePath` 升级为真实素材 URL / token / 媒体资源引用
+
+### recognitionContext
+- viewProfile（可选：`rear` / `rear_left_oblique` / `rear_right_oblique` / `left_side` / `right_side` / `front_left_oblique` / `front_right_oblique` / `front` / `unknown`）
+- viewLabel
+- viewConfidence（可选）
+- dominantRacketSide（可选：`left` / `right` / `unknown`）
+- dominantRacketSideLabel
+- racketSideConfidence（可选）
+- engine（可选）
+
+### visualEvidence
+- bestFrameIndex（可选）
+- bestFrameImagePath（可选）
+- bestFrameOverlayPath（可选）
+- overlayFrames
+  - index
+  - timestampSeconds（可选）
+  - rawImagePath（可选）
+  - overlayImagePath（可选）
+  - status（可选）
 
 ## 6. 评分与预处理补充结构
 ### scoringEvidence
 - detectedFrameCount（可选）
 - frameCount（可选）
-- avgStabilityScore（可选）
-- avgBodyTurnScore（可选）
-- avgRacketArmLiftScore（可选）
+- coverageRatio（可选）
+- medianStabilityScore（可选）
+- medianBodyTurnScore（可选）
+- medianRacketArmLiftScore（可选）
+- scoreVariance（可选）
 - bestFrameIndex（可选）
+- rejectionReasons（可选）
+- dimensionEvidence（可选）
+  - key
+  - label
+  - score
+  - available（可选）
+  - confidence（可选）
+  - source
 - humanSummary（可选）
 
 ### preprocess

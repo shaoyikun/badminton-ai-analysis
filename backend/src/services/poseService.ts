@@ -20,6 +20,13 @@ export function buildPoseSummary(result: PoseAnalysisResult): PoseInfo['summary'
     scoreVariance: result.summary?.scoreVariance,
     rejectionReasons: result.summary?.rejectionReasons,
     humanSummary: result.summary?.humanSummary,
+    viewProfile: result.summary?.viewProfile,
+    viewConfidence: result.summary?.viewConfidence,
+    viewStability: result.summary?.viewStability,
+    dominantRacketSide: result.summary?.dominantRacketSide,
+    racketSideConfidence: result.summary?.racketSideConfidence,
+    bestFrameOverlayRelativePath: result.summary?.bestFrameOverlayRelativePath,
+    overlayFrameCount: result.summary?.overlayFrameCount,
   };
 }
 

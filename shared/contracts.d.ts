@@ -46,6 +46,18 @@ export type TaskStage =
 
 export type PreprocessStatus = 'idle' | 'queued' | 'processing' | 'completed' | 'failed';
 export type PoseStatus = 'idle' | 'processing' | 'completed' | 'failed';
+export type ViewProfile =
+  | 'rear'
+  | 'rear_left_oblique'
+  | 'rear_right_oblique'
+  | 'left_side'
+  | 'right_side'
+  | 'front_left_oblique'
+  | 'front_right_oblique'
+  | 'front'
+  | 'unknown';
+
+export type DominantRacketSide = 'left' | 'right' | 'unknown';
 
 export interface UploadConstraints {
   minDurationSeconds: number;
@@ -90,6 +102,9 @@ export interface ErrorResponse {
 export interface DimensionScore {
   name: string;
   score: number;
+  available?: boolean;
+  confidence?: number;
+  note?: string;
 }
 
 export interface IssueItem {
@@ -160,6 +175,7 @@ export interface PoseFrameMetrics {
   hipSpan: number | null;
   bodyTurnScore: number | null;
   racketArmLiftScore: number | null;
+  subjectScale?: number | null;
   summaryText: string;
 }
 
@@ -169,6 +185,9 @@ export interface PoseFrameResult {
   status: string;
   keypoints: PoseKeypoint[];
   metrics: PoseFrameMetrics | null;
+  overlayRelativePath?: string;
+  viewProfile?: ViewProfile;
+  dominantRacketSide?: DominantRacketSide;
 }
 
 export interface PoseOverallSummary {
@@ -181,6 +200,13 @@ export interface PoseOverallSummary {
   scoreVariance: number;
   rejectionReasons: FlowErrorCode[];
   humanSummary: string;
+  viewProfile?: ViewProfile;
+  viewConfidence?: number;
+  viewStability?: number;
+  dominantRacketSide?: DominantRacketSide;
+  racketSideConfidence?: number;
+  bestFrameOverlayRelativePath?: string;
+  overlayFrameCount?: number;
 }
 
 export interface PoseAnalysisResult {
@@ -211,6 +237,13 @@ export interface PoseInfo {
     scoreVariance?: number;
     rejectionReasons?: FlowErrorCode[];
     humanSummary?: string;
+    viewProfile?: ViewProfile;
+    viewConfidence?: number;
+    viewStability?: number;
+    dominantRacketSide?: DominantRacketSide;
+    racketSideConfidence?: number;
+    bestFrameOverlayRelativePath?: string;
+    overlayFrameCount?: number;
   };
 }
 
@@ -273,9 +306,35 @@ export interface StandardComparison {
   summaryText: string;
   currentFrameLabel: string;
   standardFrameLabel: string;
+  viewProfile?: ViewProfile;
   standardReference: StandardReferenceFrame;
   phaseFrames?: StandardPhaseFrame[];
   differences: string[];
+}
+
+export interface RecognitionContext {
+  viewProfile?: ViewProfile;
+  viewLabel: string;
+  viewConfidence?: number;
+  dominantRacketSide?: DominantRacketSide;
+  dominantRacketSideLabel: string;
+  racketSideConfidence?: number;
+  engine?: string;
+}
+
+export interface VisualEvidenceFrame {
+  index: number;
+  timestampSeconds?: number;
+  rawImagePath?: string;
+  overlayImagePath?: string;
+  status?: string;
+}
+
+export interface VisualEvidence {
+  bestFrameIndex?: number | null;
+  bestFrameImagePath?: string;
+  bestFrameOverlayPath?: string;
+  overlayFrames: VisualEvidenceFrame[];
 }
 
 export interface ReportResult {
@@ -290,6 +349,8 @@ export interface ReportResult {
   retestAdvice: string;
   createdAt?: string;
   poseBased?: boolean;
+  recognitionContext?: RecognitionContext;
+  visualEvidence?: VisualEvidence;
   standardComparison?: StandardComparison;
   scoringEvidence?: {
     frameCount?: number;
@@ -306,6 +367,8 @@ export interface ReportResult {
       key: string;
       label: string;
       score: number;
+      available?: boolean;
+      confidence?: number;
       source: string;
     }>;
     humanSummary?: string;

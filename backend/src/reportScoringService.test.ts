@@ -17,6 +17,31 @@ function buildTask(): AnalysisTaskRecord {
     artifacts: {
       preprocess: {
         status: 'completed',
+        artifacts: {
+          normalizedFileName: 'clip.mp4',
+          metadataExtractedAt: now,
+          artifactsDir: 'artifacts/tasks/task_report_test/preprocess',
+          manifestPath: 'artifacts/tasks/task_report_test/preprocess/manifest.json',
+          framePlan: {
+            strategy: 'uniform-sampling-ffmpeg-v1',
+            targetFrameCount: 2,
+            sampleTimestamps: [1.2, 2.4],
+          },
+          sampledFrames: [
+            {
+              index: 5,
+              timestampSeconds: 1.2,
+              fileName: 'frame-05.jpg',
+              relativePath: 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg',
+            },
+            {
+              index: 6,
+              timestampSeconds: 2.4,
+              fileName: 'frame-06.jpg',
+              relativePath: 'artifacts/tasks/task_report_test/preprocess/frame-06.jpg',
+            },
+          ],
+        },
       },
     },
   };
@@ -37,9 +62,36 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       scoreVariance: 0.011,
       rejectionReasons: [],
       humanSummary: '本次基于 8/12 帧稳定识别结果生成：已经能看到较稳定的侧身展开和挥拍臂上举。',
+      viewProfile: 'rear_left_oblique',
+      viewConfidence: 0.84,
+      viewStability: 0.75,
+      dominantRacketSide: 'right',
+      racketSideConfidence: 0.71,
+      bestFrameOverlayRelativePath: 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg',
+      overlayFrameCount: 1,
       ...summaryOverrides,
     },
-    frames: [],
+    frames: [
+      {
+        frameIndex: 5,
+        fileName: 'frame-05.jpg',
+        status: 'usable',
+        keypoints: [],
+        metrics: null,
+        overlayRelativePath: 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg',
+        viewProfile: 'rear_left_oblique',
+        dominantRacketSide: 'right',
+      },
+      {
+        frameIndex: 6,
+        fileName: 'frame-06.jpg',
+        status: 'detected',
+        keypoints: [],
+        metrics: null,
+        viewProfile: 'rear_left_oblique',
+        dominantRacketSide: 'right',
+      },
+    ],
   };
 }
 
@@ -68,4 +120,18 @@ test('buildRuleBasedResult maps report fields from pose evidence only', () => {
   assert.equal(report.scoringEvidence?.dimensionEvidence?.length, 4);
   assert.equal(report.scoringEvidence?.usableFrameCount, 8);
   assert.equal(report.scoringEvidence?.rejectionReasons?.length, 0);
+  assert.equal(report.recognitionContext?.viewLabel, '左后斜');
+  assert.equal(report.recognitionContext?.dominantRacketSideLabel, '右手挥拍侧');
+  assert.equal(report.visualEvidence?.bestFrameImagePath, 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg');
+  assert.equal(report.visualEvidence?.bestFrameOverlayPath, 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg');
+  assert.equal(report.visualEvidence?.overlayFrames.length, 2);
+});
+
+test('buildRuleBasedResult keeps visual evidence usable when overlay is missing', () => {
+  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+    bestFrameOverlayRelativePath: undefined,
+  }));
+
+  assert.equal(report.visualEvidence?.bestFrameImagePath, 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg');
+  assert.equal(report.visualEvidence?.bestFrameOverlayPath, 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg');
 });

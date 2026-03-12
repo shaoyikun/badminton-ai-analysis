@@ -14,6 +14,17 @@ import {
 } from './insights'
 import { buildAssetUrl, buildReferenceUrl, formatScore, formatTime } from './utils'
 
+function formatConfidence(value?: number | null) {
+  if (value === null || value === undefined) return '—'
+  return `${Math.round(value * 100)}%`
+}
+
+function getRecognitionLead(report: ReportResult) {
+  const viewLabel = report.recognitionContext?.viewLabel ?? '未确定'
+  const sideLabel = report.recognitionContext?.dominantRacketSideLabel ?? '挥拍侧未确定'
+  return `系统当前把这条视频识别为${viewLabel}视角，并推断主要是${sideLabel}。`
+}
+
 export function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
   if (!poseResult) return null
 
@@ -32,11 +43,122 @@ export function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null 
         <div className="score-tile"><span>侧身展开</span><strong>{formatScore(poseResult.summary.medianBodyTurnScore)}</strong></div>
         <div className="score-tile"><span>挥拍臂上举</span><strong>{formatScore(poseResult.summary.medianRacketArmLiftScore)}</strong></div>
         <div className="score-tile"><span>波动度</span><strong>{formatScore(poseResult.summary.scoreVariance)}</strong></div>
+        <div className="score-tile"><span>识别视角</span><strong>{poseResult.summary.viewProfile ?? 'unknown'}</strong></div>
+        <div className="score-tile"><span>挥拍侧</span><strong>{poseResult.summary.dominantRacketSide ?? 'unknown'}</strong></div>
       </div>
       {poseResult.summary.rejectionReasons.length > 0 ? (
         <p className="muted-copy">拒绝原因：{poseResult.summary.rejectionReasons.join(' / ')}</p>
       ) : null}
     </div>
+  )
+}
+
+export function RecognitionContextCard({ report }: { report: ReportResult }) {
+  if (!report.recognitionContext) return null
+
+  return (
+    <section className="surface-card recognition-context-card">
+      <div className="section-head">
+        <div>
+          <h2>识别信息</h2>
+          <p className="muted-copy">这是系统从当前视频里自动识别出来的拍摄信息，不是你手动填写的。</p>
+        </div>
+      </div>
+
+      <div className="recognition-lead-card">
+        <strong>{getRecognitionLead(report)}</strong>
+        <p>这些信息会直接参与后面的动作解释、差异提示和骨架可视化展示。</p>
+      </div>
+
+      <div className="recognition-metadata-grid">
+        <div className="recognition-metadata-item">
+          <span>拍摄视角</span>
+          <strong>{report.recognitionContext.viewLabel}</strong>
+          <p>{`视角置信度 ${formatConfidence(report.recognitionContext.viewConfidence)}`}</p>
+        </div>
+        <div className="recognition-metadata-item">
+          <span>挥拍侧</span>
+          <strong>{report.recognitionContext.dominantRacketSideLabel}</strong>
+          <p>{`挥拍侧置信度 ${formatConfidence(report.recognitionContext.racketSideConfidence)}`}</p>
+        </div>
+        <div className="recognition-metadata-item">
+          <span>识别引擎</span>
+          <strong>{report.recognitionContext.engine ?? '—'}</strong>
+          <p>后续叠加图会直接基于这次关键点识别结果生成。</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export function PoseOverlayGalleryCard({ report }: { report: ReportResult }) {
+  const [showOverlay, setShowOverlay] = useState(true)
+  const visualEvidence = report.visualEvidence
+  if (!visualEvidence?.overlayFrames?.length) return null
+
+  const bestImagePath = showOverlay
+    ? visualEvidence.bestFrameOverlayPath ?? visualEvidence.bestFrameImagePath
+    : visualEvidence.bestFrameImagePath ?? visualEvidence.bestFrameOverlayPath
+  const bestFrame = visualEvidence.overlayFrames.find((item) => item.index === visualEvidence.bestFrameIndex) ?? visualEvidence.overlayFrames[0]
+
+  return (
+    <section className="surface-card pose-overlay-card">
+      <div className="section-head">
+        <div>
+          <h2>骨架识别图</h2>
+          <p className="muted-copy">先看系统最稳定的一帧，再按需要展开查看全部抽帧识别结果。</p>
+        </div>
+        <div className="view-toggle-chip-group">
+          <button className={`ghost-action inline ${showOverlay ? 'active' : ''}`} onClick={() => setShowOverlay(true)} type="button">
+            看骨架叠加图
+          </button>
+          <button className={`ghost-action inline ${!showOverlay ? 'active' : ''}`} onClick={() => setShowOverlay(false)} type="button">
+            看原始抽帧
+          </button>
+        </div>
+      </div>
+
+      <div className="pose-overlay-hero">
+        <div className="pose-overlay-media">
+          {bestImagePath ? <img src={buildAssetUrl(bestImagePath)} alt="最佳姿态识别图" /> : <div className="placeholder-box">暂无可展示图像</div>}
+        </div>
+        <div className="pose-overlay-copy">
+          <span className="eyebrow-copy">默认展示最佳帧</span>
+          <strong>{getRecognitionLead(report)}</strong>
+          <p>{showOverlay ? '当前看到的是系统叠加后的身体结构图，方便确认关键点有没有识别到位。' : '当前看到的是原始抽帧图，方便对照系统是不是在正确的时刻抓到了动作。'}
+          </p>
+          <div className="info-list compact">
+            <div className="list-row">
+              <span>最佳帧</span>
+              <strong>{visualEvidence.bestFrameIndex ?? '—'}</strong>
+              <p>{bestFrame?.timestampSeconds !== undefined ? `${bestFrame.timestampSeconds}s` : '暂无时间戳'}</p>
+            </div>
+            <div className="list-row">
+              <span>当前视角</span>
+              <strong>{report.recognitionContext?.viewLabel ?? '未确定'}</strong>
+              <p>{`视角置信度 ${formatConfidence(report.recognitionContext?.viewConfidence)}`}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details className="pose-overlay-details">
+        <summary>展开查看全部抽帧识别图</summary>
+        <div className="pose-overlay-grid">
+          {visualEvidence.overlayFrames.map((frame) => {
+            const imagePath = showOverlay ? frame.overlayImagePath ?? frame.rawImagePath : frame.rawImagePath ?? frame.overlayImagePath
+            return (
+              <div key={`${frame.index}-${imagePath ?? 'placeholder'}`} className="pose-overlay-frame-card">
+                {imagePath ? <img src={buildAssetUrl(imagePath)} alt={`关键帧 ${frame.index}`} /> : <div className="placeholder-box">暂无图像</div>}
+                <strong>{`关键帧 ${frame.index}`}</strong>
+                <span>{frame.timestampSeconds !== undefined ? `${frame.timestampSeconds}s` : '无时间戳'}</span>
+                <span>{frame.status ? `识别状态：${frame.status}` : '识别状态：—'}</span>
+              </div>
+            )
+          })}
+        </div>
+      </details>
+    </section>
   )
 }
 
@@ -459,7 +581,7 @@ export function StandardComparisonCard({ report }: { report: ReportResult }) {
       <div className="section-head">
         <div>
           <h2>{report.standardComparison.sectionTitle}</h2>
-          <p className="muted-copy">这一块不只是看像不像，而是看当前动作离目标动作还差在哪。</p>
+          <p className="muted-copy">这一块不只是看像不像，而是看系统在当前视角下能稳定看到的动作差异。</p>
         </div>
       </div>
       <div className="coach-note standard-summary-note">

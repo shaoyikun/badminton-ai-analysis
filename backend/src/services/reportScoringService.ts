@@ -1,4 +1,15 @@
-import type { AnalysisTaskRecord, FlowErrorCode, PoseAnalysisResult, ReportResult, StandardComparison, SuggestionItem } from '../types/task';
+import type {
+  AnalysisTaskRecord,
+  DominantRacketSide,
+  FlowErrorCode,
+  PoseAnalysisResult,
+  RecognitionContext,
+  ReportResult,
+  StandardComparison,
+  SuggestionItem,
+  ViewProfile,
+  VisualEvidence,
+} from '../types/task';
 
 function now() {
   return new Date().toISOString();
@@ -41,6 +52,24 @@ const METRIC_LABELS: Record<MetricKey, string> = {
   turn: '侧身展开',
   lift: '挥拍臂上举',
   repeatability: '动作复现稳定性',
+};
+
+const VIEW_PROFILE_LABELS: Record<ViewProfile, string> = {
+  rear: '后方',
+  rear_left_oblique: '左后斜',
+  rear_right_oblique: '右后斜',
+  left_side: '左侧面',
+  right_side: '右侧面',
+  front_left_oblique: '左前斜',
+  front_right_oblique: '右前斜',
+  front: '正面',
+  unknown: '未确定',
+};
+
+const RACKET_SIDE_LABELS: Record<DominantRacketSide, string> = {
+  left: '左手挥拍侧',
+  right: '右手挥拍侧',
+  unknown: '挥拍侧未确定',
 };
 
 const ISSUE_DEFINITIONS: IssueDefinition[] = [
@@ -123,6 +152,98 @@ const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
   internal_error: 'internal server error',
 };
 
+const WEAK_TURN_VIEW_PROFILES = new Set<ViewProfile>(['front', 'front_left_oblique', 'front_right_oblique']);
+
+function getViewLabel(viewProfile?: ViewProfile) {
+  return VIEW_PROFILE_LABELS[viewProfile ?? 'unknown'] ?? VIEW_PROFILE_LABELS.unknown;
+}
+
+function getRacketSideLabel(dominantRacketSide?: DominantRacketSide) {
+  return RACKET_SIDE_LABELS[dominantRacketSide ?? 'unknown'] ?? RACKET_SIDE_LABELS.unknown;
+}
+
+function getViewReferenceCue(viewProfile?: ViewProfile) {
+  switch (viewProfile) {
+    case 'left_side':
+    case 'right_side':
+      return '当前识别为侧面视角，参考图主要帮助你对齐挥拍侧准备和击球前身体线条。';
+    case 'front':
+      return '当前识别为正面视角，系统更适合参考挥拍臂准备和整体稳定度，转体展开只做弱判断。';
+    case 'front_left_oblique':
+    case 'front_right_oblique':
+      return '当前识别为前斜视角，这次更适合参考挥拍臂准备；转体展开会保留为弱判断。';
+    case 'rear_left_oblique':
+    case 'rear_right_oblique':
+      return '当前识别为后斜视角，这次对转体展开和挥拍臂准备都能给出相对完整的参考判断。';
+    case 'rear':
+      return '当前识别为后方视角，这次的转体展开和挥拍臂准备判断会相对更稳。';
+    default:
+      return '当前只围绕可稳定观测的侧身展开、挥拍臂上举和动作稳定性来做差异对比。';
+  }
+}
+
+function getMetricViewNote(metricKey: MetricKey, viewProfile?: ViewProfile) {
+  if (metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(viewProfile ?? 'unknown')) {
+    return `基于当前${getViewLabel(viewProfile)}视角，这一项只做弱判断，更适合作为复测时的辅助参考。`;
+  }
+  if (metricKey === 'lift' && (viewProfile === 'front' || viewProfile === 'front_left_oblique' || viewProfile === 'front_right_oblique')) {
+    return `基于当前${getViewLabel(viewProfile)}视角，这一项的证据相对直接。`;
+  }
+  if (metricKey === 'repeatability') {
+    return `这一项主要看当前${getViewLabel(viewProfile)}视角下动作在多帧里是否稳定复现。`;
+  }
+  return `这项判断结合了当前${getViewLabel(viewProfile)}视角下最稳定的关键帧证据。`;
+}
+
+function getMetricConfidence(metricKey: MetricKey, viewProfile?: ViewProfile) {
+  if (metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(viewProfile ?? 'unknown')) {
+    return 0.52;
+  }
+  if (metricKey === 'lift' && (viewProfile === 'front' || viewProfile === 'front_left_oblique' || viewProfile === 'front_right_oblique')) {
+    return 0.84;
+  }
+  if (viewProfile === 'unknown') {
+    return 0.48;
+  }
+  return 0.78;
+}
+
+function buildRecognitionContext(summary: PoseAnalysisResult['summary'], engine: string): RecognitionContext {
+  return {
+    viewProfile: summary.viewProfile,
+    viewLabel: getViewLabel(summary.viewProfile),
+    viewConfidence: summary.viewConfidence,
+    dominantRacketSide: summary.dominantRacketSide,
+    dominantRacketSideLabel: getRacketSideLabel(summary.dominantRacketSide),
+    racketSideConfidence: summary.racketSideConfidence,
+    engine,
+  };
+}
+
+function buildVisualEvidence(task: AnalysisTaskRecord, poseResult: PoseAnalysisResult): VisualEvidence {
+  const sampledFrames = task.artifacts.preprocess?.artifacts?.sampledFrames ?? [];
+  const frameMap = new Map(poseResult.frames.map((frame) => [frame.frameIndex, frame]));
+  const bestFrameIndex = poseResult.summary.bestFrameIndex ?? sampledFrames[0]?.index ?? null;
+  const bestRawFrame = sampledFrames.find((item) => item.index === bestFrameIndex) ?? sampledFrames[0];
+  const bestPoseFrame = bestFrameIndex ? frameMap.get(bestFrameIndex) : undefined;
+
+  return {
+    bestFrameIndex,
+    bestFrameImagePath: bestRawFrame?.relativePath,
+    bestFrameOverlayPath: poseResult.summary.bestFrameOverlayRelativePath ?? bestPoseFrame?.overlayRelativePath,
+    overlayFrames: sampledFrames.map((frame) => {
+      const poseFrame = frameMap.get(frame.index);
+      return {
+        index: frame.index,
+        timestampSeconds: frame.timestampSeconds,
+        rawImagePath: frame.relativePath,
+        overlayImagePath: poseFrame?.overlayRelativePath,
+        status: poseFrame?.status,
+      };
+    }),
+  };
+}
+
 function buildMetricScores(summary: PoseAnalysisResult['summary'], frameCount: number): MetricScores {
   const usableRatio = frameCount > 0 ? summary.usableFrameCount / frameCount : 0;
   const stability = clampScore(summary.coverageRatio * 40 + summary.medianStabilityScore * 60);
@@ -136,25 +257,29 @@ function buildMetricScores(summary: PoseAnalysisResult['summary'], frameCount: n
 function buildSummaryText(metricScores: MetricScores, poseSummary: PoseAnalysisResult['summary'], frameCount: number) {
   const weakestMetric = Object.entries(metricScores).sort((a, b) => a[1] - b[1])[0] as [MetricKey, number];
   const evidence = `本次基于 ${poseSummary.usableFrameCount}/${frameCount} 帧稳定识别结果生成。`;
+  const viewLead = `当前识别为${getViewLabel(poseSummary.viewProfile)}，${getRacketSideLabel(poseSummary.dominantRacketSide)}。`;
 
   if (weakestMetric[1] >= 80) {
-    return `${evidence} 当前这条高远球的可观测框架比较稳定，下一步更适合继续验证动作能否连续复现。`;
+    return `${evidence} ${viewLead} 当前这条高远球的可观测框架比较稳定，下一步更适合继续验证动作能否连续复现。`;
   }
 
-  return `${evidence} 当前最值得先改的是${METRIC_LABELS[weakestMetric[0]]}，这也是这次报告里证据最明确的短板。`;
+  return `${evidence} ${viewLead} 当前最值得先改的是${METRIC_LABELS[weakestMetric[0]]}，这也是这次报告里证据最明确的短板。`;
 }
 
-function buildRankedIssues(metricScores: MetricScores): RankedIssue[] {
+function buildRankedIssues(metricScores: MetricScores, poseSummary: PoseAnalysisResult['summary']): RankedIssue[] {
   return ISSUE_DEFINITIONS
     .map((definition) => {
       const metricScore = metricScores[definition.metricKey];
-      const gap = definition.threshold - metricScore;
+      const rawGap = definition.threshold - metricScore;
+      const gap = definition.metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(poseSummary.viewProfile ?? 'unknown')
+        ? rawGap * 0.55
+        : rawGap;
       if (gap <= 0) return null;
 
       return {
         title: definition.title,
-        description: `${definition.description}（${METRIC_LABELS[definition.metricKey]} ${metricScore} 分）`,
-        impact: definition.impact,
+        description: `${definition.description}（${METRIC_LABELS[definition.metricKey]} ${metricScore} 分）${getMetricViewNote(definition.metricKey, poseSummary.viewProfile)}`,
+        impact: `${definition.impact}${definition.metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(poseSummary.viewProfile ?? 'unknown') ? ' 当前视角下，这一项会建议你在下次尽量保持同机位复测确认。' : ''}`,
         metricKey: definition.metricKey,
         severity: gap,
         suggestion: definition.suggestion,
@@ -164,30 +289,37 @@ function buildRankedIssues(metricScores: MetricScores): RankedIssue[] {
     .sort((a, b) => b.severity - a.severity);
 }
 
-function buildStandardComparison(rankedIssues: RankedIssue[]): StandardComparison {
+function buildStandardComparison(rankedIssues: RankedIssue[], poseSummary: PoseAnalysisResult['summary']): StandardComparison {
+  const viewLabel = getViewLabel(poseSummary.viewProfile);
   const differences = rankedIssues.length > 0
     ? rankedIssues.slice(0, 3).map((issue) => {
       switch (issue.metricKey) {
         case 'turn':
-          return '当前样本里身体更常停留在较正朝向，和标准高远球相比，侧身展开还不够明确。';
+          return WEAK_TURN_VIEW_PROFILES.has(poseSummary.viewProfile ?? 'unknown')
+            ? `基于当前${viewLabel}视角，系统看到转体展开还有提升空间，但这一项会保留为弱判断。`
+            : `基于当前${viewLabel}视角，系统看到身体更常停留在较正朝向，和参考动作相比，侧身展开还不够明确。`;
         case 'lift':
-          return '当前样本里挥拍臂上举空间还没完全撑开，和标准参考相比，上举幅度偏保守。';
+          return `基于当前${viewLabel}视角，挥拍臂准备空间还没完全撑开，和参考动作相比，上举幅度偏保守。`;
         case 'repeatability':
-          return '当前样本不同帧之间波动偏大，和标准参考相比，动作复现稳定性还不够。';
+          return `基于当前${viewLabel}视角，当前样本不同帧之间波动偏大，动作复现稳定性还不够。`;
         case 'stability':
-          return '当前样本虽然可分析，但主体稳定度偏边缘，和标准参考相比，画面条件仍需要先稳住。';
+          return `当前样本虽然可分析，但在${viewLabel}视角下的主体稳定度仍偏边缘，画面条件还需要先稳住。`;
       }
     })
-    : ['当前样本和标准参考之间的可观测差异已经不大，下一步更适合继续验证稳定复现。'];
+    : [`基于当前${viewLabel}视角，当前样本和参考动作之间的可观测差异已经不大，下一步更适合继续验证稳定复现。`];
 
   return {
-    sectionTitle: '标准动作对比',
+    sectionTitle: '当前视角动作参考对照',
     summaryText: rankedIssues.length > 0
-      ? `和标准高远球相比，当前最明确的差异集中在${rankedIssues.slice(0, 3).map((item) => METRIC_LABELS[item.metricKey]).join('、')}。`
-      : '和标准高远球相比，当前可稳定观测的关键维度已经比较接近。',
+      ? `当前识别为${viewLabel}视角，和参考动作相比，最明确的差异集中在${rankedIssues.slice(0, 3).map((item) => METRIC_LABELS[item.metricKey]).join('、')}。`
+      : `当前识别为${viewLabel}视角，和参考动作相比，可稳定观测的关键维度已经比较接近。`,
     currentFrameLabel: '当前样本最佳稳定帧',
     standardFrameLabel: STANDARD_REFERENCE.imageLabel,
-    standardReference: STANDARD_REFERENCE,
+    viewProfile: poseSummary.viewProfile,
+    standardReference: {
+      ...STANDARD_REFERENCE,
+      cue: getViewReferenceCue(poseSummary.viewProfile),
+    },
     phaseFrames: [
       {
         phase: '准备',
@@ -227,6 +359,9 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
   const dimensionScores = (Object.keys(METRIC_LABELS) as MetricKey[]).map((key) => ({
     name: METRIC_LABELS[key],
     score: metricScores[key],
+    available: true,
+    confidence: getMetricConfidence(key, poseResult.summary.viewProfile),
+    note: getMetricViewNote(key, poseResult.summary.viewProfile),
   }));
   const totalScore = clampScore(
     metricScores.stability * 0.28
@@ -234,21 +369,30 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
     + metricScores.lift * 0.24
     + metricScores.repeatability * 0.2,
   );
-  const rankedIssues = buildRankedIssues(metricScores);
+  const rankedIssues = buildRankedIssues(metricScores, poseResult.summary);
+  const recognitionContext = buildRecognitionContext(poseResult.summary, poseResult.engine);
+  const visualEvidence = buildVisualEvidence(task, poseResult);
 
   const issues = rankedIssues.length > 0
-    ? rankedIssues.slice(0, 3).map(({ title, description, impact }) => ({ title, description, impact }))
+    ? rankedIssues.slice(0, 3).map(({ title, description, impact }) => ({
+      title,
+      description,
+      impact,
+    }))
     : [{
       title: '当前高远球可观测框架较稳定',
-      description: '这次样本里，主体稳定度、侧身展开、挥拍臂上举和动作复现都没有明显拖后腿的短板。',
+      description: `当前识别为${recognitionContext.viewLabel}视角，系统能稳定看到主体稳定度、侧身展开、挥拍臂准备和动作复现都没有明显拖后腿的短板。`,
       impact: '接下来更值得继续验证的是，能不能在同机位下把这套动作持续复现出来。',
     }];
 
   const suggestions = rankedIssues.length > 0
-    ? rankedIssues.map((item) => item.suggestion).slice(0, 3)
+    ? rankedIssues.map((item) => ({
+      ...item.suggestion,
+      description: `${item.suggestion.description} 当前识别为${recognitionContext.viewLabel}视角。`,
+    })).slice(0, 3)
     : [{
       title: '下次继续验证动作能否稳定复现',
-      description: '保持同一机位再录一条高远球视频，优先确认这次看到的较稳动作不是偶尔出现。',
+      description: `保持同一机位再录一条高远球视频，优先确认这次在${recognitionContext.viewLabel}视角下看到的较稳动作不是偶尔出现。`,
     }];
 
   return {
@@ -259,11 +403,13 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
     dimensionScores,
     issues,
     suggestions,
-    compareSummary: '当前报告只围绕可稳定观测的侧身展开、挥拍臂上举、主体稳定度和动作复现稳定性生成。',
-    retestAdvice: '建议 3~7 天后保持同一机位复测，下次优先看侧身展开、挥拍臂上举和动作复现稳定性是否一起变稳。',
+    compareSummary: `当前报告只围绕${recognitionContext.viewLabel}视角下可稳定观测的侧身展开、挥拍臂上举、主体稳定度和动作复现稳定性生成。`,
+    retestAdvice: `建议 3~7 天后保持同一机位复测，下次优先看${recognitionContext.viewLabel}视角下的侧身展开、挥拍臂上举和动作复现稳定性是否一起变稳。`,
     createdAt: now(),
     poseBased: true,
-    standardComparison: buildStandardComparison(rankedIssues),
+    recognitionContext,
+    visualEvidence,
+    standardComparison: buildStandardComparison(rankedIssues, poseResult.summary),
     scoringEvidence: {
       frameCount: poseResult.frameCount,
       detectedFrameCount: poseResult.detectedFrameCount,
@@ -280,24 +426,32 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
           key: 'stability',
           label: METRIC_LABELS.stability,
           score: metricScores.stability,
+          available: true,
+          confidence: getMetricConfidence('stability', poseResult.summary.viewProfile),
           source: `coverageRatio=${poseResult.summary.coverageRatio}, medianStability=${poseResult.summary.medianStabilityScore}`,
         },
         {
           key: 'turn',
           label: METRIC_LABELS.turn,
           score: metricScores.turn,
+          available: true,
+          confidence: getMetricConfidence('turn', poseResult.summary.viewProfile),
           source: `medianBodyTurnScore=${poseResult.summary.medianBodyTurnScore}`,
         },
         {
           key: 'lift',
           label: METRIC_LABELS.lift,
           score: metricScores.lift,
+          available: true,
+          confidence: getMetricConfidence('lift', poseResult.summary.viewProfile),
           source: `medianRacketArmLiftScore=${poseResult.summary.medianRacketArmLiftScore}`,
         },
         {
           key: 'repeatability',
           label: METRIC_LABELS.repeatability,
           score: metricScores.repeatability,
+          available: true,
+          confidence: getMetricConfidence('repeatability', poseResult.summary.viewProfile),
           source: `usableFrameCount=${poseResult.summary.usableFrameCount}, scoreVariance=${poseResult.summary.scoreVariance}`,
         },
       ],

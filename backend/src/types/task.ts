@@ -3,6 +3,7 @@ export type {
   ComparisonResponse,
   CreateTaskRequest,
   CreateTaskResponse,
+  DominantRacketSide,
   ErrorCategory,
   ErrorResponse,
   ErrorSnapshot,
@@ -22,6 +23,7 @@ export type {
   PreprocessFrameItem,
   PreprocessInfo,
   PreprocessStatus,
+  RecognitionContext,
   ReportResult,
   RetestCoachReview,
   RetestComparison,
@@ -37,6 +39,8 @@ export type {
   TaskStatusResponse,
   UploadTaskResponse,
   VideoMetadata,
+  ViewProfile,
+  VisualEvidence,
 } from '../../../shared/contracts';
 
 import type {
