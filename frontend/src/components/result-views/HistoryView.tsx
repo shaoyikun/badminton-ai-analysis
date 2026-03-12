@@ -7,7 +7,7 @@ export function HistoryView({ report, history, selectedCompareTaskId, selectedHi
       <HistoryCard history={history} selectedCompareTaskId={selectedCompareTaskId} onSelectCompare={onSelectCompare} onOpenHistoryDetail={onOpenHistoryDetail} disabled={disabled} />
 
       {selectedHistoryReport ? (
-        <div className="result-card">
+        <div className="result-card history-detail-card">
           <h3>历史样本详情</h3>
           <ul>
             <li><span>样本摘要</span><strong>{selectedHistoryReport.summaryText ?? '—'}</strong></li>
@@ -16,6 +16,28 @@ export function HistoryView({ report, history, selectedCompareTaskId, selectedHi
             <li><span>复测建议</span><strong>{selectedHistoryReport.retestAdvice}</strong></li>
           </ul>
           <p>{selectedHistoryReport.issues[0]?.impact ?? '这次历史样本暂无额外影响说明。'}</p>
+
+          {selectedHistoryReport.standardComparison ? (
+            <div className="history-detail-section">
+              <strong>那次和标准动作差在哪</strong>
+              <p>{selectedHistoryReport.standardComparison.summaryText}</p>
+              <ul>
+                {selectedHistoryReport.standardComparison.differences.slice(0, 2).map((item) => (
+                  <li key={item}><span>标准差异</span><strong>{item}</strong></li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="history-detail-section">
+            <strong>那次之后本来该继续看什么</strong>
+            <ul>
+              {selectedHistoryReport.suggestions.map((item) => (
+                <li key={item.title}><span>{item.title}</span><strong>{item.description}</strong></li>
+              ))}
+            </ul>
+          </div>
+
           <div className="button-group compact">
             <button className="primary-button secondary" onClick={() => onUseAsComparisonBaseline(selectedHistoryReport.taskId)} disabled={disabled || selectedCompareTaskId === selectedHistoryReport.taskId}>
               {selectedCompareTaskId === selectedHistoryReport.taskId ? '当前已作为对比基线' : '设为当前对比基线'}

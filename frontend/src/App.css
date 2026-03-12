@@ -705,6 +705,21 @@ select:disabled,
   font-size: 18px;
 }
 
+.history-detail-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.history-detail-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.history-detail-section strong {
+  display: block;
+  color: #101828;
+}
+
 .comparison-summary-card {
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
 }
