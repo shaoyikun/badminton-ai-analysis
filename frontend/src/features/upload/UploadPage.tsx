@@ -19,6 +19,8 @@ function formatDuration(seconds?: number) {
 export function UploadPage() {
   const navigate = useNavigate()
   const {
+    taskId,
+    latestCompletedTaskId,
     file,
     setFile,
     selectedVideoSummary,
@@ -26,8 +28,11 @@ export function UploadPage() {
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
     isBusy,
+    status,
+    report,
     errorState,
     clearErrorState,
+    prepareFreshUpload,
     selectedActionLabel,
     startAnalysisFlow,
   } = useAnalysisTask()
@@ -44,6 +49,13 @@ export function UploadPage() {
     [readinessItems, uploadChecklistConfirmed],
   )
   const submissionDisabled = isBusy || blockingReasons.length > 0
+
+  useEffect(() => {
+    const isCompletedCarryover = Boolean(taskId) && taskId === latestCompletedTaskId
+    if (!errorState && (status === 'completed' || report || isCompletedCarryover)) {
+      prepareFreshUpload()
+    }
+  }, [errorState, latestCompletedTaskId, prepareFreshUpload, report, status, taskId])
 
   useEffect(() => {
     if (!previewUrl || !file) return
@@ -85,7 +97,7 @@ export function UploadPage() {
     setSubmissionError(result.message ?? '启动分析失败，请稍后再试。')
   }
 
-  const previousAttemptSummary = !file && selectedVideoSummary ? selectedVideoSummary : null
+  const previousAttemptSummary = !file && errorState && selectedVideoSummary ? selectedVideoSummary : null
 
   return (
     <div className="page-stack">

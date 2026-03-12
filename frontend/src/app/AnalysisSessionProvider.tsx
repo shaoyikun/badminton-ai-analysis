@@ -121,6 +121,7 @@ type AnalysisSessionContextValue = {
   uploadChecklistConfirmed: boolean
   setUploadChecklistConfirmed: (value: boolean) => void
   resetUploadDraft: () => void
+  prepareFreshUpload: () => void
   setFile: (value: File | null) => void
   log: string[]
   isBusy: boolean
@@ -337,6 +338,25 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     }
     setIsPolling(false)
   }, [])
+
+  const prepareFreshUpload = useCallback(() => {
+    stopPolling()
+    setTaskId('')
+    setStatus('')
+    setStage('')
+    setProgressPercent(0)
+    setPreprocessStatus('idle')
+    setPoseStatus('idle')
+    setReport(null)
+    setPoseResult(null)
+    setComparison(null)
+    setSelectedCompareTaskId('')
+    setSelectedHistoryReport(null)
+    setFile(null)
+    setSelectedVideoSummary(null)
+    setUploadChecklistConfirmed(false)
+    setErrorState(null)
+  }, [stopPolling])
 
   const setFriendlyError = useCallback((errorCode?: FlowErrorCode | string, fallback?: string) => {
     lastFailureReasonRef.current = 'server'
@@ -758,6 +778,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
     resetUploadDraft,
+    prepareFreshUpload,
     setFile,
     log,
     isBusy,

@@ -37,6 +37,30 @@ test('报告页无会话保护', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '上传视频' })).toBeVisible()
 })
 
+test('再次测试回到上传页时清空上一次成功任务草稿', async ({ page }) => {
+  await mockApi(page)
+
+  await gotoWithSession(
+    page,
+    '/upload',
+    buildSessionSnapshot({
+      taskId: currentTaskId,
+      latestCompletedTaskId: currentTaskId,
+      selectedVideoSummary: {
+        fileName: 'last-success.mp4',
+        fileSizeBytes: 12 * 1024 * 1024,
+        mimeType: 'video/mp4',
+        extension: '.mp4',
+        durationSeconds: 9,
+      },
+    }),
+  )
+
+  await expect(page.getByText('last-success.mp4')).toHaveCount(0)
+  await expect(page.getByText('上次尝试的视频')).toHaveCount(0)
+  await expect(page.getByRole('checkbox')).not.toBeChecked()
+})
+
 test('历史页详情与基线切换', async ({ page }) => {
   await mockApi(page)
 
