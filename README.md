@@ -55,6 +55,7 @@
 - `spec/PRODUCT-SPEC.md`
 - `spec/INTERACTION-SPEC.md`
 - `spec/DATA-SPEC.md`
+- `spec/COMMIT-SPEC.md`
 - `spec/README.md`
 
 ---
