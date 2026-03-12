@@ -15,7 +15,6 @@ export function HistoryPage() {
   const navigate = useNavigate()
   const {
     actionType,
-    setActionType,
     history,
     selectedCompareTaskId,
     selectedHistoryReport,
@@ -29,11 +28,6 @@ export function HistoryPage() {
   const isViewingBaseline = currentBaseline?.taskId === selectedHistoryReport?.taskId
   const canOpenCurrentComparison = Boolean(currentBaseline)
   const selectedFocus = selectedHistoryReport ? getTrainingFocus(selectedHistoryReport) : null
-
-  function handleSelectAction(nextActionType: 'clear' | 'smash') {
-    setDetailOpen(false)
-    setActionType(nextActionType)
-  }
 
   async function openDetail(taskId: string) {
     const detail = await fetchHistoryReport(taskId)
@@ -70,15 +64,10 @@ export function HistoryPage() {
       <div className="page-stack">
         <section className="surface-card">
           <div className="section-head">
-            <h2>按动作查看历史</h2>
+            <h2>当前历史范围</h2>
           </div>
           <div className="pill-row">
-            <button className={`choice-pill ${actionType === 'clear' ? 'active' : ''}`} onClick={() => handleSelectAction('clear')} type="button">
-              正手高远球
-            </button>
-            <button className={`choice-pill ${actionType === 'smash' ? 'active' : ''}`} onClick={() => handleSelectAction('smash')} type="button">
-              杀球
-            </button>
+            <span className="choice-pill active">正手高远球</span>
           </div>
         </section>
 

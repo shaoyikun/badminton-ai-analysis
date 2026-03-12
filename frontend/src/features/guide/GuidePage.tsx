@@ -39,11 +39,7 @@ export function GuidePage() {
         <div className="info-list">
           <div className="list-row">
             <strong>正手高远球</strong>
-            <p>优先保证引拍、击球、收拍和回位全过程都能看到。</p>
-          </div>
-          <div className="list-row">
-            <strong>杀球</strong>
-            <p>优先保证高点准备、身体联动和击球后的整体平衡。</p>
+            <p>当前正式分析只支持这一动作，优先保证准备、上举、击球、收拍和回位全过程都能看到。</p>
           </div>
         </div>
       </section>

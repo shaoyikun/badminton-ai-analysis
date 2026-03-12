@@ -20,12 +20,17 @@ export function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null 
       <p>{poseResult.summary.humanSummary}</p>
       <div className="score-grid three-up">
         <div className="score-tile"><span>识别引擎</span><strong>{poseResult.engine}</strong></div>
-        <div className="score-tile"><span>命中帧数</span><strong>{poseResult.detectedFrameCount} / {poseResult.frameCount}</strong></div>
+        <div className="score-tile"><span>稳定帧数</span><strong>{poseResult.summary.usableFrameCount} / {poseResult.frameCount}</strong></div>
         <div className="score-tile"><span>最佳帧</span><strong>{poseResult.summary.bestFrameIndex ?? '—'}</strong></div>
-        <div className="score-tile"><span>稳定度均值</span><strong>{formatScore(poseResult.summary.avgStabilityScore)}</strong></div>
-        <div className="score-tile"><span>侧身展开</span><strong>{formatScore(poseResult.summary.avgBodyTurnScore)}</strong></div>
-        <div className="score-tile"><span>挥拍臂抬举</span><strong>{formatScore(poseResult.summary.avgRacketArmLiftScore)}</strong></div>
+        <div className="score-tile"><span>覆盖率</span><strong>{formatScore(poseResult.summary.coverageRatio)}</strong></div>
+        <div className="score-tile"><span>稳定度中位</span><strong>{formatScore(poseResult.summary.medianStabilityScore)}</strong></div>
+        <div className="score-tile"><span>侧身展开</span><strong>{formatScore(poseResult.summary.medianBodyTurnScore)}</strong></div>
+        <div className="score-tile"><span>挥拍臂上举</span><strong>{formatScore(poseResult.summary.medianRacketArmLiftScore)}</strong></div>
+        <div className="score-tile"><span>波动度</span><strong>{formatScore(poseResult.summary.scoreVariance)}</strong></div>
       </div>
+      {poseResult.summary.rejectionReasons.length > 0 ? (
+        <p className="muted-copy">拒绝原因：{poseResult.summary.rejectionReasons.join(' / ')}</p>
+      ) : null}
     </div>
   )
 }

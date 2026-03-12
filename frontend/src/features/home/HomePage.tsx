@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 export function HomePage() {
-  const { actionType, setActionType, selectedActionLabel, clearErrorState } = useAnalysisTask()
+  const { selectedActionLabel } = useAnalysisTask()
 
   return (
     <div className="page-stack">
@@ -16,31 +16,12 @@ export function HomePage() {
 
       <section className="surface-card">
         <div className="section-head">
-          <h2>先选择这次要分析的动作</h2>
+          <h2>当前正式支持的动作</h2>
         </div>
         <div className="pill-row">
-          <button
-            className={`choice-pill ${actionType === 'clear' ? 'active' : ''}`}
-            onClick={() => {
-              clearErrorState()
-              setActionType('clear')
-            }}
-            type="button"
-          >
-            正手高远球
-          </button>
-          <button
-            className={`choice-pill ${actionType === 'smash' ? 'active' : ''}`}
-            onClick={() => {
-              clearErrorState()
-              setActionType('smash')
-            }}
-            type="button"
-          >
-            杀球
-          </button>
+          <span className="choice-pill active">正手高远球</span>
         </div>
-        <p className="muted-copy">当前动作：{selectedActionLabel}。首页先选定动作，后面的拍摄指引和上传确认都会跟着走。</p>
+        <p className="muted-copy">当前为了保证结果可信度，只开放 {selectedActionLabel} 的正式分析。后面的拍摄指引和上传确认都会围绕这一动作展开。</p>
       </section>
 
       <section className="surface-card">

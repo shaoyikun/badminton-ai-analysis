@@ -13,6 +13,7 @@
       "smash": "杀球"
     },
     "captureChecklist": [
+      "当前正式分析仅支持正手高远球",
       "单人出镜，避免其他人频繁进入画面",
       "完整覆盖准备、击球、收拍，建议 5~15 秒",
       "优先侧后方或正后方机位",
@@ -21,6 +22,19 @@
     ]
   },
   "errorCatalog": {
+    "unsupported_action_scope": {
+      "title": "当前动作暂不支持正式分析",
+      "summary": "这版 MVP 目前只支持正手高远球的正式分析。",
+      "explanation": "为了保证结果可信度，当前系统先把能力范围收窄到正手高远球，其他动作暂不进入正式分析链路。",
+      "suggestions": [
+        "切换为正手高远球再继续上传",
+        "如果你要验证链路，优先准备一段侧后方拍摄的高远球视频",
+        "其余动作后续扩展前，不会给出正式报告"
+      ],
+      "uploadBanner": "当前只支持正手高远球正式分析，请切换动作后再上传。",
+      "primaryAction": "upload",
+      "secondaryAction": "guide"
+    },
     "upload_failed": {
       "title": "视频暂时不能处理",
       "summary": "上传的文件没有通过当前上传要求。",
@@ -86,6 +100,19 @@
       "primaryAction": "guide",
       "secondaryAction": "upload"
     },
+    "subject_too_small_or_cropped": {
+      "title": "主体太小或入镜不完整",
+      "summary": "人物离镜头太远，或者关键身体部位被裁切，无法稳定分析。",
+      "explanation": "如果肩、手臂、髋部或双腿长时间看不清，系统虽然可能抽到帧，但无法给出可信的动作结论。",
+      "suggestions": [
+        "让人物全身尽量完整入镜，尤其不要裁掉挥拍手和下肢",
+        "机位可以稍微靠近，但要保留完整挥拍空间",
+        "重新拍摄前先试录一段，确认准备到收拍都还在画面里"
+      ],
+      "uploadBanner": "上次失败是因为主体太小或入镜不完整，请调整距离和画面范围后重拍。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
     "poor_lighting_or_occlusion": {
       "title": "画面质量不足",
       "summary": "光线、清晰度或遮挡影响了关键动作识别。",
@@ -109,6 +136,32 @@
         "固定机位后先试录一段，确认引拍和击球点都能看到"
       ],
       "uploadBanner": "上次失败是因为机位不合适，建议先按推荐角度重拍。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
+    "insufficient_pose_coverage": {
+      "title": "有效姿态帧不足",
+      "summary": "系统只识别到零星几帧，证据不够稳定，不能生成正式报告。",
+      "explanation": "这通常说明主体可见性不足、动作过程拍得不完整，或画面条件让关键点命中率太低。",
+      "suggestions": [
+        "优先保证单人、固定机位、全身完整入镜",
+        "让准备、击球、收拍都在画面里连续出现",
+        "保持侧后方或正后方机位，再重新拍一条高远球视频"
+      ],
+      "uploadBanner": "上次失败是因为有效姿态帧不足，请按拍摄指引重拍后再试。",
+      "primaryAction": "guide",
+      "secondaryAction": "upload"
+    },
+    "insufficient_action_evidence": {
+      "title": "动作证据不足，暂不出报告",
+      "summary": "虽然识别到了人体，但还不足以支撑一份可信的正式分析报告。",
+      "explanation": "为了避免结果看起来像演示数据，当前系统在证据不够时会明确拒绝，而不是硬给结论。",
+      "suggestions": [
+        "重新拍一条更稳定的正手高远球视频",
+        "优先检查机位是否偏正、动作是否拍全、人物是否清晰完整",
+        "尽量让动作节奏更连贯，避免关键阶段刚好缺失"
+      ],
+      "uploadBanner": "上次失败是因为动作证据不足，建议按拍摄规范重拍后再上传。",
       "primaryAction": "guide",
       "secondaryAction": "upload"
     },

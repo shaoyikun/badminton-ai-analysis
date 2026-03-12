@@ -171,7 +171,7 @@ function readSessionSnapshot(): SessionSnapshot {
     if (!raw) throw new Error('missing session')
     const parsed = JSON.parse(raw) as Partial<SessionSnapshot>
     return {
-      actionType: parsed.actionType === 'smash' ? 'smash' : 'clear',
+      actionType: 'clear',
       taskId: parsed.taskId ?? '',
       latestCompletedTaskId: parsed.latestCompletedTaskId ?? '',
       selectedCompareTaskId: parsed.selectedCompareTaskId ?? '',
@@ -465,6 +465,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       const data = await response.json() as TaskStatusResponse | ErrorResponse
       if (!response.ok) {
         const error = parseErrorPayload(data)
+        lastFailureReasonRef.current = 'server'
+        setFriendlyError(error?.code, error?.message)
         appendLog(`创建任务失败：${error?.message ?? '未知错误'}`)
         return null
       }
@@ -480,7 +482,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsBusy(false)
     }
-  }, [actionType, appendLog, applyTaskSnapshot, fetchHistory, selectedActionLabel, stopPolling])
+  }, [actionType, appendLog, applyTaskSnapshot, fetchHistory, selectedActionLabel, setFriendlyError, stopPolling])
 
   const uploadVideo = useCallback(async (targetTaskId?: string) => {
     const activeTaskId = targetTaskId ?? taskId
@@ -554,7 +556,11 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
 
     const createdTaskId = await createTask()
     if (!createdTaskId) {
-      return { ok: false, reason: 'network', message: '创建任务失败，请稍后再试。' }
+      return {
+        ok: false,
+        reason: lastFailureReasonRef.current === 'server' ? 'server' : 'network',
+        message: '创建任务失败，请稍后再试。',
+      }
     }
 
     const uploaded = await uploadVideo(createdTaskId)

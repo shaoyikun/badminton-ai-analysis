@@ -17,22 +17,18 @@ function formatDuration(seconds?: number) {
 export function UploadPage() {
   const navigate = useNavigate()
   const {
-    actionType,
-    setActionType,
     file,
     setFile,
     selectedVideoSummary,
     setSelectedVideoSummary,
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
-    resetUploadDraft,
     isBusy,
     errorState,
     clearErrorState,
     selectedActionLabel,
     startAnalysisFlow,
   } = useAnalysisTask()
-  const [switchHint, setSwitchHint] = useState('')
   const [submissionError, setSubmissionError] = useState('')
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file])
 
@@ -87,21 +83,6 @@ export function UploadPage() {
     setSubmissionError(result.message ?? '启动分析失败，请稍后再试。')
   }
 
-  function handleActionChange(nextActionType: 'clear' | 'smash') {
-    if (nextActionType === actionType) return
-
-    setActionType(nextActionType)
-    clearErrorState()
-    setSubmissionError('')
-    if (file || selectedVideoSummary) {
-      resetUploadDraft()
-      setSelectedVideoSummary(null)
-      setSwitchHint('已切换动作类型，上一段视频和确认状态已清空，请重新选择。')
-    } else {
-      setSwitchHint('')
-    }
-  }
-
   const previousAttemptSummary = !file && selectedVideoSummary ? selectedVideoSummary : null
 
   return (
@@ -116,18 +97,12 @@ export function UploadPage() {
 
       <section className="surface-card">
         <div className="section-head">
-          <h2>选择动作类型</h2>
+          <h2>当前分析动作</h2>
         </div>
         <div className="pill-row">
-          <button className={`choice-pill ${actionType === 'clear' ? 'active' : ''}`} onClick={() => handleActionChange('clear')} type="button">
-            正手高远球
-          </button>
-          <button className={`choice-pill ${actionType === 'smash' ? 'active' : ''}`} onClick={() => handleActionChange('smash')} type="button">
-            杀球
-          </button>
+          <span className="choice-pill active">正手高远球</span>
         </div>
-        <p className="muted-copy">当前分析动作：{selectedActionLabel}。切换动作后，当前视频和确认状态都会被清空。</p>
-        {switchHint ? <div className="inline-note">{switchHint}</div> : null}
+        <p className="muted-copy">当前为了保证结果可信度，只开放 {selectedActionLabel} 的正式分析。</p>
       </section>
 
       <section className="surface-card">
@@ -135,7 +110,7 @@ export function UploadPage() {
           <h2>上传约束提示</h2>
         </div>
         <div className="info-list compact">
-          <div className="list-row">支持动作：正手高远球、杀球；一段视频只分析一种动作</div>
+          <div className="list-row">当前正式支持：正手高远球；一段视频只分析一种动作</div>
           <div className="list-row">时长：{UPLOAD_CONSTRAINTS.minDurationSeconds}~{UPLOAD_CONSTRAINTS.maxDurationSeconds} 秒</div>
           <div className="list-row">机位：优先 {UPLOAD_CONSTRAINTS.recommendedAngles.join(' 或 ')}</div>
           <div className="list-row">画面：单人出镜、全身尽量完整入镜、避免逆光和遮挡</div>
@@ -154,7 +129,6 @@ export function UploadPage() {
             onChange={(event) => {
               const nextFile = event.target.files?.[0] ?? null
               setSubmissionError('')
-              setSwitchHint('')
               clearErrorState()
               setUploadChecklistConfirmed(false)
               setFile(nextFile)

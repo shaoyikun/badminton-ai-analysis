@@ -17,7 +17,7 @@ import type {
 } from '../types/task';
 import { createTaskRecord, enterStage, failTask, markTaskStarted, markTaskUploaded, mergeArtifacts, completeTask } from '../domain/analysisTask';
 import { fileExists, prepareTaskArtifactsDir, readJsonFile, storeUploadedVideo, writePoseResult, writePreprocessManifest, writeReportFile } from './artifactStore';
-import { buildMockResult } from './reportScoringService';
+import { buildRuleBasedResult, getPoseQualityFailure } from './reportScoringService';
 import { getMaxFileSizeBytes, extractFrames, probeVideo, validateUploadedVideo } from './preprocessService';
 import { buildPoseSummary, readPoseResult, runPoseAnalysis } from './poseService';
 import { buildErrorSnapshot } from './errorCatalog';
@@ -167,6 +167,12 @@ function validateActionType(actionType: string): actionType is ActionType {
 export function assertActionType(actionType: string): asserts actionType is ActionType {
   if (!validateActionType(actionType)) {
     throw Object.assign(new Error('invalid action type'), { code: 'invalid_action_type' as const });
+  }
+}
+
+export function assertSupportedActionType(actionType: ActionType) {
+  if (actionType !== 'clear') {
+    throw Object.assign(new Error('only clear is supported in the current MVP'), { code: 'unsupported_action_scope' as const });
   }
 }
 
@@ -328,7 +334,21 @@ async function executeReportStage(task: AnalysisTaskRecord) {
   }
 
   await delay(getAnalysisDelayMs());
-  const report = buildMockResult(task);
+  if (task.actionType !== 'clear') {
+    throw buildErrorSnapshot('unsupported_action_scope', 'only clear is supported in the current MVP');
+  }
+
+  const poseResult = readPoseResult(task.artifacts.poseResultPath);
+  if (!poseResult) {
+    throw buildErrorSnapshot('report_generation_failed', 'pose result missing before report generation');
+  }
+
+  const qualityFailure = getPoseQualityFailure(poseResult);
+  if (qualityFailure) {
+    throw buildErrorSnapshot(qualityFailure.code, qualityFailure.message);
+  }
+
+  const report = buildRuleBasedResult(task, poseResult);
   const reportFile = writeReportFile(task.taskId, report);
   saveReport(task.taskId, JSON.stringify(report), report.totalScore, report.summaryText, report.poseBased);
   return mergeArtifacts(task, {
@@ -347,6 +367,10 @@ async function runAnalysisPipeline(taskId: string) {
   if (!task || task.status !== 'processing') return;
 
   try {
+    if (task.actionType !== 'clear') {
+      throw buildErrorSnapshot('unsupported_action_scope', 'only clear is supported in the current MVP');
+    }
+
     if (task.stage === 'validating') {
       task = saveTask(await executeValidatingStage(task));
       task = saveTask(enterStage(task, 'extracting_frames'));

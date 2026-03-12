@@ -98,6 +98,26 @@ test('task lifecycle endpoints expose new task resource shape', async (t) => {
   });
 });
 
+test('create task rejects unsupported action scope', async (t) => {
+  await withTempWorkspace(async () => {
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'smash' },
+    });
+
+    assert.equal(response.statusCode, 422);
+    const payload = response.json() as { error?: { code?: string; category?: string } };
+    assert.equal(payload.error?.code, 'unsupported_action_scope');
+    assert.equal(payload.error?.category, 'request_validation');
+  });
+});
+
 test('start endpoint triggers worker and task status exposes unified error object', async (t) => {
   await withTempWorkspace(async () => {
     const app = await buildServer();

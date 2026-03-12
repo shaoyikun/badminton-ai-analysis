@@ -11,7 +11,14 @@ export function buildPoseSummary(result: PoseAnalysisResult): PoseInfo['summary'
     engine: result.engine,
     frameCount: result.frameCount,
     detectedFrameCount: result.detectedFrameCount,
+    usableFrameCount: result.summary?.usableFrameCount,
+    coverageRatio: result.summary?.coverageRatio,
     bestFrameIndex: result.summary?.bestFrameIndex,
+    medianStabilityScore: result.summary?.medianStabilityScore,
+    medianBodyTurnScore: result.summary?.medianBodyTurnScore,
+    medianRacketArmLiftScore: result.summary?.medianRacketArmLiftScore,
+    scoreVariance: result.summary?.scoreVariance,
+    rejectionReasons: result.summary?.rejectionReasons,
     humanSummary: result.summary?.humanSummary,
   };
 }

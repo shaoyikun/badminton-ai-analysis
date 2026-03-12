@@ -9,6 +9,7 @@ type ErrorDefinition = {
 
 const ERROR_DEFINITIONS: Record<FlowErrorCode, ErrorDefinition> = {
   invalid_action_type: { category: 'request_validation', retryable: false, message: 'actionType is invalid', statusCode: 400 },
+  unsupported_action_scope: { category: 'request_validation', retryable: false, message: 'actionType is outside the current MVP scope', statusCode: 422 },
   file_required: { category: 'request_validation', retryable: true, message: 'file is required', statusCode: 400 },
   task_not_found: { category: 'request_validation', retryable: false, message: 'task not found', statusCode: 404 },
   invalid_task_state: { category: 'domain_state', retryable: true, message: 'task state does not allow this operation', statusCode: 409 },
@@ -19,8 +20,11 @@ const ERROR_DEFINITIONS: Record<FlowErrorCode, ErrorDefinition> = {
   invalid_duration: { category: 'media_validation', retryable: true, message: 'video duration should be between 5 and 15 seconds', statusCode: 422 },
   multi_person_detected: { category: 'media_validation', retryable: true, message: 'multiple people detected in frame', statusCode: 422 },
   body_not_detected: { category: 'media_validation', retryable: true, message: 'body not detected reliably', statusCode: 422 },
+  subject_too_small_or_cropped: { category: 'media_validation', retryable: true, message: 'subject is too small or cropped for reliable analysis', statusCode: 422 },
   poor_lighting_or_occlusion: { category: 'media_validation', retryable: true, message: 'video quality is too poor for reliable analysis', statusCode: 422 },
   invalid_camera_angle: { category: 'media_validation', retryable: true, message: 'camera angle is not suitable for analysis', statusCode: 422 },
+  insufficient_pose_coverage: { category: 'media_validation', retryable: true, message: 'pose coverage is insufficient for a reliable report', statusCode: 422 },
+  insufficient_action_evidence: { category: 'media_validation', retryable: true, message: 'action evidence is insufficient for a reliable report', statusCode: 422 },
   preprocess_failed: { category: 'pipeline_execution', retryable: true, message: 'preprocess stage failed', statusCode: 500 },
   pose_failed: { category: 'pipeline_execution', retryable: true, message: 'pose estimation failed', statusCode: 500 },
   report_generation_failed: { category: 'pipeline_execution', retryable: true, message: 'report generation failed', statusCode: 500 },

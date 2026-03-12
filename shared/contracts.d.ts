@@ -9,6 +9,7 @@ export type ErrorCategory =
 
 export type FlowErrorCode =
   | 'invalid_action_type'
+  | 'unsupported_action_scope'
   | 'file_required'
   | 'task_not_found'
   | 'invalid_task_state'
@@ -19,8 +20,11 @@ export type FlowErrorCode =
   | 'invalid_duration'
   | 'multi_person_detected'
   | 'body_not_detected'
+  | 'subject_too_small_or_cropped'
   | 'poor_lighting_or_occlusion'
   | 'invalid_camera_angle'
+  | 'insufficient_pose_coverage'
+  | 'insufficient_action_evidence'
   | 'preprocess_failed'
   | 'pose_failed'
   | 'report_generation_failed'
@@ -169,10 +173,13 @@ export interface PoseFrameResult {
 
 export interface PoseOverallSummary {
   bestFrameIndex: number | null;
-  stableFrameCount: number;
-  avgStabilityScore: number;
-  avgBodyTurnScore: number;
-  avgRacketArmLiftScore: number;
+  usableFrameCount: number;
+  coverageRatio: number;
+  medianStabilityScore: number;
+  medianBodyTurnScore: number;
+  medianRacketArmLiftScore: number;
+  scoreVariance: number;
+  rejectionReasons: FlowErrorCode[];
   humanSummary: string;
 }
 
@@ -195,7 +202,14 @@ export interface PoseInfo {
     engine: string;
     frameCount: number;
     detectedFrameCount: number;
+    usableFrameCount?: number;
+    coverageRatio?: number;
     bestFrameIndex?: number | null;
+    medianStabilityScore?: number;
+    medianBodyTurnScore?: number;
+    medianRacketArmLiftScore?: number;
+    scoreVariance?: number;
+    rejectionReasons?: FlowErrorCode[];
     humanSummary?: string;
   };
 }
@@ -278,12 +292,22 @@ export interface ReportResult {
   poseBased?: boolean;
   standardComparison?: StandardComparison;
   scoringEvidence?: {
-    detectedFrameCount?: number;
     frameCount?: number;
-    avgStabilityScore?: number;
-    avgBodyTurnScore?: number;
-    avgRacketArmLiftScore?: number;
+    detectedFrameCount?: number;
+    usableFrameCount?: number;
+    coverageRatio?: number;
+    medianStabilityScore?: number;
+    medianBodyTurnScore?: number;
+    medianRacketArmLiftScore?: number;
+    scoreVariance?: number;
     bestFrameIndex?: number | null;
+    rejectionReasons?: FlowErrorCode[];
+    dimensionEvidence?: Array<{
+      key: string;
+      label: string;
+      score: number;
+      source: string;
+    }>;
     humanSummary?: string;
   };
   preprocess?: {

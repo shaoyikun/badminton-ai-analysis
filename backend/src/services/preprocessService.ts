@@ -129,7 +129,7 @@ export function validateUploadedVideo(metadata: VideoMetadata): { errorCode: Flo
 
   if ((metadata.width ?? 0) < uploadConstraints.minWidth || (metadata.height ?? 0) < uploadConstraints.minHeight) {
     return {
-      errorCode: 'poor_lighting_or_occlusion',
+      errorCode: 'subject_too_small_or_cropped',
       errorMessage: `video resolution is too small: ${metadata.width ?? 0}x${metadata.height ?? 0}`,
     };
   }

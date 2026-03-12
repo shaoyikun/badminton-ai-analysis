@@ -12,6 +12,7 @@ import { getTask, getReportRow } from './services/taskRepository';
 import { getMaxFileSizeBytes } from './services/preprocessService';
 import {
   assertActionType,
+  assertSupportedActionType,
   createAnalysisTask,
   getHistoryDetail,
   getPoseResultForDebug,
@@ -70,9 +71,13 @@ export async function buildServer() {
 
     try {
       assertActionType(body.actionType);
+      assertSupportedActionType(body.actionType);
       const task = createAnalysisTask(body.actionType);
       return toTaskResource(task);
     } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'unsupported_action_scope') {
+        return sendError(reply, 'unsupported_action_scope', error.message);
+      }
       return sendError(reply, 'invalid_action_type', error instanceof Error ? error.message : undefined);
     }
   });
