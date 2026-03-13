@@ -1,8 +1,12 @@
 import { Link } from 'react-router-dom'
+import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 export function HomePage() {
-  const { selectedActionLabel } = useAnalysisTask()
+  const { actionType, selectedActionLabel } = useAnalysisTask()
+  const actionDescription = actionType === 'smash'
+    ? '当前已正式开放杀球分析，后面的拍摄指引、上传确认和历史记录都会围绕杀球动作展开。'
+    : '当前已正式开放正手高远球分析，后面的拍摄指引、上传确认和历史记录都会围绕这一动作展开。'
 
   return (
     <div className="page-stack">
@@ -18,10 +22,8 @@ export function HomePage() {
         <div className="section-head">
           <h2>当前正式支持的动作</h2>
         </div>
-        <div className="pill-row">
-          <span className="choice-pill active">正手高远球</span>
-        </div>
-        <p className="muted-copy">当前为了保证结果可信度，只开放 {selectedActionLabel} 的正式分析。后面的拍摄指引和上传确认都会围绕这一动作展开。</p>
+        <ActionTypeSelector />
+        <p className="muted-copy">{actionDescription}</p>
       </section>
 
       <section className="surface-card">

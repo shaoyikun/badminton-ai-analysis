@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
+  buildActionScenario,
   buildSessionSnapshot,
   comparisonHistoryTaskId,
   comparisonResponse,
@@ -30,6 +31,23 @@ test('报告页回访加载成功', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '当前视角动作参考对照' })).toBeVisible()
   await expect(page.getByRole('link', { name: '再次测试' })).toHaveAttribute('href', '/upload')
   await expect(page.getByRole('link', { name: '查看历史' })).toHaveAttribute('href', '/history')
+})
+
+test('杀球报告页回访时使用当前动作上下文', async ({ page }) => {
+  const smashScenario = buildActionScenario('smash')
+  await mockApi(page, smashScenario)
+
+  await gotoWithSession(
+    page,
+    '/report',
+    buildSessionSnapshot({
+      actionType: 'smash',
+      latestCompletedTaskId: currentTaskId,
+    }),
+  )
+
+  await expect(page.locator('.badge.badge-inverse').getByText('杀球', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /杀球样本已经完成正式分析/ })).toBeVisible()
 })
 
 test('报告页无会话保护', async ({ page }) => {
@@ -88,6 +106,24 @@ test('历史页详情与基线切换', async ({ page }) => {
   await expect(page.getByText('2026/3/13 00:22:29')).toBeVisible()
   await expect(page.getByText(comparisonResponse.comparison.summaryText)).toBeVisible()
   await expect(page.getByRole('link', { name: '返回本次报告' })).toHaveAttribute('href', '/report')
+})
+
+test('历史页切到杀球时只展示杀球动作语境', async ({ page }) => {
+  const smashScenario = buildActionScenario('smash')
+  await mockApi(page, smashScenario)
+
+  await gotoWithSession(
+    page,
+    '/history',
+    buildSessionSnapshot({
+      actionType: 'smash',
+      latestCompletedTaskId: currentTaskId,
+    }),
+  )
+
+  await expect(page.getByRole('heading', { name: '杀球历史样本' })).toBeVisible()
+  await expect(page.getByText(/当前只展示.*杀球.*历史样本和同动作复测基线/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /杀球 ·/ }).first()).toBeVisible()
 })
 
 test('对比页空状态可恢复', async ({ page }) => {

@@ -99,7 +99,7 @@ test('task lifecycle endpoints expose new task resource shape', async (t) => {
   });
 });
 
-test('create task rejects unsupported action scope', async (t) => {
+test('create task accepts smash as a public action type', async (t) => {
   await withTempWorkspace(async () => {
     const app = await buildServer();
     t.after(async () => {
@@ -112,10 +112,11 @@ test('create task rejects unsupported action scope', async (t) => {
       payload: { actionType: 'smash' },
     });
 
-    assert.equal(response.statusCode, 422);
-    const payload = response.json() as { error?: { code?: string; category?: string } };
-    assert.equal(payload.error?.code, 'unsupported_action_scope');
-    assert.equal(payload.error?.category, 'request_validation');
+    assert.equal(response.statusCode, 200);
+    const payload = response.json() as { actionType?: string; status?: string; stage?: string };
+    assert.equal(payload.actionType, 'smash');
+    assert.equal(payload.status, 'created');
+    assert.equal(payload.stage, 'upload_pending');
   });
 });
 

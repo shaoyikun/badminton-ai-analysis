@@ -40,6 +40,25 @@ export const ACTION_GUIDE_COPY: Record<ActionType, { title: string; checklist: s
       '击球点前后不要被裁切，整套动作保持连贯',
     ],
   },
+  smash: {
+    title: '杀球拍摄重点',
+    checklist: [
+      '尽量完整拍到加载、引拍、击球和随挥，不要只拍击球瞬间',
+      '优先保留上肢加载、躯干打开和击球前后衔接的完整过程',
+      '人物全身尽量完整入镜，避免把挥拍臂和击球后随挥裁掉',
+    ],
+  },
+}
+
+export const ACTION_SPECIAL_REMINDER_COPY: Record<ActionType, { title: string; description: string }> = {
+  clear: {
+    title: '正手高远球',
+    description: '优先保证准备、上举、击球、收拍和回位全过程都能看到。',
+  },
+  smash: {
+    title: '杀球',
+    description: '优先保证身体加载、挥拍臂加载、击球候选到随挥这一整段都拍完整。',
+  },
 }
 
 const ACTION_TARGET_COPY: Record<FlowActionTarget, { label: string; to: string }> = {

@@ -1,8 +1,8 @@
 import type { ActionType, ReportResult, RetestComparison, TaskHistoryItem } from '../../hooks/useAnalysisTask'
+import { getActionLabel } from '../../features/upload/uploadFlow'
 
 export function getActionTypeLabel(actionType: ActionType) {
-  void actionType
-  return '正手高远球'
+  return getActionLabel(actionType)
 }
 
 export function getValidBaselineItem(history: TaskHistoryItem[], selectedCompareTaskId: string) {

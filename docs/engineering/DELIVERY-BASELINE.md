@@ -31,7 +31,7 @@ make down
 - `make dev`：强制本地开发路径
 - `make verify`：严格交付门禁，默认包含 Docker Compose 构建校验
 - `make verify-local`：本地快速校验，只用于无 Docker daemon 的临时验证
-- `make evaluate`：clear-only 离线评测入口，默认对比 checked-in baseline 并在 drift 时返回非零
+- `make evaluate`：clear + smash 联合离线评测入口，默认对比 checked-in baseline 并在 drift 时返回非零
 
 ## 最小部署步骤
 

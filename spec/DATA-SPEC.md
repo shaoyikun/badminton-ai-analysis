@@ -1,9 +1,9 @@
 # DATA-SPEC
 
 说明：
-- 当前公开动作范围以 `docs/action-scope.md` 为准；截至 2026-03-13，runtime 为 `clear-only`
-- 若未来重新开放 `smash`，必须先满足 `spec/PHASED-EVOLUTION-SPEC.md` 中的对应阶段条件
-- Phase 5 已存在 dev-only `smash` shadow report，用于离线评测；它不等价于公开 runtime 契约
+- 当前公开动作范围以 `docs/action-scope.md` 为准；截至 2026-03-13，runtime 已支持 `clear + smash`
+- `smash` 已进入正式 runtime，并继续沿用独立评分版本与标准对照
+- 离线评测仍保留按动作单独执行的能力，用于 clear / smash 回归
 
 ## 1. 分析结果结构
 ### report
@@ -31,7 +31,7 @@
 
 说明：
 - 当前实现中的报告主结构以 `ReportResult` 为准，定义见 `backend/src/types/task.ts`
-- `smash` shadow mode 会生成内部同形结果用于 evaluation/dev，但不会通过公开 API 返回
+- `smash` 会通过公开 API 返回正式报告，结构与 `clear` 保持同形
 - `issues` 已替代旧文档中的 `top_issues`
 - `history`、`comparison` 会在结果读取和复测对比场景中按需补充，不保证每次都有
 - `totalScore` 只作为辅助摘要信息，不作为产品主叙事
@@ -262,8 +262,8 @@
 
 说明：
 - `analysisDisposition` 用于区分“硬拒绝”“低置信完成”“正常可分析”
-- 公开 runtime 当前使用 `rule-v3-phase-aware`（clear-only）
-- 离线 shadow `smash` 使用独立 `scoringModelVersion=rule-v3-smash-shadow`
+- 公开 runtime 的 `clear` 使用 `rule-v3-phase-aware`
+- 公开 runtime 的 `smash` 使用独立 `scoringModelVersion=rule-v3-smash-shadow`
 - `cameraSuitability` 只参与置信度，不直接进入 `totalScore`
 - `fallbacksUsed` 用于标记哪些维度仍由旧 turn/lift 或全局稳定性代理补足
 - Phase 2 起，`swing_repeatability` 优先使用 `contactCandidate` / `followThrough` 阶段证据；若阶段证据不足，会明确记录为阶段回退

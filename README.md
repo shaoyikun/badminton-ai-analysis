@@ -212,7 +212,7 @@ make evaluate
 当前约定：
 
 - `make evaluate` 默认会同时跑 `clear + smash` 两条离线基线
-- `./scripts/evaluate.sh --action-type smash` 只跑 Phase 5 的 `smash` shadow baseline；公开 runtime 仍是 `clear-only`
+- `./scripts/evaluate.sh --action-type smash` 会单独跑 `smash` 的正式回归基线
 - `make evaluate` 默认会在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTagsByAction` 时返回非零
 - `successRate` 的定义是“非 `rejected` / 全部”；`low_confidence` 仍计入成功完成率
 - 只有明确接受新行为时，才允许执行 `./scripts/evaluate.sh --update-baseline`

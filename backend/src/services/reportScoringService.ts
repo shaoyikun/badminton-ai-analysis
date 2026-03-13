@@ -185,7 +185,7 @@ const MIN_SOFT_COVERAGE_STABILITY = 0.6;
 
 const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
   invalid_action_type: 'actionType is invalid',
-  unsupported_action_scope: 'only clear is supported in the current MVP',
+  unsupported_action_scope: 'actionType is outside the current public runtime scope',
   file_required: 'file is required',
   task_not_found: 'task not found',
   invalid_task_state: 'task state does not allow this operation',

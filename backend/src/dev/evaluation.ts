@@ -273,8 +273,7 @@ function buildTaskRecord(
 }
 
 function toRuntimeActionType(actionType: ShadowActionType): ActionType {
-  // Public runtime remains clear-only in Phase 5; shadow smash evaluation overrides the action downstream.
-  return actionType === 'smash' ? 'clear' : actionType;
+  return actionType;
 }
 
 function requireInputPath(

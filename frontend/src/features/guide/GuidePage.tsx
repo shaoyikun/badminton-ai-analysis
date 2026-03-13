@@ -1,11 +1,13 @@
+import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { BottomCTA } from '../../components/ui/BottomCTA'
 import { Notice } from '../../components/ui/Notice'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
-import { ACTION_GUIDE_COPY, UPLOAD_CONSTRAINTS } from '../upload/uploadFlow'
+import { ACTION_GUIDE_COPY, ACTION_SPECIAL_REMINDER_COPY, UPLOAD_CONSTRAINTS } from '../upload/uploadFlow'
 
 export function GuidePage() {
   const { selectedActionLabel, actionType } = useAnalysisTask()
   const actionGuide = ACTION_GUIDE_COPY[actionType]
+  const reminder = ACTION_SPECIAL_REMINDER_COPY[actionType]
 
   return (
     <div className="page-stack">
@@ -26,6 +28,7 @@ export function GuidePage() {
         <div className="section-head">
           <h2>{actionGuide.title}</h2>
         </div>
+        <ActionTypeSelector />
         <div className="info-list">
           {actionGuide.checklist.map((item) => (
             <div key={item} className="list-row">{item}</div>
@@ -39,8 +42,8 @@ export function GuidePage() {
         </div>
         <div className="info-list">
           <div className="list-row">
-            <strong>正手高远球</strong>
-            <p>当前正式分析只支持这一动作，优先保证准备、上举、击球、收拍和回位全过程都能看到。</p>
+            <strong>{reminder.title}</strong>
+            <p>{reminder.description}</p>
           </div>
         </div>
       </section>

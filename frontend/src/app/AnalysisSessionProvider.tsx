@@ -83,15 +83,22 @@ export type ErrorState = {
   secondaryAction: FlowActionTarget
 } | null
 
+type ActionTaskStateMap = Partial<Record<ActionType, string>>
+
 type SessionSnapshot = {
   actionType: ActionType
   taskId: string
-  latestCompletedTaskId: string
-  selectedCompareTaskId: string
+  latestCompletedTaskIds: ActionTaskStateMap
+  selectedCompareTaskIds: ActionTaskStateMap
   selectedVideoSummary: LocalVideoSummary | null
   uploadChecklistConfirmed: boolean
   errorState: ErrorState
   debugEnabled: boolean
+}
+
+type LegacySessionSnapshot = Partial<SessionSnapshot> & {
+  latestCompletedTaskId?: string
+  selectedCompareTaskId?: string
 }
 
 type FlowResult =
@@ -159,8 +166,8 @@ function readSessionSnapshot(): SessionSnapshot {
     return {
       actionType: 'clear',
       taskId: '',
-      latestCompletedTaskId: '',
-      selectedCompareTaskId: '',
+      latestCompletedTaskIds: {},
+      selectedCompareTaskIds: {},
       selectedVideoSummary: null,
       uploadChecklistConfirmed: false,
       errorState: null,
@@ -171,12 +178,22 @@ function readSessionSnapshot(): SessionSnapshot {
   try {
     const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
     if (!raw) throw new Error('missing session')
-    const parsed = JSON.parse(raw) as Partial<SessionSnapshot>
+    const parsed = JSON.parse(raw) as LegacySessionSnapshot
+    const latestCompletedTaskIds = parsed.latestCompletedTaskIds ?? (
+      'latestCompletedTaskId' in parsed && typeof parsed.latestCompletedTaskId === 'string' && parsed.latestCompletedTaskId
+        ? { [(parsed.actionType === 'smash' ? 'smash' : 'clear') as ActionType]: parsed.latestCompletedTaskId }
+        : {}
+    )
+    const selectedCompareTaskIds = parsed.selectedCompareTaskIds ?? (
+      'selectedCompareTaskId' in parsed && typeof parsed.selectedCompareTaskId === 'string' && parsed.selectedCompareTaskId
+        ? { [(parsed.actionType === 'smash' ? 'smash' : 'clear') as ActionType]: parsed.selectedCompareTaskId }
+        : {}
+    )
     return {
-      actionType: 'clear',
+      actionType: parsed.actionType === 'smash' ? 'smash' : 'clear',
       taskId: parsed.taskId ?? '',
-      latestCompletedTaskId: parsed.latestCompletedTaskId ?? '',
-      selectedCompareTaskId: parsed.selectedCompareTaskId ?? '',
+      latestCompletedTaskIds,
+      selectedCompareTaskIds,
       selectedVideoSummary: parsed.selectedVideoSummary ?? null,
       uploadChecklistConfirmed: Boolean(parsed.uploadChecklistConfirmed),
       errorState: parsed.errorState ?? null,
@@ -186,8 +203,8 @@ function readSessionSnapshot(): SessionSnapshot {
     return {
       actionType: 'clear',
       taskId: '',
-      latestCompletedTaskId: '',
-      selectedCompareTaskId: '',
+      latestCompletedTaskIds: {},
+      selectedCompareTaskIds: {},
       selectedVideoSummary: null,
       uploadChecklistConfirmed: false,
       errorState: null,
@@ -292,9 +309,9 @@ export function getErrorRouteActions(errorState: ErrorState) {
 
 export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const initialSession = readSessionSnapshot()
-  const [actionType, setActionType] = useState<ActionType>(initialSession.actionType)
+  const [actionType, setActionTypeState] = useState<ActionType>(initialSession.actionType)
   const [taskId, setTaskId] = useState(initialSession.taskId)
-  const [latestCompletedTaskId, setLatestCompletedTaskId] = useState(initialSession.latestCompletedTaskId)
+  const [latestCompletedTaskIds, setLatestCompletedTaskIds] = useState<ActionTaskStateMap>(initialSession.latestCompletedTaskIds)
   const [status, setStatus] = useState<TaskStatus | ''>('')
   const [stage, setStage] = useState<TaskStage | ''>('')
   const [progressPercent, setProgressPercent] = useState(0)
@@ -305,7 +322,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<TaskHistoryItem[]>([])
   const [comparison, setComparison] = useState<RetestComparison | null>(null)
   const [comparisonUnavailableReason, setComparisonUnavailableReason] = useState<ComparisonResponse['unavailableReason'] | null>(null)
-  const [selectedCompareTaskId, setSelectedCompareTaskId] = useState(initialSession.selectedCompareTaskId)
+  const [selectedCompareTaskIds, setSelectedCompareTaskIds] = useState<ActionTaskStateMap>(initialSession.selectedCompareTaskIds)
   const [selectedHistoryReport, setSelectedHistoryReport] = useState<ReportResult | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [selectedVideoSummary, setSelectedVideoSummary] = useState<LocalVideoSummary | null>(initialSession.selectedVideoSummary)
@@ -319,6 +336,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const pollingRef = useRef<number | null>(null)
   const lastFailureReasonRef = useRef<'server' | 'network' | null>(null)
 
+  const latestCompletedTaskId = latestCompletedTaskIds[actionType] ?? ''
+  const selectedCompareTaskId = selectedCompareTaskIds[actionType] ?? ''
   const selectedActionLabel = getActionLabel(actionType)
   const canOpenReportTab = Boolean(latestCompletedTaskId)
 
@@ -352,13 +371,26 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     setReport(null)
     setPoseResult(null)
     setComparison(null)
-    setSelectedCompareTaskId('')
+    setComparisonUnavailableReason(null)
     setSelectedHistoryReport(null)
     setFile(null)
     setSelectedVideoSummary(null)
     setUploadChecklistConfirmed(false)
     setErrorState(null)
   }, [stopPolling])
+
+  const setSelectedCompareTaskId = useCallback((value: string) => {
+    setSelectedCompareTaskIds((prev) => ({
+      ...prev,
+      [actionType]: value,
+    }))
+  }, [actionType])
+
+  const setActionType = useCallback((value: ActionType) => {
+    if (value === actionType) return
+    prepareFreshUpload()
+    setActionTypeState(value)
+  }, [actionType, prepareFreshUpload])
 
   const setFriendlyError = useCallback((errorCode?: FlowErrorCode | string, fallback?: string) => {
     lastFailureReasonRef.current = 'server'
@@ -384,7 +416,10 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     setPoseStatus(derivedStatuses.poseStatus)
 
     if (snapshot.status === 'completed') {
-      setLatestCompletedTaskId(snapshot.taskId)
+      setLatestCompletedTaskIds((prev) => ({
+        ...prev,
+        [snapshot.actionType]: snapshot.taskId,
+      }))
     }
 
     if (snapshot.error) {
@@ -446,7 +481,10 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     const payload = data as ComparisonResponse
     setComparison(payload.comparison ?? null)
     setComparisonUnavailableReason(payload.unavailableReason ?? null)
-    setSelectedCompareTaskId(payload.baselineTask.taskId)
+    setSelectedCompareTaskIds((prev) => ({
+      ...prev,
+      [payload.currentTask.actionType]: payload.baselineTask.taskId,
+    }))
     return payload
   }, [appendLog, latestCompletedTaskId, report?.taskId, taskId])
 
@@ -472,7 +510,10 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     setProgressPercent(100)
     setReport(reportPayload)
     setErrorState(null)
-    setLatestCompletedTaskId(activeTaskId)
+    setLatestCompletedTaskIds((prev) => ({
+      ...prev,
+      [reportPayload.actionType]: activeTaskId,
+    }))
     if (showSuccessLog) appendLog('已获取分析结果')
     await fetchHistory(reportPayload.actionType)
     await fetchPoseResult(activeTaskId, true)
@@ -528,7 +569,10 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       setComparison(null)
       setComparisonUnavailableReason(null)
       setSelectedHistoryReport(null)
-      setSelectedCompareTaskId('')
+      setSelectedCompareTaskIds((prev) => ({
+        ...prev,
+        [actionType]: '',
+      }))
 
       const response = await fetch(`${API_BASE}/api/tasks`, {
         method: 'POST',
@@ -675,11 +719,14 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const applyCustomComparison = useCallback(async (previousTaskId: string) => {
     const currentTaskId = report?.taskId ?? latestCompletedTaskId ?? taskId
     if (!currentTaskId || !previousTaskId) return null
-    setSelectedCompareTaskId(previousTaskId)
+    setSelectedCompareTaskIds((prev) => ({
+      ...prev,
+      [actionType]: previousTaskId,
+    }))
     const result = await fetchComparison(currentTaskId, previousTaskId)
     if (result) appendLog('已切换到自定义历史样本对比')
     return result
-  }, [appendLog, fetchComparison, latestCompletedTaskId, report?.taskId, taskId])
+  }, [actionType, appendLog, fetchComparison, latestCompletedTaskId, report?.taskId, taskId])
 
   const ensureLatestReportLoaded = useCallback(async () => {
     const targetTaskId = latestCompletedTaskId || taskId
@@ -714,8 +761,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
       actionType,
       taskId,
-      latestCompletedTaskId,
-      selectedCompareTaskId,
+      latestCompletedTaskIds,
+      selectedCompareTaskIds,
       selectedVideoSummary,
       uploadChecklistConfirmed,
       errorState,
@@ -725,8 +772,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     actionType,
     debugEnabled,
     errorState,
-    latestCompletedTaskId,
-    selectedCompareTaskId,
+    latestCompletedTaskIds,
+    selectedCompareTaskIds,
     selectedVideoSummary,
     taskId,
     uploadChecklistConfirmed,

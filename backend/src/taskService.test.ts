@@ -332,6 +332,86 @@ function buildSevereCoveragePoseResult(): PoseAnalysisResult {
   };
 }
 
+function buildSmashPoseResult(): PoseAnalysisResult {
+  return {
+    engine: 'mediapipe-pose',
+    frameCount: 12,
+    detectedFrameCount: 10,
+    summary: {
+      bestFrameIndex: 6,
+      usableFrameCount: 8,
+      coverageRatio: 0.6667,
+      medianStabilityScore: 0.78,
+      medianBodyTurnScore: 0.52,
+      medianRacketArmLiftScore: 0.48,
+      scoreVariance: 0.011,
+      temporalConsistency: 0.46,
+      motionContinuity: 0.52,
+      rejectionReasons: [],
+      rejectionReasonDetails: [],
+      humanSummary: '杀球样本已经完成姿态摘要计算。',
+      viewProfile: 'rear_left_oblique',
+      viewConfidence: 0.84,
+      viewStability: 0.75,
+      dominantRacketSide: 'right',
+      racketSideConfidence: 0.71,
+      bestPreparationFrameIndex: 6,
+      phaseCandidates: {
+        preparation: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 5,
+          windowEndFrameIndex: 6,
+          score: 0.57,
+          sourceMetric: 'contactPreparationScore',
+          detectionStatus: 'detected',
+        },
+        backswing: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 5,
+          windowEndFrameIndex: 6,
+          score: 0.58,
+          sourceMetric: 'hittingArmPreparationScore',
+          detectionStatus: 'detected',
+        },
+        contactCandidate: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 6,
+          windowEndFrameIndex: 6,
+          score: 0.49,
+          sourceMetric: 'compositeScore',
+          detectionStatus: 'detected',
+        },
+        followThrough: {
+          anchorFrameIndex: 7,
+          windowStartFrameIndex: 6,
+          windowEndFrameIndex: 7,
+          score: 0.46,
+          sourceMetric: 'postContactMotionScore',
+          detectionStatus: 'detected',
+        },
+      },
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.38, peak: 0.54, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        shoulderHipRotationScore: { median: 0.41, peak: 0.58, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        trunkCoilScore: { median: 0.36, peak: 0.52, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        hittingArmPreparationScore: { median: 0.42, peak: 0.59, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        wristAboveShoulderConfidence: { median: 0.33, peak: 0.51, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        racketSideElbowHeightScore: { median: 0.35, peak: 0.5, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        elbowExtensionScore: { median: 0.31, peak: 0.48, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        contactPreparationScore: { median: 0.44, peak: 0.57, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      },
+      debugCounts: {
+        tooSmallCount: 0,
+        lowStabilityCount: 0,
+        unknownViewCount: 0,
+        usableFrameCount: 8,
+        detectedFrameCount: 10,
+      },
+    },
+    frames: [],
+  };
+}
+
 test('runAnalysisPipeline completes low-confidence sample and still stores a report', async () => {
   await withTempWorkspace(async () => {
     const originalDelay = process.env.MOCK_ANALYSIS_DELAY_MS;
@@ -404,6 +484,49 @@ test('runAnalysisPipeline completes boundary coverage sample as low confidence',
       assert.ok(reportRow);
       assert.equal(report?.scoringEvidence?.analysisDisposition, 'low_confidence');
       assert.ok(report?.scoringEvidence?.rejectionDecision?.lowConfidenceReasons?.includes('insufficient_pose_coverage'));
+    } finally {
+      if (originalDelay === undefined) {
+        delete process.env.MOCK_ANALYSIS_DELAY_MS;
+      } else {
+        process.env.MOCK_ANALYSIS_DELAY_MS = originalDelay;
+      }
+    }
+  });
+});
+
+test('runAnalysisPipeline completes smash sample with public smash report payload', async () => {
+  await withTempWorkspace(async () => {
+    const originalDelay = process.env.MOCK_ANALYSIS_DELAY_MS;
+    process.env.MOCK_ANALYSIS_DELAY_MS = '0';
+
+    try {
+      const task = createTask('smash');
+      const stored = writePoseResult(task.taskId, buildSmashPoseResult());
+      saveTask({
+        ...task,
+        status: 'processing',
+        stage: 'generating_report',
+        progressPercent: 90,
+        startedAt: new Date().toISOString(),
+        artifacts: {
+          ...task.artifacts,
+          poseResultPath: stored.absolutePath,
+        },
+      });
+
+      await runAnalysisPipelineForTests(task.taskId);
+
+      const completedTask = getTask(task.taskId);
+      const reportRow = getReportRow(task.taskId);
+      const report = reportRow ? JSON.parse(reportRow.report_json) as ReportResult : null;
+
+      assert.equal(completedTask?.status, 'completed');
+      assert.equal(completedTask?.stage, 'completed');
+      assert.ok(reportRow);
+      assert.equal(report?.actionType, 'smash');
+      assert.equal(report?.scoringEvidence?.scoringModelVersion, 'rule-v3-smash-shadow');
+      assert.equal(report?.standardComparison?.standardReference.imagePath, '/standard-references/smash-reference-real.jpg');
+      assert.ok(report?.issues.some((item) => item.issueCategory === 'smash_loading_gap'));
     } finally {
       if (originalDelay === undefined) {
         delete process.env.MOCK_ANALYSIS_DELAY_MS;
@@ -674,5 +797,67 @@ test('getRetestComparison disables comparison across scoring model versions', as
     assert.ok(comparison);
     assert.equal(comparison.comparison, null);
     assert.equal(comparison.unavailableReason, 'scoring_model_mismatch');
+  });
+});
+
+test('getRetestComparison returns null across different action types', async () => {
+  await withTempWorkspace(async () => {
+    const clearTask = createTask('clear');
+    const smashTask = createTask('smash');
+    const now = new Date().toISOString();
+
+    saveTask({
+      ...clearTask,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      completedAt: now,
+    });
+    saveTask({
+      ...smashTask,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      completedAt: now,
+      baselineTaskId: clearTask.taskId,
+    });
+
+    const clearReport: ReportResult = {
+      taskId: clearTask.taskId,
+      actionType: 'clear',
+      totalScore: 70,
+      summaryText: 'clear',
+      dimensionScores: [{ name: '身体准备', score: 70 }],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: true,
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v3-phase-aware',
+      },
+    };
+    const smashReport: ReportResult = {
+      taskId: smashTask.taskId,
+      actionType: 'smash',
+      totalScore: 72,
+      summaryText: 'smash',
+      dimensionScores: [{ name: '身体加载', score: 72 }],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: true,
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v3-smash-shadow',
+      },
+    };
+
+    saveReport(clearTask.taskId, JSON.stringify(clearReport), clearReport.totalScore, clearReport.summaryText, clearReport.poseBased);
+    saveReport(smashTask.taskId, JSON.stringify(smashReport), smashReport.totalScore, smashReport.summaryText, smashReport.poseBased);
+
+    const comparison = getRetestComparison(smashTask.taskId, clearTask.taskId);
+
+    assert.equal(comparison, null);
   });
 });

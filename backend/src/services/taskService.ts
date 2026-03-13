@@ -18,13 +18,12 @@ import type {
 import { createTaskRecord, enterStage, failTask, markTaskStarted, markTaskUploaded, mergeArtifacts, completeTask } from '../domain/analysisTask';
 import { fileExists, prepareTaskArtifactsDir, readJsonFile, storeUploadedVideo, writePoseResult, writePreprocessManifest, writeReportFile } from './artifactStore';
 import { buildRuleBasedResult, getPoseQualityFailure } from './reportScoringService';
+import { buildShadowRuleBasedResult } from './shadowReportScoringService';
 import { getMaxFileSizeBytes, extractFrames, probeVideo, validateUploadedVideo } from './preprocessService';
 import { buildPoseSummary, readPoseResult, runPoseAnalysis } from './poseService';
 import { buildErrorSnapshot } from './errorCatalog';
 import { createTask as createTaskEntry, findLatestCompletedTask, getReportRow, getTask, listCompletedHistory, listProcessingTasks, saveReport, saveTask } from './taskRepository';
 import { toTaskResource } from '../types/task';
-
-type RecognizedActionType = ActionType | 'smash';
 
 const PHASE_STATUS_WEIGHTS = {
   ok: 0,
@@ -57,7 +56,7 @@ function getUploadBaseName(fileName: string) {
 }
 
 function getActionLabel(actionType: ActionType) {
-  return '正手高远球';
+  return actionType === 'smash' ? '杀球' : '正手高远球';
 }
 
 function uniqueNames(names: Array<string | undefined>) {
@@ -223,20 +222,21 @@ function readReport(taskId: string) {
   return row ? JSON.parse(row.report_json) as ReportResult : undefined;
 }
 
-function validateActionType(actionType: string): actionType is RecognizedActionType {
+function validateActionType(actionType: string): actionType is ActionType {
   return actionType === 'clear' || actionType === 'smash';
 }
 
-export function assertActionType(actionType: string): asserts actionType is RecognizedActionType {
+export function assertActionType(actionType: string): asserts actionType is ActionType {
   if (!validateActionType(actionType)) {
     throw Object.assign(new Error('invalid action type'), { code: 'invalid_action_type' as const });
   }
 }
 
-export function assertSupportedActionType(actionType: RecognizedActionType): asserts actionType is ActionType {
-  if (actionType !== 'clear') {
-    throw Object.assign(new Error('only clear is supported in the current MVP'), { code: 'unsupported_action_scope' as const });
+function buildRuntimeReport(task: AnalysisTaskRecord, poseResult: PoseAnalysisResult): ReportResult {
+  if (task.actionType === 'smash') {
+    return buildShadowRuleBasedResult(task, poseResult, { shadowActionType: 'smash' });
   }
+  return buildRuleBasedResult(task, poseResult);
 }
 
 export function createAnalysisTask(actionType: ActionType) {
@@ -407,9 +407,6 @@ async function executeReportStage(task: AnalysisTaskRecord) {
   }
 
   await delay(getAnalysisDelayMs());
-  if (task.actionType !== 'clear') {
-    throw buildErrorSnapshot('unsupported_action_scope', 'only clear is supported in the current MVP');
-  }
 
   const poseResult = readPoseResult(task.artifacts.poseResultPath);
   if (!poseResult) {
@@ -421,7 +418,7 @@ async function executeReportStage(task: AnalysisTaskRecord) {
     throw buildErrorSnapshot(qualityFailure.code, qualityFailure.message);
   }
 
-  const report = buildRuleBasedResult(task, poseResult);
+  const report = buildRuntimeReport(task, poseResult);
   const reportFile = writeReportFile(task.taskId, report);
   saveReport(task.taskId, JSON.stringify(report), report.totalScore, report.summaryText, report.poseBased);
   return mergeArtifacts(task, {
@@ -440,10 +437,6 @@ async function runAnalysisPipeline(taskId: string) {
   if (!task || task.status !== 'processing') return;
 
   try {
-    if (task.actionType !== 'clear') {
-      throw buildErrorSnapshot('unsupported_action_scope', 'only clear is supported in the current MVP');
-    }
-
     if (task.stage === 'validating') {
       task = saveTask(await executeValidatingStage(task));
       task = saveTask(enterStage(task, 'extracting_frames'));

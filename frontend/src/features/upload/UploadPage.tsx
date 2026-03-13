@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatFileSize } from '../../components/result-views/utils'
+import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { BottomCTA } from '../../components/ui/BottomCTA'
 import { Notice } from '../../components/ui/Notice'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 import {
+  ACTION_SPECIAL_REMINDER_COPY,
   buildLocalVideoSummary,
   buildUploadReadinessItems,
   getUploadBlockingReasons,
@@ -19,6 +21,7 @@ function formatDuration(seconds?: number) {
 export function UploadPage() {
   const navigate = useNavigate()
   const {
+    actionType,
     taskId,
     latestCompletedTaskId,
     file,
@@ -98,6 +101,7 @@ export function UploadPage() {
   }
 
   const previousAttemptSummary = !file && errorState && selectedVideoSummary ? selectedVideoSummary : null
+  const actionReminder = ACTION_SPECIAL_REMINDER_COPY[actionType]
 
   return (
     <div className="page-stack">
@@ -111,10 +115,8 @@ export function UploadPage() {
         <div className="section-head">
           <h2>当前分析动作</h2>
         </div>
-        <div className="pill-row">
-          <span className="choice-pill active">正手高远球</span>
-        </div>
-        <p className="muted-copy">当前为了保证结果可信度，只开放 {selectedActionLabel} 的正式分析。</p>
+        <ActionTypeSelector disabled={isBusy} />
+        <p className="muted-copy">当前上传、分析和报告都会按 {selectedActionLabel} 的正式口径执行。</p>
       </section>
 
       <section className="surface-card">
@@ -122,11 +124,12 @@ export function UploadPage() {
           <h2>上传约束提示</h2>
         </div>
         <div className="info-list compact">
-          <div className="list-row">当前正式支持：正手高远球；一段视频只分析一种动作</div>
+          <div className="list-row">当前正式支持：正手高远球、杀球；一段视频只分析一种动作</div>
           <div className="list-row">时长：{UPLOAD_CONSTRAINTS.minDurationSeconds}~{UPLOAD_CONSTRAINTS.maxDurationSeconds} 秒</div>
           <div className="list-row">机位：优先 {UPLOAD_CONSTRAINTS.recommendedAngles.join(' 或 ')}</div>
           <div className="list-row">画面：单人出镜、全身尽量完整入镜、避免逆光和遮挡</div>
           <div className="list-row">文件：{UPLOAD_CONSTRAINTS.supportedExtensions.join(' / ')}，建议小于 {Math.round(UPLOAD_CONSTRAINTS.defaultMaxFileSizeBytes / 1024 / 1024)}MB</div>
+          <div className="list-row">{actionReminder.title}专项：{actionReminder.description}</div>
         </div>
       </section>
 

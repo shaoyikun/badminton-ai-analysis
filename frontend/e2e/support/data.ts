@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type {
+  ActionType,
   ComparisonResponse,
   ErrorResponse,
   FlowErrorCode,
@@ -11,10 +12,10 @@ import type {
 } from '../../../shared/contracts'
 
 type SessionSnapshot = {
-  actionType: 'clear'
+  actionType: ActionType
   taskId: string
-  latestCompletedTaskId: string
-  selectedCompareTaskId: string
+  latestCompletedTaskIds: Partial<Record<ActionType, string>>
+  selectedCompareTaskIds: Partial<Record<ActionType, string>>
   selectedVideoSummary: null
   uploadChecklistConfirmed: boolean
   errorState: {
@@ -28,6 +29,11 @@ type SessionSnapshot = {
     secondaryAction: 'upload' | 'guide'
   } | null
   debugEnabled: boolean
+}
+
+type SessionSnapshotOverrides = Partial<SessionSnapshot> & {
+  latestCompletedTaskId?: string
+  selectedCompareTaskId?: string
 }
 
 function readJson<T>(filename: string) {
@@ -128,18 +134,101 @@ export const poseResponse: PoseAnalysisResult = {
 }
 
 export function buildSessionSnapshot(
-  overrides: Partial<SessionSnapshot> = {},
+  overrides: SessionSnapshotOverrides = {},
 ): SessionSnapshot {
+  const actionType = overrides.actionType ?? 'clear'
+  const latestCompletedTaskIds = overrides.latestCompletedTaskIds ?? (
+    overrides.latestCompletedTaskId
+      ? { [actionType]: overrides.latestCompletedTaskId }
+      : {}
+  )
+  const selectedCompareTaskIds = overrides.selectedCompareTaskIds ?? (
+    overrides.selectedCompareTaskId
+      ? { [actionType]: overrides.selectedCompareTaskId }
+      : {}
+  )
+
   return {
-    actionType: 'clear',
+    actionType,
     taskId: '',
-    latestCompletedTaskId: '',
-    selectedCompareTaskId: '',
+    latestCompletedTaskIds,
+    selectedCompareTaskIds,
     selectedVideoSummary: null,
     uploadChecklistConfirmed: false,
     errorState: null,
     debugEnabled: false,
     ...overrides,
+  }
+}
+
+export function buildActionScenario(actionType: ActionType) {
+  const label = actionType === 'smash' ? '杀球' : '正手高远球'
+  const summaryText = actionType === 'smash'
+    ? '这次杀球样本已经完成正式分析，可以继续回看加载、引拍和击球连贯性。'
+    : reportResponse.summaryText
+
+  const history: HistoryListResponse = {
+    ...historyResponse,
+    items: historyResponse.items.map((item, index) => ({
+      ...item,
+      actionType,
+      summaryText: actionType === 'smash'
+        ? `第 ${index + 1} 条${label}样本已完成分析，可继续做同动作复测。`
+        : item.summaryText,
+    })),
+  }
+
+  const report = {
+    ...reportResponse,
+    actionType,
+    summaryText,
+  }
+
+  const historyDetail: HistoryDetailResponse = {
+    ...historyDetailResponse,
+    task: {
+      ...historyDetailResponse.task,
+      actionType,
+    },
+    report,
+  }
+
+  const comparison: ComparisonResponse = {
+    ...comparisonResponse,
+    currentTask: {
+      ...comparisonResponse.currentTask,
+      actionType,
+    },
+    baselineTask: {
+      ...comparisonResponse.baselineTask,
+      actionType,
+    },
+  }
+
+  const reportTaskStatusByAction: TaskStatusResponse = {
+    ...reportTaskStatus,
+    actionType,
+  }
+
+  return {
+    history,
+    historyDetail,
+    report,
+    comparison,
+    currentTaskStatus: reportTaskStatusByAction,
+    createTaskResponse: {
+      ...processingLifecycle.created,
+      actionType,
+    } satisfies TaskStatusResponse,
+    uploadTaskResponse: {
+      ...processingLifecycle.uploaded,
+      actionType,
+      fileName: actionType === 'smash' ? 'valid-smash.mp4' : 'valid-clear.mp4',
+    },
+    startTaskResponse: {
+      ...processingLifecycle.processing,
+      actionType,
+    } satisfies TaskStatusResponse,
   }
 }
 

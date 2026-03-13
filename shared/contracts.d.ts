@@ -1,4 +1,4 @@
-export type ActionType = 'clear';
+export type ActionType = 'clear' | 'smash';
 
 export type ErrorCategory =
   | 'request_validation'

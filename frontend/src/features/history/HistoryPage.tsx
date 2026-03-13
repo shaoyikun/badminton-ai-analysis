@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../../components/ui/BottomSheet'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { getActionTypeLabel, getTrainingFocus, getValidBaselineItem } from '../../components/result-views/insights'
 import { formatTime } from '../../components/result-views/utils'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
@@ -66,9 +67,8 @@ export function HistoryPage() {
           <div className="section-head">
             <h2>当前历史范围</h2>
           </div>
-          <div className="pill-row">
-            <span className="choice-pill active">正手高远球</span>
-          </div>
+          <ActionTypeSelector />
+          <p className="muted-copy">当前只展示 {getActionTypeLabel(actionType)} 的历史样本和同动作复测基线。</p>
         </section>
 
         <section className="surface-card">

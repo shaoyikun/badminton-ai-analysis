@@ -4,8 +4,8 @@
 
 当前约束：
 
-- 正式动作范围已收敛为 `clear-only`
-- `smash` 已进入离线 shadow mode，但不属于公开 runtime 能力
+- 正式动作范围已开放为 `clear + smash`
+- `smash` 既有公开 runtime 能力，也保留独立离线回归基线
 - 仓库内 fixture 以轻量 artifact 为主，不假装拥有大规模真实标签
 - 当前 checked-in 回归集默认使用 artifact fixture，避免依赖本机必须安装 `ffprobe` / `ffmpeg`
 - CLI 仍支持 `videoPath`，本地环境装好相关依赖后可额外添加视频 smoke case

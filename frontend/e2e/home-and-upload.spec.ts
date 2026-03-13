@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { invalidImagePath, validVideoPath } from './support/data'
+import { buildActionScenario, invalidImagePath, validVideoPath } from './support/data'
 import { mockApi } from './support/mockApi'
 
 test('首页主漏斗可达性', async ({ page }) => {
@@ -74,4 +74,30 @@ test('提交后进入处理中页', async ({ page }) => {
   await expect(page.getByText('valid-clear.mp4')).toBeVisible()
   await expect(page.getByRole('heading', { name: '分步骤反馈' })).toBeVisible()
   await expect(page.getByText('视频已上传')).toBeVisible()
+})
+
+test('首页切换到杀球后可进入对应上传与处理中链路', async ({ page }) => {
+  await mockApi(page, buildActionScenario('smash'))
+
+  await page.goto('/')
+
+  await page.getByRole('tab', { name: '杀球' }).click()
+  await expect(page.getByRole('link', { name: '开始分析杀球' })).toBeVisible()
+  await expect(page.getByText('当前已正式开放杀球分析')).toBeVisible()
+
+  await page.getByRole('link', { name: '开始分析杀球' }).click()
+  await expect(page).toHaveURL(/\/guide$/)
+  await expect(page.getByRole('heading', { name: '杀球拍摄重点' })).toBeVisible()
+
+  await page.getByRole('link', { name: '我已了解，去上传' }).click()
+  await expect(page).toHaveURL(/\/upload$/)
+  await expect(page.getByText('杀球专项：优先保证身体加载、挥拍臂加载、击球候选到随挥这一整段都拍完整。')).toBeVisible()
+
+  await page.setInputFiles('input[type="file"]', validVideoPath)
+  await page.getByRole('checkbox', { name: '我已确认这段视频只包含当前动作，主体清晰、完整，且基本符合拍摄要求。' }).check()
+  await expect(page.getByRole('button', { name: '确认并开始分析' })).toBeEnabled()
+  await page.getByRole('button', { name: '确认并开始分析' }).click()
+
+  await expect(page).toHaveURL(/\/(processing|report)$/)
+  await expect(page.getByText('杀球', { exact: true }).first()).toBeVisible()
 })
