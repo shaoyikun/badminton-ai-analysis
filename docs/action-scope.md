@@ -11,6 +11,13 @@
 - 后端正式分析链路、评分逻辑、标准动作对照、错误文案都以 `clear` 为唯一支持动作
 - 旧客户端若仍显式传 `"smash"`，后端会返回 `unsupported_action_scope`
 
+同时，Phase 5 已补齐 `smash` 的离线 shadow mode：
+
+- backend 内部评分层已经有独立的 `smash` shadow profile
+- 离线评测已可通过 `./scripts/evaluate.sh --action-type smash` 单独运行
+- `smash` shadow 会使用独立的标准动作对照素材、文案、issue 标签和 baseline
+- 这条能力只服务于离线评测与开发验证，不改变公开 API / 前端正式入口
+
 ## 为什么这次不继续支持 Smash
 
 当前后端还不具备低风险的 `smash` 正式支持条件：
@@ -22,7 +29,12 @@
 - `viewProfile` 仍是轻量几何推断，不是时序视角分类器
 - 报告仍主要以 summary 聚合证据，不是逐帧因果解释
 
-前端虽然保留了 `smash` 标准参考素材，但这些素材目前只是未来扩动作的资产，不构成当前 runtime 支持。
+当前 `smash` shadow 的观测边界也仍然有限：
+
+- 只能判断身体加载、挥拍臂加载、击球候选到随挥的连贯性
+- 不能判断真实击球点、球速、落点
+- 不能判断球拍、羽球或触球质量
+- 不能直接替代 Phase 6 的公开协议、前端入口和历史/复测能力
 
 ## 兼容策略
 
@@ -39,3 +51,4 @@
 3. `standardComparison`、文案和参考图逻辑能独立输出 `smash`
 4. 至少能说明 `smash` 在机位、准备态、时序稳定性上的专属观测边界
 5. 能跑通离线评测，并证明 `smash` 不会把 `clear` 主链路回归带坏
+6. Phase 6 中公开协议、历史/comparison 和前端入口的改动，必须在独立阶段里一次收口，不与 shadow mode 混做

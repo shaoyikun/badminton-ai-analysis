@@ -25,7 +25,7 @@
 
 说明：
 - 截至 2026-03-13，正式 runtime 范围以 `clear-only` 为准
-- `smash` 只作为后续扩动作目标，不构成当前公开能力
+- `smash` 当前已进入离线 shadow mode，用于内部评分、标准对照和评测基线验证，但不构成当前公开能力
 - 是否重新开放 `smash` 以 `docs/action-scope.md` 和 `spec/PHASED-EVOLUTION-SPEC.md` 的 Phase 5-6 为准
 
 ### 输入约束

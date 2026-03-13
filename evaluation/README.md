@@ -5,6 +5,7 @@
 当前约束：
 
 - 正式动作范围已收敛为 `clear-only`
+- `smash` 已进入离线 shadow mode，但不属于公开 runtime 能力
 - 仓库内 fixture 以轻量 artifact 为主，不假装拥有大规模真实标签
 - 当前 checked-in 回归集默认使用 artifact fixture，避免依赖本机必须安装 `ffprobe` / `ffmpeg`
 - CLI 仍支持 `videoPath`，本地环境装好相关依赖后可额外添加视频 smoke case
@@ -26,6 +27,11 @@ evaluation/
       clear-poor-lighting-or-occlusion.pose.json
       clear-boundary-analyzable.pose.json
       clear-boundary-rejected.pose.json
+      smash-normal.pose.json
+      smash-weak-loading.pose.json
+      smash-arm-prep-gap.pose.json
+      smash-bad-camera.pose.json
+      smash-subject-too-small.pose.json
 ```
 
 ## Fixture 格式
@@ -34,13 +40,21 @@ evaluation/
 
 ```json
 {
-  "requiredCoverageTags": [
-    "bad_camera",
-    "subject_too_small",
-    "poor_lighting_or_occlusion",
-    "weak_preparation",
-    "stable_preparation"
-  ],
+  "requiredCoverageTagsByAction": {
+    "clear": [
+      "bad_camera",
+      "subject_too_small",
+      "poor_lighting_or_occlusion",
+      "weak_preparation",
+      "stable_preparation"
+    ],
+    "smash": [
+      "bad_camera",
+      "subject_too_small",
+      "weak_loading",
+      "stable_loading"
+    ]
+  },
   "fixtures": [
     {
       "id": "clear-under-rotation",
@@ -72,15 +86,17 @@ evaluation/
 
 约定：
 
-- `actionType` 当前只允许 `clear`
-- `requiredCoverageTags`
-  - checked-in baseline suite 必须声明并覆盖：
-    - `bad_camera`
-    - `subject_too_small`
-    - `poor_lighting_or_occlusion`
-    - `weak_preparation`
-    - `stable_preparation`
-  - 自定义 ad hoc suite 可以不声明；一旦声明，就会强制校验覆盖完整性
+- `actionType`
+  - checked-in baseline suite 当前允许：
+    - `clear`
+    - `smash`
+  - 其中 `smash` 只用于离线 shadow mode，不代表公开 runtime 已开放
+- `requiredCoverageTagsByAction`
+  - checked-in baseline suite 必须按动作声明并覆盖：
+    - `clear`：`bad_camera`、`subject_too_small`、`poor_lighting_or_occlusion`、`weak_preparation`、`stable_preparation`
+    - `smash`：`bad_camera`、`subject_too_small`、`weak_loading`、`stable_loading`
+  - 自定义 ad hoc suite 仍可继续使用旧的 `requiredCoverageTags`
+  - 一旦声明，就会强制校验覆盖完整性
 - `coverageTags`
   - 每个 fixture 都必须至少标记一个 tag
   - 用来说明这个样本守护的是哪一类最小回归场景
@@ -117,12 +133,15 @@ evaluation/
 
 ```bash
 make evaluate
+./scripts/evaluate.sh --action-type clear
+./scripts/evaluate.sh --action-type smash
 ```
 
 等价脚本：
 
 ```bash
 ./scripts/evaluate.sh
+./scripts/evaluate.sh --action-type smash
 ./scripts/evaluate.sh --json
 ./scripts/evaluate.sh --update-baseline
 ```
@@ -132,9 +151,13 @@ make evaluate
 - `make evaluate` / `./scripts/evaluate.sh`
   - 评测通过时返回 `0`
   - 遇到以下任一情况返回非零：
-    - fixture index 缺少 `requiredCoverageTags`
+    - fixture index 缺少 `requiredCoverageTagsByAction`
     - checked-in baseline 缺 case
     - current 与 baseline 有 drift
+- `--action-type`
+  - `all`：默认值，同时跑 `clear + smash`
+  - `clear`：只跑公开 clear 基线
+  - `smash`：只跑离线 shadow smash 基线
 - `--update-baseline`
   - 只有在明确接受新行为时才使用
   - 会刷新 `evaluation/baseline.json`
@@ -150,7 +173,8 @@ make evaluate
 - `rejectionReasons` 分布
 - `lowConfidenceReasons` 分布
 - `majorIssueLabels` 命中率与 miss case
-- `requiredCoverageTags` 的 required / present / missing 状态
+- `requiredCoverageTagsByAction` 的 required / present / missing 状态
+- 按动作分组的 fixture 数、disposition 分布、issue hit 和 baseline drift
 - `scoreVariance` / `temporalConsistency` / `motionContinuity` 聚合统计
 - baseline vs current 差异摘要
 
@@ -171,7 +195,7 @@ make evaluate
 - baseline drift
 - disposition match rate 下降
 - top issue hit rate 下降
-- `requiredCoverageTags` 缺失
+- `requiredCoverageTagsByAction` 缺失
 - `primaryErrorCode` 分布出现未解释变化
 
 如果只是预期内行为变化，也不要直接忽略；应先确认变化原因，再决定是否执行 `--update-baseline`。
@@ -185,6 +209,7 @@ make evaluate
 
 ```bash
 ./scripts/evaluate.sh --json
+./scripts/evaluate.sh --action-type smash --json
 ```
 
 5. 确认结果后刷新 baseline：
@@ -215,3 +240,4 @@ make evaluate
 - `repeatability` 仍依赖 `contactPreparationScore + scoreVariance + temporalConsistency + motionContinuity`
 - `camera quality` 仍依赖 `camera_suitability + invalid_camera_angle + view stability`
 - 某些专项特征不可观测时，仍会回退到旧 turn/lift 兼容特征；baseline 会记录 `fallbacksUsed`
+- `smash` shadow 当前只能判断身体加载、挥拍臂加载和击球前后连贯性，不能判断真实击球点、球速、落点或球拍/羽球质量

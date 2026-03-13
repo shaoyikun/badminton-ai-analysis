@@ -1,11 +1,19 @@
 {
-  "requiredCoverageTags": [
-    "bad_camera",
-    "subject_too_small",
-    "poor_lighting_or_occlusion",
-    "weak_preparation",
-    "stable_preparation"
-  ],
+  "requiredCoverageTagsByAction": {
+    "clear": [
+      "bad_camera",
+      "subject_too_small",
+      "poor_lighting_or_occlusion",
+      "weak_preparation",
+      "stable_preparation"
+    ],
+    "smash": [
+      "bad_camera",
+      "subject_too_small",
+      "weak_loading",
+      "stable_loading"
+    ]
+  },
   "fixtures": [
     {
       "id": "clear-normal",
@@ -156,6 +164,81 @@
       "coverageTags": ["stable_preparation"],
       "notes": "时序抖动较大但仍可完成报告",
       "reviewerNotes": "守护 Phase 4：insufficient_action_evidence 稳定落到 low_confidence"
+    },
+    {
+      "id": "smash-normal",
+      "actionType": "smash",
+      "input": {
+        "poseResultPath": "./pose/smash-normal.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["smash_contact_timing_gap"],
+        "analysisDisposition": "analyzable"
+      },
+      "coverageTags": ["stable_loading"],
+      "notes": "高质量 smash shadow 正常样例",
+      "reviewerNotes": "守护 smash shadow：高质量样本不复用 clear 模板与 issue 标签"
+    },
+    {
+      "id": "smash-weak-loading",
+      "actionType": "smash",
+      "input": {
+        "poseResultPath": "./pose/smash-weak-loading.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["smash_loading_gap"],
+        "analysisDisposition": "analyzable"
+      },
+      "coverageTags": ["weak_loading"],
+      "notes": "杀球前身体加载不足",
+      "reviewerNotes": "主要观察 smash_loading_gap 是否仍排在前列"
+    },
+    {
+      "id": "smash-arm-prep-gap",
+      "actionType": "smash",
+      "input": {
+        "poseResultPath": "./pose/smash-arm-prep-gap.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["smash_arm_preparation_gap"],
+        "analysisDisposition": "analyzable"
+      },
+      "coverageTags": ["weak_loading"],
+      "notes": "杀球挥拍臂加载不足",
+      "reviewerNotes": "主要观察 smash_arm_preparation_gap 是否仍稳定命中"
+    },
+    {
+      "id": "smash-bad-camera",
+      "actionType": "smash",
+      "input": {
+        "poseResultPath": "./pose/smash-bad-camera.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "poor",
+        "majorIssueLabels": ["evidence_quality_gap"],
+        "analysisDisposition": "low_confidence"
+      },
+      "coverageTags": ["bad_camera"],
+      "notes": "杀球前斜/机位不佳样例",
+      "reviewerNotes": "主要观察 invalid_camera_angle 与 low_confidence 是否稳定出现"
+    },
+    {
+      "id": "smash-subject-too-small",
+      "actionType": "smash",
+      "input": {
+        "poseResultPath": "./pose/smash-subject-too-small.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": [],
+        "analysisDisposition": "rejected"
+      },
+      "coverageTags": ["subject_too_small"],
+      "notes": "杀球主体过小导致的硬拒绝样例",
+      "reviewerNotes": "主要观察 subject_too_small_or_cropped 是否仍为首个硬拒绝原因"
     }
   ]
 }

@@ -7,7 +7,8 @@ import { readJsonFile, writePreprocessManifest } from '../services/artifactStore
 import { estimatePoseForTaskDir } from '../services/analysisService';
 import { getArtifactsDir } from '../services/database';
 import { extractFrames, probeVideo, validateUploadedVideo } from '../services/preprocessService';
-import { buildRuleBasedResult, getPoseQualityFailure } from '../services/reportScoringService';
+import { getPoseQualityFailure } from '../services/reportScoringService';
+import { buildShadowRuleBasedResult, type ShadowActionType } from '../services/shadowReportScoringService';
 import { buildDebugTaskRecord, loadDebugArtifactsContext } from './debugAlgorithmBaseline';
 
 export type EvaluationCameraQuality = 'good' | 'limited' | 'poor';
@@ -17,15 +18,25 @@ export type EvaluationCoverageTag =
   | 'subject_too_small'
   | 'poor_lighting_or_occlusion'
   | 'weak_preparation'
-  | 'stable_preparation';
+  | 'stable_preparation'
+  | 'weak_loading'
+  | 'stable_loading';
 
-export const DEFAULT_REQUIRED_COVERAGE_TAGS: EvaluationCoverageTag[] = [
-  'bad_camera',
-  'subject_too_small',
-  'poor_lighting_or_occlusion',
-  'weak_preparation',
-  'stable_preparation',
-];
+export const DEFAULT_REQUIRED_COVERAGE_TAGS_BY_ACTION: Record<ShadowActionType, EvaluationCoverageTag[]> = {
+  clear: [
+    'bad_camera',
+    'subject_too_small',
+    'poor_lighting_or_occlusion',
+    'weak_preparation',
+    'stable_preparation',
+  ],
+  smash: [
+    'bad_camera',
+    'subject_too_small',
+    'weak_loading',
+    'stable_loading',
+  ],
+};
 
 export interface EvaluationFixtureInput {
   videoPath?: string;
@@ -41,7 +52,7 @@ export interface EvaluationFixtureExpected {
 
 export interface EvaluationFixtureCase {
   id: string;
-  actionType: ActionType;
+  actionType: ShadowActionType;
   input: EvaluationFixtureInput;
   expected: EvaluationFixtureExpected;
   coverageTags: EvaluationCoverageTag[];
@@ -51,6 +62,7 @@ export interface EvaluationFixtureCase {
 
 export interface EvaluationFixtureIndex {
   requiredCoverageTags?: EvaluationCoverageTag[];
+  requiredCoverageTagsByAction?: Partial<Record<ShadowActionType, EvaluationCoverageTag[]>>;
   fixtures: EvaluationFixtureCase[];
 }
 
@@ -75,7 +87,7 @@ export interface EvaluationBaselineFile {
 
 export interface EvaluationCaseResult {
   id: string;
-  actionType: ActionType;
+  actionType: ShadowActionType;
   inputMode: 'video' | 'preprocess' | 'pose';
   coverageTags: EvaluationCoverageTag[];
   expected: EvaluationFixtureExpected;
@@ -107,6 +119,25 @@ export interface EvaluationCaseResult {
   };
   notes?: string;
   reviewerNotes?: string;
+}
+
+export interface EvaluationActionSummary {
+  totalFixtures: number;
+  dispositionDistribution: Record<string, number>;
+  coverageStatus: {
+    required: EvaluationCoverageTag[];
+    present: EvaluationCoverageTag[];
+    missing: EvaluationCoverageTag[];
+  };
+  issueHit: {
+    expectedLabelCount: number;
+    matchedLabelCount: number;
+    hitRate: number;
+  };
+  baselineComparison: {
+    missingBaselineCount: number;
+    changedCaseCount: number;
+  };
 }
 
 export interface EvaluationAggregateReport {
@@ -150,6 +181,7 @@ export interface EvaluationAggregateReport {
         differences: string[];
       }>;
     };
+    byAction: Partial<Record<ShadowActionType, EvaluationActionSummary>>;
   };
   cases: EvaluationCaseResult[];
 }
@@ -169,10 +201,12 @@ type EvaluateFixtureOptions = {
 };
 
 type EvaluateSuiteOptions = EvaluateFixtureOptions & {
+  actionTypeFilter?: ShadowActionType | 'all';
   indexPath?: string;
 };
 
 type LoadFixtureIndexOptions = {
+  actionTypeFilter: ShadowActionType | 'all';
   requireDeclaredCoverageTags: boolean;
 };
 
@@ -238,6 +272,11 @@ function buildTaskRecord(
   };
 }
 
+function toRuntimeActionType(actionType: ShadowActionType): ActionType {
+  // Public runtime remains clear-only in Phase 5; shadow smash evaluation overrides the action downstream.
+  return actionType === 'smash' ? 'clear' : actionType;
+}
+
 function requireInputPath(
   indexDir: string,
   filePath: string | undefined,
@@ -267,7 +306,7 @@ function guessMimeType(filePath: string) {
   }
 }
 
-function classifyCameraQuality(report: ReportResult) {
+function classifyCameraQuality(report: Pick<ReportResult, 'scoringEvidence'>) {
   const cameraSuitability = report.scoringEvidence?.cameraSuitability ?? 0;
   const lowConfidenceReasons = report.scoringEvidence?.rejectionDecision?.lowConfidenceReasons ?? [];
   if (cameraSuitability < 55 || lowConfidenceReasons.includes('invalid_camera_angle')) {
@@ -297,7 +336,7 @@ function getPrimaryErrorCode(
   return 'none';
 }
 
-function getActualIssueLabels(report: ReportResult, disposition: EvaluationDisposition) {
+function getActualIssueLabels(report: Pick<ReportResult, 'issues'>, disposition: EvaluationDisposition) {
   if (disposition === 'rejected') return [];
   return uniqueStrings(report.issues.map((issue) => issue.issueCategory ?? issue.targetDimensionKey ?? issue.title));
 }
@@ -394,17 +433,37 @@ function loadFixtureIndex(indexPath: string, options: LoadFixtureIndexOptions) {
     throw new Error(`fixture index is empty: ${indexPath}`);
   }
 
-  const requiredCoverageTags = index.requiredCoverageTags ?? [];
-  if (options.requireDeclaredCoverageTags && requiredCoverageTags.length === 0) {
-    throw new Error(`fixture index must declare requiredCoverageTags: ${indexPath}`);
+  const selectedFixtures = options.actionTypeFilter === 'all'
+    ? index.fixtures
+    : index.fixtures.filter((fixture) => fixture.actionType === options.actionTypeFilter);
+  if (selectedFixtures.length === 0) {
+    throw new Error(`fixture index does not contain actionType=${options.actionTypeFilter}: ${indexPath}`);
   }
 
-  for (const fixture of index.fixtures) {
+  const declaredRequiredCoverageTags = options.actionTypeFilter === 'all'
+    ? (index.requiredCoverageTagsByAction
+      ? [
+        ...new Set(
+          Object.values(index.requiredCoverageTagsByAction)
+            .flatMap((tags) => tags ?? []),
+        ),
+      ]
+      : (index.requiredCoverageTags ?? []))
+    : (index.requiredCoverageTagsByAction?.[options.actionTypeFilter] ?? index.requiredCoverageTags ?? []);
+  const requiredCoverageTags = declaredRequiredCoverageTags.length > 0
+    ? declaredRequiredCoverageTags
+    : (options.actionTypeFilter === 'all' ? [] : []);
+
+  if (options.requireDeclaredCoverageTags && requiredCoverageTags.length === 0) {
+    throw new Error(`fixture index must declare requiredCoverageTags or requiredCoverageTagsByAction: ${indexPath}`);
+  }
+
+  for (const fixture of selectedFixtures) {
     if (!fixture.id) {
       throw new Error('fixture id is required');
     }
-    if (fixture.actionType !== 'clear') {
-      throw new Error(`fixture "${fixture.id}" must use clear actionType in clear-only mode`);
+    if (fixture.actionType !== 'clear' && fixture.actionType !== 'smash') {
+      throw new Error(`fixture "${fixture.id}" must use clear or smash actionType`);
     }
     if (
       !fixture.input?.videoPath
@@ -419,14 +478,18 @@ function loadFixtureIndex(indexPath: string, options: LoadFixtureIndexOptions) {
   }
 
   if (requiredCoverageTags.length > 0) {
-    const presentCoverageTags = new Set(index.fixtures.flatMap((fixture) => fixture.coverageTags));
+    const presentCoverageTags = new Set(selectedFixtures.flatMap((fixture) => fixture.coverageTags));
     const missingCoverageTags = requiredCoverageTags.filter((tag) => !presentCoverageTags.has(tag));
     if (missingCoverageTags.length > 0) {
       throw new Error(`fixture index is missing requiredCoverageTags: ${missingCoverageTags.join(', ')}`);
     }
   }
 
-  return index;
+  return {
+    ...index,
+    requiredCoverageTags,
+    fixtures: selectedFixtures,
+  };
 }
 
 async function executeVideoFixture(
@@ -453,7 +516,7 @@ async function executeVideoFixture(
   const poseResult = await estimatePose(preprocessDir);
 
   return {
-    task: buildTaskRecord(taskId, fixture.actionType, { metadata, artifacts }, now),
+    task: buildTaskRecord(taskId, toRuntimeActionType(fixture.actionType), { metadata, artifacts }, now),
     poseResult,
     cleanup: () => {
       fs.rmSync(path.join(getArtifactsDir(), 'tasks', taskId), { recursive: true, force: true });
@@ -486,7 +549,7 @@ async function executePoseFixture(
     const preprocessDir = requireInputPath(indexDir, fixture.input.preprocessDir, 'input.preprocessDir', fixture.id);
     const context = loadDebugArtifactsContext(preprocessDir);
     return {
-      task: buildTaskRecord(`evaluation_${sanitizeFixtureId(fixture.id)}`, fixture.actionType, {
+      task: buildTaskRecord(`evaluation_${sanitizeFixtureId(fixture.id)}`, toRuntimeActionType(fixture.actionType), {
         artifacts: context.artifacts,
       }, now),
       poseResult,
@@ -494,7 +557,7 @@ async function executePoseFixture(
   }
 
   return {
-    task: buildTaskRecord(`evaluation_${sanitizeFixtureId(fixture.id)}`, fixture.actionType, undefined, now),
+    task: buildTaskRecord(`evaluation_${sanitizeFixtureId(fixture.id)}`, toRuntimeActionType(fixture.actionType), undefined, now),
     poseResult,
   };
 }
@@ -529,7 +592,9 @@ export async function evaluateFixtureCase(
   const execution = await executeFixture(fixture, indexDir, options);
 
   try {
-    const report = buildRuleBasedResult(execution.task, execution.poseResult);
+    const report = buildShadowRuleBasedResult(execution.task, execution.poseResult, {
+      shadowActionType: fixture.actionType,
+    });
     const analysisDisposition = report.scoringEvidence?.analysisDisposition ?? 'analyzable';
     const topIssueLabels = getActualIssueLabels(report, analysisDisposition);
     const lowConfidenceReasons = report.scoringEvidence?.rejectionDecision?.lowConfidenceReasons ?? [];
@@ -616,6 +681,7 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
   const baseline = options.baseline ?? loadBaselineFile(baselinePath);
   const isDefaultIndex = path.resolve(indexPath) === path.resolve(getDefaultIndexPath());
   const index = loadFixtureIndex(indexPath, {
+    actionTypeFilter: options.actionTypeFilter ?? 'all',
     requireDeclaredCoverageTags: isDefaultIndex,
   });
   const indexDir = path.dirname(indexPath);
@@ -632,7 +698,10 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
   const nextBaseline: EvaluationBaselineFile = {
     schemaVersion: 1,
     generatedAt: options.now?.() ?? nowIso(),
-    fixtures: Object.fromEntries(results.map((result) => [result.id, toBaselineCase(result)])),
+    fixtures: {
+      ...(baseline?.fixtures ?? {}),
+      ...Object.fromEntries(results.map((result) => [result.id, toBaselineCase(result)])),
+    },
   };
 
   const successCount = results.filter((result) => result.actual.analysisDisposition !== 'rejected').length;
@@ -668,6 +737,43 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
       id: result.id,
       differences: result.baseline.differences,
     }));
+  const actionSummaries = Object.fromEntries(
+    (['clear', 'smash'] as const)
+      .map((actionType) => {
+        const actionResults = results.filter((result) => result.actionType === actionType);
+        if (actionResults.length === 0) return null;
+        const actionRequiredCoverageTags = index.requiredCoverageTagsByAction?.[actionType]
+          ?? DEFAULT_REQUIRED_COVERAGE_TAGS_BY_ACTION[actionType]
+          ?? [];
+        const actionPresentCoverageTags = [...new Set(actionResults.flatMap((result) => result.coverageTags))].sort();
+        const actionMatchedLabelCount = actionResults.reduce((sum, result) => sum + result.expectationCheck.matchedIssueLabels.length, 0);
+        const actionExpectedLabelCount = actionResults.reduce((sum, result) => sum + result.expected.majorIssueLabels.length, 0);
+        const actionDispositionDistribution: Record<string, number> = {};
+        for (const actionResult of actionResults) {
+          actionDispositionDistribution[actionResult.actual.analysisDisposition] = (actionDispositionDistribution[actionResult.actual.analysisDisposition] ?? 0) + 1;
+        }
+
+        return [actionType, {
+          totalFixtures: actionResults.length,
+          dispositionDistribution: actionDispositionDistribution,
+          coverageStatus: {
+            required: actionRequiredCoverageTags,
+            present: actionPresentCoverageTags,
+            missing: actionRequiredCoverageTags.filter((tag) => !actionPresentCoverageTags.includes(tag)),
+          },
+          issueHit: {
+            expectedLabelCount: actionExpectedLabelCount,
+            matchedLabelCount: actionMatchedLabelCount,
+            hitRate: Number((actionMatchedLabelCount / Math.max(1, actionExpectedLabelCount)).toFixed(4)),
+          },
+          baselineComparison: {
+            missingBaselineCount: actionResults.filter((result) => !result.baseline.exists).length,
+            changedCaseCount: actionResults.filter((result) => result.baseline.changed).length,
+          },
+        } satisfies EvaluationActionSummary] as const;
+      })
+      .filter((entry): entry is readonly [ShadowActionType, EvaluationActionSummary] => Boolean(entry)),
+  ) as Partial<Record<ShadowActionType, EvaluationActionSummary>>;
 
   return {
     report: {
@@ -704,6 +810,7 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
           changedCaseCount: changedCases.length,
           changedCases,
         },
+        byAction: actionSummaries,
       },
       cases: results,
     },
@@ -732,6 +839,14 @@ export function renderEvaluationSummary(report: EvaluationAggregateReport) {
     `- motionContinuity: mean=${report.summary.motionContinuity.mean ?? 'null'}, p50=${report.summary.motionContinuity.p50 ?? 'null'}, min=${report.summary.motionContinuity.min ?? 'null'}, max=${report.summary.motionContinuity.max ?? 'null'}`,
     `- baselineChangedCases: ${report.summary.baselineComparison.changedCaseCount}`,
   ];
+
+  const actionEntries = Object.entries(report.summary.byAction ?? {});
+  if (actionEntries.length > 0) {
+    lines.push('', '## By Action', '');
+    for (const [actionType, actionSummary] of actionEntries) {
+      lines.push(`- ${actionType}: fixtures=${actionSummary.totalFixtures}; disposition=${Object.entries(actionSummary.dispositionDistribution).map(([key, value]) => `${key}=${value}`).join(', ') || 'none'}; issueHit=${actionSummary.issueHit.matchedLabelCount}/${actionSummary.issueHit.expectedLabelCount} (${actionSummary.issueHit.hitRate}); coverageMissing=${actionSummary.coverageStatus.missing.join(', ') || 'none'}; baselineChanged=${actionSummary.baselineComparison.changedCaseCount}`);
+    }
+  }
 
   if (report.summary.issueHit.missedCases.length > 0) {
     lines.push('', '## Missed Issue Labels', '');

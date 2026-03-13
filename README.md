@@ -203,13 +203,17 @@ curl http://127.0.0.1:5173/health
 
 ```bash
 make evaluate
+./scripts/evaluate.sh --action-type clear
+./scripts/evaluate.sh --action-type smash
 ```
 
 它会读取 `evaluation/fixtures/index.json`，回放 video / preprocess / pose fixtures，并与 `evaluation/baseline.json` 对比。
 
 当前约定：
 
-- `make evaluate` 默认会在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTags` 时返回非零
+- `make evaluate` 默认会同时跑 `clear + smash` 两条离线基线
+- `./scripts/evaluate.sh --action-type smash` 只跑 Phase 5 的 `smash` shadow baseline；公开 runtime 仍是 `clear-only`
+- `make evaluate` 默认会在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTagsByAction` 时返回非零
 - `successRate` 的定义是“非 `rejected` / 全部”；`low_confidence` 仍计入成功完成率
 - 只有明确接受新行为时，才允许执行 `./scripts/evaluate.sh --update-baseline`
 

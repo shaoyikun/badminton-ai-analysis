@@ -3,6 +3,7 @@
 说明：
 - 当前公开动作范围以 `docs/action-scope.md` 为准；截至 2026-03-13，runtime 为 `clear-only`
 - 若未来重新开放 `smash`，必须先满足 `spec/PHASED-EVOLUTION-SPEC.md` 中的对应阶段条件
+- Phase 5 已存在 dev-only `smash` shadow report，用于离线评测；它不等价于公开 runtime 契约
 
 ## 1. 分析结果结构
 ### report
@@ -30,6 +31,7 @@
 
 说明：
 - 当前实现中的报告主结构以 `ReportResult` 为准，定义见 `backend/src/types/task.ts`
+- `smash` shadow mode 会生成内部同形结果用于 evaluation/dev，但不会通过公开 API 返回
 - `issues` 已替代旧文档中的 `top_issues`
 - `history`、`comparison` 会在结果读取和复测对比场景中按需补充，不保证每次都有
 - `totalScore` 只作为辅助摘要信息，不作为产品主叙事
@@ -195,6 +197,7 @@
 - MVP 第一版允许先返回“本地静态参考素材 + 差异说明文案”，不强制要求一开始就接真人标准图片库
 - 若已有可用素材，可以进一步返回阶段性关键帧（如准备 / 引拍 / 击球），当前字段为 `phaseFrames`
 - 后续可再把 `imagePath` 升级为真实素材 URL / token / 媒体资源引用
+- Phase 5 起，离线 shadow `smash` 已要求使用独立素材与文案，不能继续复用 `clear` 的标准对照模板
 
 ### recognitionContext
 - viewProfile（可选：`rear` / `rear_left_oblique` / `rear_right_oblique` / `left_side` / `right_side` / `front_left_oblique` / `front_right_oblique` / `front` / `unknown`）
@@ -259,6 +262,8 @@
 
 说明：
 - `analysisDisposition` 用于区分“硬拒绝”“低置信完成”“正常可分析”
+- 公开 runtime 当前使用 `rule-v3-phase-aware`（clear-only）
+- 离线 shadow `smash` 使用独立 `scoringModelVersion=rule-v3-smash-shadow`
 - `cameraSuitability` 只参与置信度，不直接进入 `totalScore`
 - `fallbacksUsed` 用于标记哪些维度仍由旧 turn/lift 或全局稳定性代理补足
 - Phase 2 起，`swing_repeatability` 优先使用 `contactCandidate` / `followThrough` 阶段证据；若阶段证据不足，会明确记录为阶段回退

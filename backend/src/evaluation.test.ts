@@ -404,6 +404,132 @@ test('evaluateFixtureSuite tracks boundary coverage and temporal-noise low-confi
   });
 });
 
+test('evaluateFixtureSuite supports shadow smash filtering and action-scoped coverage tags', async () => {
+  await withTempDir(async (workspace) => {
+    const fixturesDir = path.join(workspace, 'evaluation', 'fixtures');
+    fs.mkdirSync(fixturesDir, { recursive: true });
+
+    const clearPosePath = path.join(fixturesDir, 'clear-case.pose.json');
+    fs.writeFileSync(clearPosePath, JSON.stringify(buildPoseResult({
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.32, peak: 0.5, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        shoulderHipRotationScore: { median: 0.3, peak: 0.48, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        trunkCoilScore: { median: 0.31, peak: 0.49, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        hittingArmPreparationScore: { median: 0.66, peak: 0.83, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        wristAboveShoulderConfidence: { median: 0.62, peak: 0.78, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        racketSideElbowHeightScore: { median: 0.61, peak: 0.76, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        elbowExtensionScore: { median: 0.59, peak: 0.74, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        contactPreparationScore: { median: 0.58, peak: 0.75, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      },
+    }), null, 2));
+
+    const smashPosePath = path.join(fixturesDir, 'smash-case.pose.json');
+    fs.writeFileSync(smashPosePath, JSON.stringify(buildPoseResult({
+      phaseCandidates: {
+        preparation: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 5,
+          windowEndFrameIndex: 6,
+          score: 0.56,
+          sourceMetric: 'contactPreparationScore',
+          detectionStatus: 'detected',
+        },
+        backswing: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 5,
+          windowEndFrameIndex: 6,
+          score: 0.58,
+          sourceMetric: 'hittingArmPreparationScore',
+          detectionStatus: 'detected',
+        },
+        contactCandidate: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 6,
+          windowEndFrameIndex: 6,
+          score: 0.61,
+          sourceMetric: 'compositeScore',
+          detectionStatus: 'detected',
+        },
+        followThrough: {
+          anchorFrameIndex: 7,
+          windowStartFrameIndex: 6,
+          windowEndFrameIndex: 7,
+          score: 0.68,
+          sourceMetric: 'postContactMotionScore',
+          detectionStatus: 'detected',
+        },
+      },
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.34, peak: 0.5, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        shoulderHipRotationScore: { median: 0.37, peak: 0.54, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        trunkCoilScore: { median: 0.3, peak: 0.47, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        hittingArmPreparationScore: { median: 0.63, peak: 0.79, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        wristAboveShoulderConfidence: { median: 0.66, peak: 0.82, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        racketSideElbowHeightScore: { median: 0.6, peak: 0.75, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        elbowExtensionScore: { median: 0.61, peak: 0.76, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+        contactPreparationScore: { median: 0.57, peak: 0.73, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      },
+      temporalConsistency: 0.76,
+      motionContinuity: 0.84,
+    }), null, 2));
+
+    const indexPath = path.join(fixturesDir, 'index.json');
+    fs.writeFileSync(indexPath, JSON.stringify({
+      requiredCoverageTagsByAction: {
+        clear: ['weak_preparation'],
+        smash: ['weak_loading'],
+      },
+      fixtures: [
+        {
+          id: 'clear-case',
+          actionType: 'clear',
+          input: { poseResultPath: './clear-case.pose.json' },
+          expected: {
+            cameraQuality: 'good',
+            majorIssueLabels: ['body_preparation_gap'],
+            analysisDisposition: 'analyzable',
+          },
+          coverageTags: ['weak_preparation'],
+        },
+        {
+          id: 'smash-case',
+          actionType: 'smash',
+          input: { poseResultPath: './smash-case.pose.json' },
+          expected: {
+            cameraQuality: 'good',
+            majorIssueLabels: ['smash_loading_gap'],
+            analysisDisposition: 'analyzable',
+          },
+          coverageTags: ['weak_loading'],
+        },
+      ],
+    }, null, 2));
+
+    const { report } = await evaluateFixtureSuite({
+      indexPath,
+      actionTypeFilter: 'smash',
+      baseline: {
+        schemaVersion: 1,
+        generatedAt: '2026-03-13T11:00:00.000Z',
+        fixtures: {},
+      },
+      now: () => '2026-03-13T12:00:00.000Z',
+    });
+
+    assert.equal(report.summary.totalFixtures, 1);
+    assert.equal(report.cases[0]?.actionType, 'smash');
+    assert.deepEqual(report.summary.coverageStatus.required, ['weak_loading']);
+    assert.deepEqual(report.summary.coverageStatus.present, ['weak_loading']);
+    assert.deepEqual(report.summary.coverageStatus.missing, []);
+    assert.equal(report.summary.byAction.smash?.totalFixtures, 1);
+    assert.deepEqual(report.summary.byAction.smash?.coverageStatus.required, ['weak_loading']);
+    assert.equal(report.summary.byAction.clear, undefined);
+    assert.deepEqual(report.summary.byAction.smash?.dispositionDistribution, {
+      analyzable: 1,
+    });
+  });
+});
+
 test('getEvaluationGateFailures flags missing baseline and drift', () => {
   const report: EvaluationAggregateReport = {
     summary: {
@@ -444,6 +570,26 @@ test('getEvaluationGateFailures flags missing baseline and drift', () => {
           },
         ],
       },
+      byAction: {
+        clear: {
+          totalFixtures: 2,
+          dispositionDistribution: { analyzable: 2 },
+          coverageStatus: {
+            required: ['stable_preparation'],
+            present: ['stable_preparation'],
+            missing: [],
+          },
+          issueHit: {
+            expectedLabelCount: 1,
+            matchedLabelCount: 1,
+            hitRate: 1,
+          },
+          baselineComparison: {
+            missingBaselineCount: 1,
+            changedCaseCount: 1,
+          },
+        },
+      },
     },
     cases: [],
   };
@@ -483,6 +629,27 @@ test('runEvaluateFixturesCli exits non-zero when gate failures remain', async ()
   assert.equal(exitCode, 1);
   assert.equal(writeCalls, 0);
   assert.match(output.join('\n'), /baselineChangedCases: 1/);
+});
+
+test('runEvaluateFixturesCli forwards --action-type to evaluation suite', async () => {
+  let forwardedActionType: string | undefined;
+
+  const exitCode = await runEvaluateFixturesCli(['--action-type', 'smash'], {
+    evaluateFixtureSuiteImpl: async (options) => {
+      forwardedActionType = options?.actionTypeFilter;
+      return {
+        report: buildMockCliReport(),
+        baseline: buildMockBaseline(),
+        baselinePath: '/tmp/baseline.json',
+        indexPath: '/tmp/index.json',
+      };
+    },
+    writeBaselineFileImpl: () => {},
+    stdout: () => {},
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(forwardedActionType, 'smash');
 });
 
 test('runEvaluateFixturesCli updates baseline and exits zero with --update-baseline', async () => {
@@ -555,6 +722,26 @@ function buildMockCliReport(
         missingBaselineCount: 0,
         changedCaseCount: 0,
         changedCases: [],
+      },
+      byAction: {
+        clear: {
+          totalFixtures: 1,
+          dispositionDistribution: { analyzable: 1 },
+          coverageStatus: {
+            required: ['stable_preparation'],
+            present: ['stable_preparation'],
+            missing: [],
+          },
+          issueHit: {
+            expectedLabelCount: 0,
+            matchedLabelCount: 0,
+            hitRate: 0,
+          },
+          baselineComparison: {
+            missingBaselineCount: 0,
+            changedCaseCount: 0,
+          },
+        },
       },
       ...overrides,
     },

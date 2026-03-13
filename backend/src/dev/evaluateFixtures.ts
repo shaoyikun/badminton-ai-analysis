@@ -5,6 +5,7 @@ export function parseArgs(argv: string[]) {
   let json = false;
   let updateBaseline = false;
   let indexPath: string | undefined;
+  let actionType: 'clear' | 'smash' | 'all' = 'all';
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -21,10 +22,19 @@ export function parseArgs(argv: string[]) {
       index += 1;
       continue;
     }
+    if (arg === '--action-type') {
+      const value = argv[index + 1];
+      if (value !== 'clear' && value !== 'smash' && value !== 'all') {
+        throw new Error(`invalid --action-type value: ${value ?? 'undefined'}`);
+      }
+      actionType = value;
+      index += 1;
+      continue;
+    }
     throw new Error(`unknown argument: ${arg}`);
   }
 
-  return { json, updateBaseline, indexPath };
+  return { json, updateBaseline, indexPath, actionType };
 }
 
 type CliDependencies = {
@@ -40,6 +50,7 @@ export async function runEvaluateFixturesCli(argv: string[], dependencies: CliDe
   const stdout = dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
   const { report, baseline, baselinePath, indexPath } = await evaluateFixtureSuiteImpl({
     indexPath: args.indexPath ? path.resolve(args.indexPath) : undefined,
+    actionTypeFilter: args.actionType,
   });
 
   if (args.updateBaseline) {
@@ -49,6 +60,7 @@ export async function runEvaluateFixturesCli(argv: string[], dependencies: CliDe
   if (args.json) {
     stdout(JSON.stringify({
       indexPath,
+      actionType: args.actionType,
       baselinePath,
       report,
       baselineUpdated: args.updateBaseline,
@@ -57,6 +69,7 @@ export async function runEvaluateFixturesCli(argv: string[], dependencies: CliDe
     stdout(renderEvaluationSummary(report));
     stdout('');
     stdout(`- indexPath: ${indexPath}`);
+    stdout(`- actionType: ${args.actionType}`);
     stdout(`- baselinePath: ${baselinePath}`);
     stdout(`- baselineUpdated: ${args.updateBaseline ? 'yes' : 'no'}`);
   }

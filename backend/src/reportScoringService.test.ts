@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { AnalysisTaskRecord, PoseAnalysisResult } from './types/task';
 import { buildRuleBasedResult, getPoseQualityFailure } from './services/reportScoringService';
+import { buildShadowRuleBasedResult } from './services/shadowReportScoringService';
 import { buildPoseSummary } from './services/poseService';
 
 function buildTask(): AnalysisTaskRecord {
@@ -1001,4 +1002,72 @@ test('hard rejection sample remains not analyzable', () => {
     code: 'body_not_detected',
     message: 'body was not detected reliably enough to generate a report',
   });
+});
+
+test('buildShadowRuleBasedResult keeps clear runtime output but emits smash-specific shadow report', () => {
+  const task = buildTask();
+  const poseResult = buildPoseResult({
+    specializedFeatureSummary: buildSpecializedSummary({
+      sideOnReadinessScore: { median: 0.38, peak: 0.54, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      shoulderHipRotationScore: { median: 0.41, peak: 0.58, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      trunkCoilScore: { median: 0.36, peak: 0.52, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      hittingArmPreparationScore: { median: 0.42, peak: 0.59, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      wristAboveShoulderConfidence: { median: 0.33, peak: 0.51, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      racketSideElbowHeightScore: { median: 0.35, peak: 0.5, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      elbowExtensionScore: { median: 0.31, peak: 0.48, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+      contactPreparationScore: { median: 0.44, peak: 0.57, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
+    }),
+    phaseCandidates: {
+      preparation: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.57,
+        sourceMetric: 'contactPreparationScore',
+        detectionStatus: 'detected',
+      },
+      backswing: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.58,
+        sourceMetric: 'hittingArmPreparationScore',
+        detectionStatus: 'detected',
+      },
+      contactCandidate: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 6,
+        windowEndFrameIndex: 6,
+        score: 0.49,
+        sourceMetric: 'compositeScore',
+        detectionStatus: 'detected',
+      },
+      followThrough: {
+        anchorFrameIndex: 7,
+        windowStartFrameIndex: 6,
+        windowEndFrameIndex: 7,
+        score: 0.46,
+        sourceMetric: 'postContactMotionScore',
+        detectionStatus: 'detected',
+      },
+    },
+    temporalConsistency: 0.46,
+    motionContinuity: 0.52,
+  });
+
+  const clearReport = buildRuleBasedResult(task, poseResult);
+  const shadowReport = buildShadowRuleBasedResult(task, poseResult, { shadowActionType: 'smash' });
+
+  assert.equal(clearReport.actionType, 'clear');
+  assert.equal(shadowReport.actionType, 'smash');
+  assert.equal(shadowReport.scoringEvidence?.scoringModelVersion, 'rule-v3-smash-shadow');
+  assert.deepEqual(shadowReport.dimensionScores.map((item) => item.name), ['证据质量', '身体加载', '挥拍臂加载', '击球连贯性']);
+  assert.equal(shadowReport.standardComparison?.standardReference.imagePath, '/standard-references/smash-reference-real.jpg');
+  assert.ok(shadowReport.standardComparison?.phaseFrames?.some((item) => item.imagePath === '/standard-references/smash-phase-load.jpg'));
+  assert.ok(shadowReport.issues.some((item) => item.issueCategory === 'smash_loading_gap'));
+  assert.ok(shadowReport.issues.some((item) => item.issueCategory === 'smash_arm_preparation_gap'));
+  assert.ok(shadowReport.issues.some((item) => item.issueCategory === 'smash_contact_timing_gap'));
+  assert.match(shadowReport.summaryText ?? '', /杀球/);
+  assert.doesNotMatch(shadowReport.standardComparison?.summaryText ?? '', /高远球/);
+  assert.equal(clearReport.standardComparison?.standardReference.imagePath, '/standard-references/clear-reference-real.jpg');
 });

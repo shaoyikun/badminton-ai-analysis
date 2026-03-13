@@ -6,9 +6,9 @@
 
 ### 当前结论
 
-- 当前项目状态：`phase_4_completed`
-- 当前已完成到：`Phase 4：置信度与失败策略校准`
-- 当前下一阶段：`Phase 5：Smash 影子模式`
+- 当前项目状态：`phase_5_completed`
+- 当前已完成到：`Phase 5：Smash 影子模式`
+- 当前下一阶段：`Phase 6：Smash 正式开放`
 - 当前下一阶段状态：`not_started`
 - 最后更新日期：`2026-03-13`
 
@@ -20,8 +20,8 @@
 | Phase 2 | `completed` | 分阶段报告、comparison 兼容策略、前端展示、测试与文档已完成 |
 | Phase 3 | `completed` | clear-only 离线评测基线、fixture/baseline、文档与 gate 已完成 |
 | Phase 4 | `completed` | 拒绝/低置信阈值、边界 fixture、文档与 gate 已完成 |
-| Phase 5 | `not_started` | 可开始为 smash 建立影子模式基线 |
-| Phase 6 | `blocked` | 依赖 smash 影子模式完成 |
+| Phase 5 | `completed` | smash shadow 评分口径、标准对照、fixtures/baseline 与离线评测过滤已完成 |
+| Phase 6 | `not_started` | clear 主链路与 smash shadow 基线已具备正式开放前置条件 |
 
 ### 状态枚举
 
@@ -275,6 +275,11 @@
 - runtime 仍保持 `clear-only`
 - 离线评测已经可以单独跑 `smash`
 - `smash` 不会复用 `clear` 的评分阈值与结论模板
+- 进入 Phase 6 前必须同时满足：
+  - clear 与 smash 双动作离线评测均通过
+  - smash shadow baseline 与标准对照素材/文案已经固定
+  - clear 主链路没有未解释回归
+  - 公开协议、前端入口、历史/comparison 支持在同一阶段一次收口
 
 ## 10. Phase 6：Smash 正式开放
 

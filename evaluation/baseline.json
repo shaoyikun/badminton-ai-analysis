@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-03-13T06:49:35.825Z",
+  "generatedAt": "2026-03-13T07:40:24.786Z",
   "fixtures": {
     "clear-normal": {
       "analysisDisposition": "analyzable",
@@ -183,6 +183,93 @@
       "motionContinuity": 0.44,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
+      ]
+    },
+    "smash-normal": {
+      "analysisDisposition": "analyzable",
+      "rejectionReasons": [],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [
+        "smash_contact_timing_gap"
+      ],
+      "totalScore": 82,
+      "confidenceScore": 76,
+      "scoreVariance": 0.008,
+      "temporalConsistency": 0.86,
+      "motionContinuity": 0.94,
+      "fallbacksUsed": [
+        "smash_phase_repeatability_fallback"
+      ]
+    },
+    "smash-weak-loading": {
+      "analysisDisposition": "analyzable",
+      "rejectionReasons": [],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [
+        "smash_loading_gap"
+      ],
+      "totalScore": 71,
+      "confidenceScore": 76,
+      "scoreVariance": 0.01,
+      "temporalConsistency": 0.82,
+      "motionContinuity": 0.91,
+      "fallbacksUsed": [
+        "smash_phase_repeatability_fallback"
+      ]
+    },
+    "smash-arm-prep-gap": {
+      "analysisDisposition": "analyzable",
+      "rejectionReasons": [],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [
+        "smash_arm_preparation_gap"
+      ],
+      "totalScore": 71,
+      "confidenceScore": 75,
+      "scoreVariance": 0.011,
+      "temporalConsistency": 0.8,
+      "motionContinuity": 0.9,
+      "fallbacksUsed": [
+        "smash_phase_repeatability_fallback"
+      ]
+    },
+    "smash-bad-camera": {
+      "analysisDisposition": "low_confidence",
+      "rejectionReasons": [
+        "invalid_camera_angle"
+      ],
+      "lowConfidenceReasons": [
+        "insufficient_action_evidence",
+        "invalid_camera_angle"
+      ],
+      "topIssueLabels": [
+        "evidence_quality_gap",
+        "smash_loading_gap",
+        "smash_arm_preparation_gap"
+      ],
+      "totalScore": 55,
+      "confidenceScore": 50,
+      "scoreVariance": 0.034,
+      "temporalConsistency": 0.16,
+      "motionContinuity": 0.44,
+      "fallbacksUsed": [
+        "smash_phase_repeatability_fallback"
+      ]
+    },
+    "smash-subject-too-small": {
+      "analysisDisposition": "rejected",
+      "rejectionReasons": [
+        "subject_too_small_or_cropped"
+      ],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [],
+      "totalScore": null,
+      "confidenceScore": null,
+      "scoreVariance": 0.019,
+      "temporalConsistency": 0.62,
+      "motionContinuity": 0.68,
+      "fallbacksUsed": [
+        "smash_phase_repeatability_fallback"
       ]
     }
   }
