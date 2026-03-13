@@ -2,12 +2,25 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-4);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.65;
+  }
 
   strong {
     font-size: 14px;
+    letter-spacing: -0.01em;
   }
 }
 
@@ -27,16 +40,16 @@
 }
 
 .info {
-  background: var(--color-info-soft);
+  background: linear-gradient(135deg, var(--color-info-soft) 0%, rgba(255, 255, 255, 0.96) 100%);
   border-color: rgba(47, 124, 246, 0.12);
 }
 
 .warning {
-  background: var(--color-warning-soft);
+  background: linear-gradient(135deg, var(--color-warning-soft) 0%, rgba(255, 255, 255, 0.96) 100%);
   border-color: rgba(232, 162, 58, 0.16);
 }
 
 .error {
-  background: var(--color-error-soft);
+  background: linear-gradient(135deg, var(--color-error-soft) 0%, rgba(255, 255, 255, 0.96) 100%);
   border-color: rgba(216, 91, 82, 0.14);
 }

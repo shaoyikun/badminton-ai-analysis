@@ -1,6 +1,10 @@
 .actionHint {
   display: grid;
   gap: var(--space-2);
+  padding: 14px 16px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(253, 238, 237, 0.92) 100%);
+  border: 1px solid rgba(216, 91, 82, 0.12);
 
   p {
     margin: 0;

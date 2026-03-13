@@ -3,3 +3,8 @@
   display: grid;
   gap: var(--space-3);
 }
+
+.requirementGrid > *,
+.errorGrid > * {
+  min-height: 112px;
+}

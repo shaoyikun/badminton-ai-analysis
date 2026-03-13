@@ -1,27 +1,28 @@
 @mixin surface-card {
   background: var(--color-bg-surface);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
 }
 
 @mixin section-title {
   margin: 0;
   font-size: 18px;
-  line-height: 1.35;
-  letter-spacing: -0.02em;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
 }
 
 @mixin eyebrow {
   font-size: 11px;
   font-weight: 700;
   line-height: 1.45;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  color: var(--color-brand-primary);
 }
 
 @mixin page-stack {
   display: grid;
-  gap: var(--space-4);
+  gap: 18px;
 }

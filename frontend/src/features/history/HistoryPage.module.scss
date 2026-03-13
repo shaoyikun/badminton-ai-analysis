@@ -13,9 +13,16 @@
   align-items: start;
   padding: 16px;
   border: 1px solid rgba(20, 33, 61, 0.08);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.88);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(232, 239, 251, 0.94) 100%);
   text-align: left;
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast);
 
   strong {
     display: block;
@@ -27,6 +34,10 @@
     color: var(--color-text-secondary);
     line-height: 1.6;
   }
+
+  &:active {
+    transform: translateY(1px);
+  }
 }
 
 .historyCardBaseline {
@@ -35,7 +46,7 @@
 }
 
 .historyCardActive {
-  box-shadow: 0 18px 40px rgba(47, 107, 255, 0.12);
+  box-shadow: var(--shadow-active);
 }
 
 .baselineTag {
@@ -69,6 +80,7 @@
 .secondaryAction {
   background: rgba(255, 255, 255, 0.84);
   border: 1px solid var(--color-border-default);
+  box-shadow: 0 8px 20px rgba(20, 51, 117, 0.06);
 }
 
 .primaryButton {

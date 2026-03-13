@@ -20,6 +20,11 @@ export function HomePage() {
         <p>
           整个流程已经收敛成正式移动端步骤：先做上传准备，再单独确认分析片段，最后查看这次最该先练什么。
         </p>
+        <div className={styles.heroStrip}>
+          <div className={styles.heroPill}>专业教练蓝</div>
+          <div className={styles.heroPill}>粗扫后再精分析</div>
+          <div className={styles.heroPill}>支持复测追踪</div>
+        </div>
         <div className={styles.heroMeta}>
           <div className={pageStyles.keyItem}>
             <span>当前动作</span>

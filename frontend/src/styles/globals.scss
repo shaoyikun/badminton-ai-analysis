@@ -6,9 +6,10 @@
 
 html {
   background:
-    radial-gradient(circle at top left, rgba(47, 107, 255, 0.16), transparent 30%),
-    radial-gradient(circle at top right, rgba(91, 182, 255, 0.12), transparent 24%),
-    linear-gradient(180deg, #fbfcff 0%, #eef3ff 100%);
+    radial-gradient(circle at top left, rgba(47, 107, 255, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(91, 182, 255, 0.18), transparent 22%),
+    linear-gradient(180deg, #f8fbff 0%, #ebf2ff 52%, #edf3ff 100%);
+  color-scheme: light;
 }
 
 body {
@@ -34,6 +35,24 @@ textarea {
 button {
   border: none;
   background: none;
+  color: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(47, 107, 255, 0.38);
+  outline-offset: 2px;
 }
 
 img,

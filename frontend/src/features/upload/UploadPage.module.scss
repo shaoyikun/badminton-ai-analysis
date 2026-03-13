@@ -8,10 +8,13 @@
   display: grid;
   gap: var(--space-2);
   padding: 18px;
-  border-radius: var(--radius-lg);
-  border: 1px dashed rgba(47, 107, 255, 0.24);
-  background: linear-gradient(135deg, rgba(47, 107, 255, 0.06) 0%, rgba(91, 182, 255, 0.08) 100%);
+  border-radius: var(--radius-xl);
+  border: 1px dashed rgba(47, 107, 255, 0.26);
+  background:
+    radial-gradient(circle at top right, rgba(91, 182, 255, 0.18), transparent 30%),
+    linear-gradient(135deg, rgba(47, 107, 255, 0.07) 0%, rgba(91, 182, 255, 0.1) 100%);
   cursor: pointer;
+  box-shadow: var(--shadow-soft);
 
   input {
     position: absolute;
@@ -26,6 +29,7 @@
 .uploadTitle {
   font-size: 16px;
   font-weight: 700;
+  color: var(--color-brand-deep);
 }
 
 .uploadSubtitle {
@@ -35,11 +39,13 @@
 
 .videoPreviewCard {
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-card);
 
   video {
     width: 100%;
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     background: rgba(20, 33, 61, 0.08);
   }
 }
@@ -48,8 +54,9 @@
   display: grid;
   gap: var(--space-3);
   padding: 16px;
-  border-radius: var(--radius-lg);
-  background: rgba(20, 33, 61, 0.05);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(223, 233, 251, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.72);
 }
 
 .checklistStack {
@@ -62,8 +69,9 @@
   grid-template-columns: auto 1fr;
   gap: var(--space-3);
   padding: 14px;
-  border-radius: var(--radius-md);
-  background: rgba(20, 33, 61, 0.05);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(223, 233, 251, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.68);
 
   strong {
     display: block;
@@ -85,8 +93,8 @@
   height: 28px;
   padding: 0 10px;
   border-radius: var(--radius-pill);
-  background: rgba(20, 33, 61, 0.08);
-  color: var(--color-text-secondary);
+  background: rgba(15, 34, 66, 0.08);
+  color: var(--color-brand-deep);
   font-size: 12px;
   font-weight: 700;
 }
@@ -96,6 +104,9 @@
   grid-template-columns: auto 1fr;
   gap: var(--space-3);
   align-items: start;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: rgba(15, 34, 66, 0.04);
 
   input {
     margin-top: 4px;

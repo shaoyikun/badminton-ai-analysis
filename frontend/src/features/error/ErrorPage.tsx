@@ -54,6 +54,30 @@ export function ErrorPage() {
         </div>
       </section>
 
+      <section className={pageStyles.card}>
+        <div className={pageStyles.sectionHeader}>
+          <h2>下一次更容易成功的顺序</h2>
+          <p className={pageStyles.muted}>先把最可能影响识别结果的前置条件收住，再重新进入主流程。</p>
+        </div>
+        <div className={pageStyles.infoList}>
+          <div className={pageStyles.listRow}>
+            <span>第 1 步</span>
+            <strong>先处理本次错误里最直接的一项</strong>
+            <p>优先看上面的失败原因和恢复建议，不要一口气同时改很多条件。</p>
+          </div>
+          <div className={pageStyles.listRow}>
+            <span>第 2 步</span>
+            <strong>回到拍摄或上传准备页重新确认条件</strong>
+            <p>动作类型、主体清晰度、时长和机位是最容易直接影响结果的几项。</p>
+          </div>
+          <div className={pageStyles.listRow}>
+            <span>第 3 步</span>
+            <strong>重新上传，再让系统重新粗扫和分析</strong>
+            <p>当前主链路会按新的输入条件重新判断候选片段和最终报告。</p>
+          </div>
+        </div>
+      </section>
+
       <BottomCTA
         primary={{ label: actions.primary.label, to: actions.primary.to }}
         secondary={{ label: actions.secondary.label, to: actions.secondary.to, tone: 'secondary' }}

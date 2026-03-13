@@ -70,6 +70,7 @@ Specialized skills to trigger directly when their scope matches:
 
 Frontend-facing specialized skills to prefer when UI work is involved:
 
+- `ui-ux-pro-max`: generate sports/mobile design inputs first for obvious visual refresh or productization work, then fold the chosen decisions into the repo's existing docs and frontend design-system sources
 - `badminton-h5-product-ui`: page/productization baseline for the mobile H5 flow
 - `mobile-ui-interaction-design`: proactive UI interaction review, component selection, screenshot-driven polish, and structured UI self-review
 - `badminton-playwright-mobile-qa`: Playwright validation, mobile screenshots, and end-to-end UI verification

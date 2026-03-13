@@ -7,6 +7,7 @@
   display: grid;
   grid-template-columns: 24px 1fr;
   gap: var(--space-3);
+  align-items: start;
 }
 
 .rail {
@@ -19,7 +20,8 @@
   height: 14px;
   border-radius: 50%;
   border: 2px solid var(--color-border-strong);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.68);
 }
 
 .line {
@@ -35,6 +37,8 @@
 }
 
 .copy {
+  padding: 2px 0 12px;
+
   strong {
     display: block;
     margin-bottom: 4px;
