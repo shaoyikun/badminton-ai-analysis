@@ -52,11 +52,46 @@ type AnalysisDisposition = {
   confidencePenaltyNotes: string[];
 };
 
+type IssueCategory =
+  | 'body_preparation_gap'
+  | 'racket_arm_preparation_gap'
+  | 'arm_lift_focus_gap'
+  | 'repeatability_gap'
+  | 'evidence_quality_gap';
+
+type SuggestionRuleKey = 'technique_focus' | 'capture_fix' | 'retest_check';
+
+type EvidenceRef = NonNullable<ReportResult['issues'][number]['evidenceRefs']>[number];
+
 type RankedIssue = ReportResult['issues'][number] & {
   key: PublicDimensionKey | 'confidence';
   severity: number;
-  kind: 'action_gap' | 'evidence_gap';
-  suggestion: SuggestionItem;
+  rankingBucket: number;
+  leadSuggestion?: SuggestionDraft;
+  captureSuggestion?: SuggestionDraft;
+};
+
+type SuggestionDraft = SuggestionItem & {
+  ruleKey: SuggestionRuleKey;
+};
+
+type FeatureDescriptor = {
+  key: string;
+  label: string;
+  value: number | null;
+  observableCoverage?: number;
+  reference?: string;
+};
+
+type IssueBuildContext = {
+  recognitionContext: RecognitionContext;
+  summary: PoseAnalysisResult['summary'];
+  scores: DimensionScores;
+  publicScores: Record<PublicDimensionKey, number>;
+  confidenceScore: number;
+  evidenceNotes: string[];
+  computed: ReturnType<typeof buildDimensionScores>;
+  dimensionEvidenceMap: Map<string, DimensionEvidenceEntry>;
 };
 
 type SpecializedSummaryItem = NonNullable<PoseAnalysisResult['summary']['specializedFeatureSummary']>[string];
@@ -152,6 +187,60 @@ const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
 };
 
 const FRONT_VIEW_PROFILES = new Set<ViewProfile>(['front', 'front_left_oblique', 'front_right_oblique']);
+
+const FEATURE_LABELS: Record<string, string> = {
+  sideOnReadinessScore: '侧身进入',
+  shoulderHipRotationScore: '肩髋转开',
+  trunkCoilScore: '躯干蓄力',
+  hittingArmPreparationScore: '挥拍臂整体准备',
+  wristAboveShoulderConfidence: '抬手高度',
+  racketSideElbowHeightScore: '抬肘位置',
+  elbowExtensionScore: '肘部展开',
+  contactPreparationScore: '准备态完整度',
+};
+
+const ISSUE_DEFINITIONS: Record<IssueCategory, { issueType: 'action_gap' | 'evidence_gap'; targetDimensionKey: PublicDimensionKey | 'confidence'; threshold: number }> = {
+  body_preparation_gap: {
+    issueType: 'action_gap',
+    targetDimensionKey: 'body_preparation',
+    threshold: 72,
+  },
+  racket_arm_preparation_gap: {
+    issueType: 'action_gap',
+    targetDimensionKey: 'racket_arm_preparation',
+    threshold: 72,
+  },
+  arm_lift_focus_gap: {
+    issueType: 'action_gap',
+    targetDimensionKey: 'racket_arm_preparation',
+    threshold: 72,
+  },
+  repeatability_gap: {
+    issueType: 'action_gap',
+    targetDimensionKey: 'swing_repeatability',
+    threshold: 74,
+  },
+  evidence_quality_gap: {
+    issueType: 'evidence_gap',
+    targetDimensionKey: 'confidence',
+    threshold: LOW_CONFIDENCE_THRESHOLD,
+  },
+};
+
+const SUGGESTION_RULES: Record<SuggestionRuleKey, { suggestionType: 'capture_fix' | 'technique_focus' | 'retest_check'; maxCount: number }> = {
+  technique_focus: {
+    suggestionType: 'technique_focus',
+    maxCount: 1,
+  },
+  capture_fix: {
+    suggestionType: 'capture_fix',
+    maxCount: 1,
+  },
+  retest_check: {
+    suggestionType: 'retest_check',
+    maxCount: 1,
+  },
+};
 
 function getViewLabel(viewProfile?: ViewProfile) {
   return VIEW_PROFILE_LABELS[viewProfile ?? 'unknown'] ?? VIEW_PROFILE_LABELS.unknown;
@@ -636,99 +725,485 @@ function buildEvidenceNotes(
   return [...new Set(notes)];
 }
 
+function buildDimensionEvidenceMap(entries: DimensionEvidenceEntry[]) {
+  return new Map(entries.map((entry) => [entry.key, entry]));
+}
+
+function formatEvidenceScore(score?: number | null) {
+  if (score === null || score === undefined) return '证据有限';
+  return `${Math.round(score)} 分`;
+}
+
+function toDimensionEvidenceRef(entry?: DimensionEvidenceEntry): EvidenceRef | undefined {
+  if (!entry) return undefined;
+  return {
+    dimensionKey: entry.key,
+    label: entry.label,
+    score: entry.score,
+    confidence: entry.confidence ?? null,
+    reference: entry.source,
+  };
+}
+
+function toFeatureEvidenceRef(feature?: FeatureDescriptor): EvidenceRef | undefined {
+  if (!feature) return undefined;
+  return {
+    featureKey: feature.key,
+    label: feature.label,
+    score: feature.value === null ? null : clampScore(feature.value * 100),
+    confidence: feature.observableCoverage ?? null,
+    reference: feature.reference,
+  };
+}
+
+function compactEvidenceRefs(...refs: Array<EvidenceRef | undefined>) {
+  return refs.filter((ref): ref is EvidenceRef => Boolean(ref));
+}
+
+function buildEvidenceSentence(evidenceRefs: EvidenceRef[]) {
+  const refs = evidenceRefs
+    .filter((ref) => ref.label)
+    .slice(0, 2)
+    .map((ref) => `${ref.label} ${formatEvidenceScore(ref.score)}`);
+
+  return refs.length > 0 ? `当前证据更直接落在 ${refs.join('、')}。` : '';
+}
+
+function getWeakestFeature(features: FeatureDescriptor[]) {
+  const available = features.filter((feature) => typeof feature.value === 'number');
+  if (available.length > 0) {
+    return [...available].sort((left, right) => (left.value ?? 1) - (right.value ?? 1))[0];
+  }
+  return features[0];
+}
+
+function shouldSuggestCaptureAdvice(
+  confidenceScore: number,
+  cameraSuitability: number,
+  dimensionConfidence?: number | null,
+) {
+  return confidenceScore < LOW_CONFIDENCE_THRESHOLD
+    || cameraSuitability < 70
+    || (dimensionConfidence ?? 1) < 0.68;
+}
+
+function getCaptureAdvice(recognitionContext: RecognitionContext, emphasis: 'body' | 'arm' | 'repeatability' | 'evidence') {
+  const genericTail = '固定手机、让人物完整入镜，并尽量把准备到出手这一段连续录进去。';
+
+  if (FRONT_VIEW_PROFILES.has(recognitionContext.viewProfile ?? 'unknown') || recognitionContext.viewProfile === 'unknown') {
+    const focus = emphasis === 'body'
+      ? '这样肩髋转开和身体准备会更完整'
+      : emphasis === 'arm'
+        ? '这样抬肘和抬手位置会更清楚'
+        : emphasis === 'repeatability'
+          ? '这样更容易看清准备节奏是不是连续'
+          : '这样动作细节的判断会更稳';
+    return `下次拍摄尽量改成后方或后斜视角，${focus}；${genericTail}`;
+  }
+
+  const focus = emphasis === 'body'
+    ? '优先让肩髋和侧身准备都留在画面里'
+    : emphasis === 'arm'
+      ? '优先让挥拍肘、前臂和肩线都完整入镜'
+      : emphasis === 'repeatability'
+        ? '优先让同一拍的准备到出手连续可见'
+        : '优先保持同一机位不变';
+  return `下次继续保持${recognitionContext.viewLabel}视角，${focus}，${genericTail}`;
+}
+
+function buildSuggestionDraft(
+  ruleKey: SuggestionRuleKey,
+  suggestion: Omit<SuggestionDraft, 'ruleKey' | 'suggestionType'>,
+): SuggestionDraft {
+  return {
+    ...suggestion,
+    ruleKey,
+    suggestionType: SUGGESTION_RULES[ruleKey].suggestionType,
+  };
+}
+
+function buildBodyPreparationIssue(context: IssueBuildContext): RankedIssue | null {
+  const definition = ISSUE_DEFINITIONS.body_preparation_gap;
+  const score = context.publicScores.body_preparation;
+  if (score >= definition.threshold) return null;
+
+  const dimensionEntry = context.dimensionEvidenceMap.get('body_preparation');
+  const weakestFeature = getWeakestFeature([
+    {
+      key: 'sideOnReadinessScore',
+      label: FEATURE_LABELS.sideOnReadinessScore,
+      value: getFeatureSummary(context.summary, 'sideOnReadinessScore')?.median ?? null,
+      observableCoverage: getFeatureSummary(context.summary, 'sideOnReadinessScore')?.observableCoverage,
+    },
+    {
+      key: 'shoulderHipRotationScore',
+      label: FEATURE_LABELS.shoulderHipRotationScore,
+      value: getFeatureSummary(context.summary, 'shoulderHipRotationScore')?.median ?? null,
+      observableCoverage: getFeatureSummary(context.summary, 'shoulderHipRotationScore')?.observableCoverage,
+    },
+    {
+      key: 'trunkCoilScore',
+      label: FEATURE_LABELS.trunkCoilScore,
+      value: getFeatureSummary(context.summary, 'trunkCoilScore')?.median ?? null,
+      observableCoverage: getFeatureSummary(context.summary, 'trunkCoilScore')?.observableCoverage,
+    },
+  ]);
+  const weakEvidence = context.computed.bodyPreparationGroup.usedFallback || (dimensionEntry?.confidence ?? 1) < 0.68;
+  const title = weakestFeature?.key === 'sideOnReadinessScore' ? '身体准备不足' : '转体不足';
+  const observation = weakEvidence
+    ? '这次能看出身体准备还不够早，但身体专项证据不算完整，这条先按弱判断处理。'
+    : weakestFeature?.key === 'sideOnReadinessScore'
+      ? '当前稳定帧里，侧身进入偏晚，身体还没完全转到给击球让出空间的位置。'
+      : weakestFeature?.key === 'shoulderHipRotationScore'
+        ? '当前稳定帧里，肩髋转开的幅度还不够，身体准备没有把后面的击球空间完全带出来。'
+        : '当前稳定帧里，身体有准备动作，但躯干蓄力没有持续挂住，转体和出手之间还略显分离。';
+  const whyItMatters = weakestFeature?.key === 'sideOnReadinessScore'
+    ? '身体准备偏晚时，后面的抬肘和出手更容易变成临时补动作，击球点会更靠后。'
+    : '转体没有先带起来时，挥拍空间和击球蓄力都会被压缩，球更难稳定顶出去。';
+  const nextTrainingFocus = weakestFeature?.key === 'sideOnReadinessScore'
+    ? '下一次训练先盯启动后的前半拍就把身体先转进去，再接手臂，不要等到快出手才补身体。'
+    : '下一次训练先盯肩髋一起转开，把身体先带起来，再接挥拍臂，不要一上来就追求手上速度。';
+  const captureAdvice = shouldSuggestCaptureAdvice(context.confidenceScore, context.scores.camera_suitability, dimensionEntry?.confidence)
+    ? getCaptureAdvice(context.recognitionContext, 'body')
+    : undefined;
+  const evidenceRefs = compactEvidenceRefs(
+    toDimensionEvidenceRef(dimensionEntry),
+    toFeatureEvidenceRef(weakestFeature),
+  );
+  const evidenceSentence = buildEvidenceSentence(evidenceRefs);
+
+  return {
+    key: 'body_preparation',
+    severity: definition.threshold - score,
+    rankingBucket: 4,
+    title,
+    description: `${observation}${evidenceSentence ? ` ${evidenceSentence}` : ''}`.trim(),
+    impact: whyItMatters,
+    issueType: definition.issueType,
+    issueCategory: definition.targetDimensionKey === 'body_preparation' ? 'body_preparation_gap' : 'body_preparation_gap',
+    targetDimensionKey: definition.targetDimensionKey,
+    confidenceImpact: weakEvidence ? 'medium' : 'low',
+    observation,
+    whyItMatters,
+    nextTrainingFocus,
+    captureAdvice,
+    evidenceRefs,
+    leadSuggestion: buildSuggestionDraft('technique_focus', {
+      title: '下一次先把身体准备做早',
+      description: nextTrainingFocus,
+      targetDimensionKey: 'body_preparation',
+      focusPoint: weakestFeature?.label ?? '身体准备',
+      linkedIssueCategory: 'body_preparation_gap',
+      evidenceRefs,
+    }),
+    captureSuggestion: captureAdvice
+      ? buildSuggestionDraft('capture_fix', {
+        title: '下次拍摄先把身体准备拍清楚',
+        description: captureAdvice,
+        targetDimensionKey: 'body_preparation',
+        recommendedNextCapture: captureAdvice,
+        linkedIssueCategory: 'body_preparation_gap',
+        evidenceRefs,
+      })
+      : undefined,
+  };
+}
+
+function buildRacketArmPreparationIssue(context: IssueBuildContext): RankedIssue | null {
+  const definition = ISSUE_DEFINITIONS.racket_arm_preparation_gap;
+  const score = context.publicScores.racket_arm_preparation;
+  if (score >= definition.threshold) return null;
+
+  const dimensionEntry = context.dimensionEvidenceMap.get('racket_arm_preparation');
+  const weakestFeature = getWeakestFeature([
+    {
+      key: 'racketSideElbowHeightScore',
+      label: FEATURE_LABELS.racketSideElbowHeightScore,
+      value: getFeatureSummary(context.summary, 'racketSideElbowHeightScore')?.median ?? null,
+      observableCoverage: getFeatureSummary(context.summary, 'racketSideElbowHeightScore')?.observableCoverage,
+    },
+    {
+      key: 'wristAboveShoulderConfidence',
+      label: FEATURE_LABELS.wristAboveShoulderConfidence,
+      value: getFeatureSummary(context.summary, 'wristAboveShoulderConfidence')?.median ?? null,
+      observableCoverage: getFeatureSummary(context.summary, 'wristAboveShoulderConfidence')?.observableCoverage,
+    },
+    {
+      key: 'elbowExtensionScore',
+      label: FEATURE_LABELS.elbowExtensionScore,
+      value: getFeatureSummary(context.summary, 'elbowExtensionScore')?.median ?? null,
+      observableCoverage: getFeatureSummary(context.summary, 'elbowExtensionScore')?.observableCoverage,
+    },
+  ]);
+  const weakEvidence = context.computed.racketArmPreparationGroup.usedFallback || (dimensionEntry?.confidence ?? 1) < 0.68;
+  const focusPoint = weakestFeature?.key === 'wristAboveShoulderConfidence' ? '抬手位置不足' : '肘部位置不足';
+  const observation = weakEvidence
+    ? '这次能看出挥拍臂准备还不够充分，但挥拍臂专项证据不算完整，这条先按弱判断处理。'
+    : weakestFeature?.key === 'wristAboveShoulderConfidence'
+      ? '挥拍臂已经开始上举了，但手和前臂抬得还不够早，准备点还偏低。'
+      : weakestFeature?.key === 'elbowExtensionScore'
+        ? '挥拍臂有准备动作，但肘部和前臂没有提前展开，整条手臂的引拍空间还没撑开。'
+        : '挥拍臂已经往上走了，但肘部没有先撑起来，准备位置还是偏低。';
+  const whyItMatters = '挥拍臂准备不到位时，击球前的引拍空间会变小，后面更容易只靠最后一下补手臂。';
+  const nextTrainingFocus = weakestFeature?.key === 'wristAboveShoulderConfidence'
+    ? '下一次训练先盯手和前臂更早抬到准备位，让抬手动作先到位，再去追求出手速度。'
+    : '下一次训练先盯肘部先撑起来，再让前臂顺着展开，不要把整条手臂拖到临出手才补。';
+  const captureAdvice = shouldSuggestCaptureAdvice(context.confidenceScore, context.scores.camera_suitability, dimensionEntry?.confidence)
+    ? getCaptureAdvice(context.recognitionContext, 'arm')
+    : undefined;
+  const evidenceRefs = compactEvidenceRefs(
+    toDimensionEvidenceRef(dimensionEntry),
+    toFeatureEvidenceRef(weakestFeature),
+    toFeatureEvidenceRef({
+      key: 'hittingArmPreparationScore',
+      label: FEATURE_LABELS.hittingArmPreparationScore,
+      value: getFeatureSummary(context.summary, 'hittingArmPreparationScore')?.median ?? null,
+      observableCoverage: getFeatureSummary(context.summary, 'hittingArmPreparationScore')?.observableCoverage,
+    }),
+  );
+  const evidenceSentence = buildEvidenceSentence(evidenceRefs);
+
+  return {
+    key: 'racket_arm_preparation',
+    severity: definition.threshold - score,
+    rankingBucket: 3,
+    title: '挥拍臂准备不足',
+    description: `${observation}${evidenceSentence ? ` ${evidenceSentence}` : ''}`.trim(),
+    impact: whyItMatters,
+    issueType: definition.issueType,
+    issueCategory: 'racket_arm_preparation_gap',
+    targetDimensionKey: definition.targetDimensionKey,
+    confidenceImpact: weakEvidence ? 'medium' : 'low',
+    observation,
+    whyItMatters,
+    nextTrainingFocus,
+    captureAdvice,
+    evidenceRefs,
+    leadSuggestion: buildSuggestionDraft('technique_focus', {
+      title: `下一次先把${focusPoint.replace('不足', '')}收住`,
+      description: nextTrainingFocus,
+      targetDimensionKey: 'racket_arm_preparation',
+      focusPoint,
+      linkedIssueCategory: 'arm_lift_focus_gap',
+      evidenceRefs,
+    }),
+    captureSuggestion: captureAdvice
+      ? buildSuggestionDraft('capture_fix', {
+        title: '下次拍摄先把挥拍臂准备拍清楚',
+        description: captureAdvice,
+        targetDimensionKey: 'racket_arm_preparation',
+        recommendedNextCapture: captureAdvice,
+        linkedIssueCategory: 'racket_arm_preparation_gap',
+        evidenceRefs,
+      })
+      : undefined,
+  };
+}
+
+function buildRepeatabilityIssue(context: IssueBuildContext): RankedIssue | null {
+  const definition = ISSUE_DEFINITIONS.repeatability_gap;
+  const score = context.publicScores.swing_repeatability;
+  if (score >= definition.threshold) return null;
+
+  const dimensionEntry = context.dimensionEvidenceMap.get('swing_repeatability');
+  const contactPreparation = getFeatureSummary(context.summary, 'contactPreparationScore');
+  const weakEvidence = context.computed.swingRepeatabilityFallbackUsed || (dimensionEntry?.confidence ?? 1) < 0.72;
+  const observation = weakEvidence
+    ? '这次能看出动作节奏没有完全连上，但因为缺少完整准备态证据，这条更多是“复现偏散”的提醒。'
+    : '这一条视频里，准备到出手的节奏没有稳定连起来，好的那一下能看到，但没有连续留住。';
+  const whyItMatters = '复现差时，单次看起来做到了的细节不一定能稳定带到每一次击球，训练效果也更难沉下来。';
+  const nextTrainingFocus = '下一次训练先把准备、抬肘、出手做成同一套节奏，不要一边追求发力一边又同时改很多动作点。';
+  const captureAdvice = shouldSuggestCaptureAdvice(context.confidenceScore, context.scores.camera_suitability, dimensionEntry?.confidence)
+    ? getCaptureAdvice(context.recognitionContext, 'repeatability')
+    : undefined;
+  const evidenceRefs = compactEvidenceRefs(
+    toDimensionEvidenceRef(dimensionEntry),
+    toFeatureEvidenceRef({
+      key: 'contactPreparationScore',
+      label: FEATURE_LABELS.contactPreparationScore,
+      value: contactPreparation?.median ?? null,
+      observableCoverage: contactPreparation?.observableCoverage,
+      reference: `scoreVariance=${roundDebugValue(context.summary.scoreVariance)}`,
+    }),
+  );
+  const evidenceSentence = buildEvidenceSentence(evidenceRefs);
+
+  return {
+    key: 'swing_repeatability',
+    severity: definition.threshold - score,
+    rankingBucket: 2,
+    title: '动作不连贯，复现差',
+    description: `${observation}${evidenceSentence ? ` ${evidenceSentence}` : ''}`.trim(),
+    impact: whyItMatters,
+    issueType: definition.issueType,
+    issueCategory: 'repeatability_gap',
+    targetDimensionKey: definition.targetDimensionKey,
+    confidenceImpact: weakEvidence ? 'medium' : 'low',
+    observation,
+    whyItMatters,
+    nextTrainingFocus,
+    captureAdvice,
+    evidenceRefs,
+    leadSuggestion: buildSuggestionDraft('technique_focus', {
+      title: '下一次先把整套节奏做顺',
+      description: nextTrainingFocus,
+      targetDimensionKey: 'swing_repeatability',
+      focusPoint: '准备到出手的连续节奏',
+      linkedIssueCategory: 'repeatability_gap',
+      evidenceRefs,
+    }),
+    captureSuggestion: captureAdvice
+      ? buildSuggestionDraft('capture_fix', {
+        title: '下次拍摄先保证连续动作都拍进去',
+        description: captureAdvice,
+        targetDimensionKey: 'swing_repeatability',
+        recommendedNextCapture: captureAdvice,
+        linkedIssueCategory: 'repeatability_gap',
+        evidenceRefs,
+      })
+      : undefined,
+  };
+}
+
+function buildEvidenceQualityIssue(context: IssueBuildContext): RankedIssue | null {
+  const score = context.publicScores.evidence_quality;
+  const cameraSuitability = context.scores.camera_suitability;
+  if (context.confidenceScore >= LOW_CONFIDENCE_THRESHOLD && score >= 70 && cameraSuitability >= 60) return null;
+
+  const evidenceEntry = context.dimensionEvidenceMap.get('evidence_quality');
+  const cameraEntry = context.dimensionEvidenceMap.get('camera_suitability');
+  const lowViewConfidence = (context.summary.viewConfidence ?? 0) < 0.62;
+  const observation = cameraSuitability < 60
+    ? `这次视频更像是机位先限制了判断，当前${context.recognitionContext.viewLabel}视角下身体和挥拍臂的细节不够完整，只能保守解读。`
+    : lowViewConfidence
+      ? `这次视频能看出动作大方向，但视角判断还不够稳，细节结论需要留一点余量。`
+      : `这次视频里稳定帧和专项特征覆盖还不够整，动作细节可以参考，但不适合放大读。`;
+  const whyItMatters = '证据质量有限时，动作分更适合看趋势，不适合把细小分差直接当成真实进步或退步。';
+  const nextTrainingFocus = '下一次训练先只盯 1 个动作点，在更稳定的拍摄下确认它是不是真的在变好，再决定要不要继续扩展。';
+  const captureAdvice = getCaptureAdvice(context.recognitionContext, 'evidence');
+  const evidenceRefs = compactEvidenceRefs(
+    toDimensionEvidenceRef(evidenceEntry),
+    toDimensionEvidenceRef(cameraEntry),
+  );
+  const evidenceSentence = buildEvidenceSentence(evidenceRefs);
+  const severity = Math.max(LOW_CONFIDENCE_THRESHOLD - context.confidenceScore, 70 - score, 65 - cameraSuitability);
+
+  return {
+    key: 'confidence',
+    severity,
+    rankingBucket: 1,
+    title: '证据质量有限，当前判断要保守',
+    description: `${observation}${evidenceSentence ? ` ${evidenceSentence}` : ''}`.trim(),
+    impact: whyItMatters,
+    issueType: ISSUE_DEFINITIONS.evidence_quality_gap.issueType,
+    issueCategory: 'evidence_quality_gap',
+    targetDimensionKey: 'evidence_quality',
+    confidenceImpact: severity >= 10 ? 'high' : severity >= 5 ? 'medium' : 'low',
+    observation,
+    whyItMatters,
+    nextTrainingFocus,
+    captureAdvice,
+    evidenceRefs,
+    captureSuggestion: buildSuggestionDraft('capture_fix', {
+      title: '下次先把机位和样本稳定性收住',
+      description: captureAdvice,
+      targetDimensionKey: 'evidence_quality',
+      recommendedNextCapture: captureAdvice,
+      focusPoint: '机位稳定和主体完整入镜',
+      linkedIssueCategory: 'evidence_quality_gap',
+      evidenceRefs,
+    }),
+  };
+}
+
+function buildRankedIssues(context: IssueBuildContext): RankedIssue[] {
+  const issues = [
+    buildBodyPreparationIssue(context),
+    buildRacketArmPreparationIssue(context),
+    buildRepeatabilityIssue(context),
+    buildEvidenceQualityIssue(context),
+  ].filter((issue): issue is RankedIssue => Boolean(issue));
+
+  const prioritizeEvidence = context.confidenceScore < 65 || context.scores.camera_suitability < 60;
+
+  return issues.sort((left, right) => {
+    const leftBucket = prioritizeEvidence && left.issueCategory === 'evidence_quality_gap' ? 5 : left.rankingBucket;
+    const rightBucket = prioritizeEvidence && right.issueCategory === 'evidence_quality_gap' ? 5 : right.rankingBucket;
+    if (leftBucket !== rightBucket) return rightBucket - leftBucket;
+    if (left.severity !== right.severity) return right.severity - left.severity;
+    return left.title.localeCompare(right.title, 'zh-Hans-CN');
+  });
+}
+
+function buildSuggestions(recognitionContext: RecognitionContext, rankedIssues: RankedIssue[]): SuggestionItem[] {
+  if (rankedIssues.length === 0) {
+    return [{
+      title: '下次继续验证动作能否稳定复现',
+      description: `保持同一机位再录一条高远球视频，优先确认这次在${recognitionContext.viewLabel}视角下看到的较稳动作不是偶尔出现。`,
+      suggestionType: 'retest_check',
+      targetDimensionKey: 'swing_repeatability',
+      focusPoint: '动作稳定复现',
+      linkedIssueCategory: 'repeatability_gap',
+    }];
+  }
+
+  const suggestions: SuggestionDraft[] = [];
+  const primaryActionIssue = rankedIssues.find((issue) => issue.issueType === 'action_gap' && issue.leadSuggestion);
+  if (primaryActionIssue?.leadSuggestion) {
+    suggestions.push(primaryActionIssue.leadSuggestion);
+  }
+
+  const captureIssue = rankedIssues.find((issue) => issue.captureSuggestion);
+  if (captureIssue?.captureSuggestion) {
+    suggestions.push(captureIssue.captureSuggestion);
+  }
+
+  const actionFocusIssues = rankedIssues.filter((issue) => issue.issueType === 'action_gap').slice(0, 2);
+  const focusLabels = actionFocusIssues.map((issue) => issue.title);
+  suggestions.push(buildSuggestionDraft('retest_check', {
+    title: actionFocusIssues.length > 0 ? '下次复测先只盯 1~2 个动作点' : '下次复测先看证据有没有稳住',
+    description: actionFocusIssues.length > 0
+      ? `下次复测先盯 ${focusLabels.join('、')}，先确认这 1~2 个动作点有没有一起变稳，再决定要不要继续加别的调整。`
+      : `下次复测先确认${recognitionContext.viewLabel}视角下的机位和主体完整度有没有稳住，再放大读动作细节。`,
+    targetDimensionKey: actionFocusIssues[0]?.targetDimensionKey ?? 'evidence_quality',
+    focusPoint: actionFocusIssues.length > 0 ? focusLabels.join('、') : '证据质量',
+    linkedIssueCategory: actionFocusIssues[0]?.issueCategory ?? 'evidence_quality_gap',
+    evidenceRefs: actionFocusIssues[0]?.evidenceRefs,
+  }));
+
+  const limitedSuggestions: SuggestionDraft[] = [];
+  for (const ruleKey of Object.keys(SUGGESTION_RULES) as SuggestionRuleKey[]) {
+    const allowedCount = SUGGESTION_RULES[ruleKey].maxCount;
+    limitedSuggestions.push(...suggestions.filter((item) => item.ruleKey === ruleKey).slice(0, allowedCount));
+  }
+
+  return limitedSuggestions
+    .slice(0, 3)
+    .map(({ ruleKey: _ruleKey, ...item }) => ({
+      ...item,
+      description: `${item.description} 当前识别为${recognitionContext.viewLabel}视角。`,
+    }));
+}
+
 function buildSummaryText(
-  publicScores: Record<PublicDimensionKey, number>,
+  rankedIssues: RankedIssue[],
   confidenceScore: number,
   summary: PoseAnalysisResult['summary'],
   frameCount: number,
 ) {
-  const weakestDimension = (Object.entries(publicScores) as Array<[PublicDimensionKey, number]>).sort((left, right) => left[1] - right[1])[0];
   const evidenceLead = `本次基于 ${summary.usableFrameCount}/${frameCount} 帧稳定识别结果生成。`;
   const recognitionLead = `当前识别为${getViewLabel(summary.viewProfile)}，${getRacketSideLabel(summary.dominantRacketSide)}。`;
+  const topIssue = rankedIssues[0];
 
-  if (confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
-    return `${evidenceLead} ${recognitionLead} 当前报告能看出动作大方向，但证据置信度偏低，建议先把机位和样本稳定性收住，再放大解读动作细节。`;
-  }
-
-  if (weakestDimension[1] >= 80) {
+  if (!topIssue) {
     return `${evidenceLead} ${recognitionLead} 当前这条高远球的可观测动作框架比较完整，下一步更适合继续验证能否稳定复现。`;
   }
 
-  return `${evidenceLead} ${recognitionLead} 当前最值得先改的是${DIMENSION_LABELS[weakestDimension[0]]}，这也是这次动作证据最明确的短板。`;
-}
-
-function buildRankedIssues(
-  publicScores: Record<PublicDimensionKey, number>,
-  confidenceScore: number,
-  evidenceNotes: string[],
-): RankedIssue[] {
-  const issues: RankedIssue[] = [];
-
-  if (publicScores.body_preparation < 72) {
-    const severity = 72 - publicScores.body_preparation;
-    issues.push({
-      key: 'body_preparation',
-      kind: 'action_gap',
-      severity,
-      title: '身体准备不足',
-      description: `当前身体准备分为 ${publicScores.body_preparation} 分，说明侧身进入和躯干蓄力还不够稳定。`,
-      impact: '这会压缩击球前的准备空间，让后续出手更依赖临时补动作。',
-      suggestion: {
-        title: '下次先盯身体准备能不能更早完成',
-        description: '保持同机位复测，优先确认准备到出手前，身体是否更早完成侧身和躯干打开。',
-      },
-    });
+  if (topIssue.issueCategory === 'evidence_quality_gap' || confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
+    return `${evidenceLead} ${recognitionLead} 当前报告能看出动作大方向，但这次更该先把机位和样本稳定性收住，再放大解读动作细节。`;
   }
 
-  if (publicScores.racket_arm_preparation < 72) {
-    const severity = 72 - publicScores.racket_arm_preparation;
-    issues.push({
-      key: 'racket_arm_preparation',
-      kind: 'action_gap',
-      severity,
-      title: '挥拍臂准备不足',
-      description: `当前挥拍臂准备分为 ${publicScores.racket_arm_preparation} 分，说明抬肘、伸展和准备高度还不够完整。`,
-      impact: '这会让击球前的准备空间不足，动作容易只靠最后一下补手臂。',
-      suggestion: {
-        title: '下次先看挥拍臂是不是更早到位',
-        description: '优先确认挥拍肘和手腕是不是更早进入准备位置，而不是临近出手才临时抬起。',
-      },
-    });
-  }
-
-  if (publicScores.swing_repeatability < 74) {
-    const severity = 74 - publicScores.swing_repeatability;
-    issues.push({
-      key: 'swing_repeatability',
-      kind: 'action_gap',
-      severity,
-      title: '挥拍复现稳定性不足',
-      description: `当前挥拍复现稳定性为 ${publicScores.swing_repeatability} 分，说明动作质量在多帧之间还不够一致。`,
-      impact: '动作波动大时，单次看起来做到了的细节不一定能连续复现。',
-      suggestion: {
-        title: '下次先把同一套挥拍节奏连续做稳',
-        description: '优先保证准备、出手和收拍的节奏一致，再看单次最好效果。',
-      },
-    });
-  }
-
-  if (confidenceScore < LOW_CONFIDENCE_THRESHOLD || publicScores.evidence_quality < 70) {
-    const severity = Math.max(LOW_CONFIDENCE_THRESHOLD - confidenceScore, 70 - publicScores.evidence_quality);
-    issues.push({
-      key: 'confidence',
-      kind: 'evidence_gap',
-      severity,
-      title: '当前样本证据置信度偏低',
-      description: `当前证据质量为 ${publicScores.evidence_quality} 分，置信度为 ${confidenceScore} 分。${evidenceNotes[0] ?? '这不直接代表动作更差，而是说明当前视频对动作判断的支持力度有限。'}`,
-      impact: '这次更适合作为方向性参考，不建议把细小分差直接当成动作退步或进步。',
-      suggestion: {
-        title: '下次优先把拍摄证据先稳住',
-        description: '先保持同机位、减少抖动、让主体完整入镜，再看动作细节的分差会更可靠。',
-      },
-    });
-  }
-
-  return issues.sort((left, right) => right.severity - left.severity);
+  return `${evidenceLead} ${recognitionLead} 当前最值得先改的是${topIssue.title}，这也是这次证据最直接指向的动作短板。`;
 }
 
 function buildStandardComparison(rankedIssues: RankedIssue[], summary: PoseAnalysisResult['summary']): StandardComparison {
@@ -736,23 +1211,25 @@ function buildStandardComparison(rankedIssues: RankedIssue[], summary: PoseAnaly
   const topIssues = rankedIssues.slice(0, 3);
   const differences = topIssues.length > 0
     ? topIssues.map((issue) => {
-      switch (issue.key) {
-        case 'body_preparation':
-          return `基于当前${viewLabel}视角，系统看到身体准备还不够早，侧身进入和躯干打开空间仍偏小。`;
-        case 'racket_arm_preparation':
-          return `基于当前${viewLabel}视角，挥拍臂准备还没完全撑开，抬肘和准备高度偏保守。`;
-        case 'swing_repeatability':
-          return `基于当前${viewLabel}视角，当前样本在多帧里的挥拍节奏还不够一致，复现稳定性不足。`;
-        case 'confidence':
-          return `这次更明显的问题在证据质量而不是动作结论本身，当前${viewLabel}视角下的机位或样本稳定性降低了判断置信度。`;
+      switch (issue.issueCategory) {
+        case 'body_preparation_gap':
+          return `基于当前${viewLabel}视角，身体准备还不够早，转体和蓄力空间偏小。`;
+        case 'racket_arm_preparation_gap':
+          return `基于当前${viewLabel}视角，挥拍臂准备还没完全撑开，重点先回看${issue.nextTrainingFocus ?? '抬肘和抬手位置'}。`;
+        case 'repeatability_gap':
+          return `基于当前${viewLabel}视角，这条样本在多帧里的准备到出手节奏还不够一致。`;
+        case 'evidence_quality_gap':
+          return `这次更明显的问题在证据质量，当前${viewLabel}视角下的机位或样本稳定性限制了判断置信度。`;
+        default:
+          return issue.observation ?? issue.description;
       }
-    }).filter((item): item is string => Boolean(item))
+    })
     : [`基于当前${viewLabel}视角，当前样本和参考动作之间的关键准备维度已经比较接近。`];
 
   return {
     sectionTitle: '当前视角动作参考对照',
     summaryText: topIssues.length > 0
-      ? `当前识别为${viewLabel}视角，这次最明确的差异集中在${topIssues.map((item) => item.kind === 'evidence_gap' ? '证据质量' : DIMENSION_LABELS[item.key as PublicDimensionKey]).join('、')}。`
+      ? `当前识别为${viewLabel}视角，这次最明确的差异集中在${topIssues.map((item) => item.title).join('、')}。`
       : `当前识别为${viewLabel}视角，这次可稳定观测的动作准备维度已经比较接近参考动作。`,
     currentFrameLabel: '当前样本最佳稳定帧',
     standardFrameLabel: '标准高远球真人参考帧',
@@ -788,24 +1265,30 @@ function buildStandardComparison(rankedIssues: RankedIssue[], summary: PoseAnaly
   };
 }
 
-function buildCompareSummary(recognitionContext: RecognitionContext, confidenceScore: number) {
+function buildCompareSummary(recognitionContext: RecognitionContext, confidenceScore: number, rankedIssues: RankedIssue[]) {
+  const issueLead = rankedIssues[0]?.issueCategory === 'evidence_quality_gap'
+    ? '这次报告会把证据质量单独提出，避免把机位限制直接当成动作错误。'
+    : '这次报告会把动作问题和证据问题分开写，方便你判断先练动作还是先修拍摄。';
   const confidenceClause = confidenceScore < LOW_CONFIDENCE_THRESHOLD
-    ? '这次报告会把机位和样本稳定性作为低置信提示单独输出。'
-    : '这次报告里的动作分数和证据分数已经分开处理。';
-  return `当前报告围绕${recognitionContext.viewLabel}视角下的身体准备、挥拍臂准备、挥拍复现稳定性和证据质量生成。${confidenceClause}`;
+    ? '当前这条样本更适合做方向判断。'
+    : '当前这条样本已经可以更明确地定位动作短板。';
+  return `当前报告围绕${recognitionContext.viewLabel}视角下的身体准备、挥拍臂准备、挥拍复现稳定性和证据质量生成。${issueLead}${confidenceClause}`;
 }
 
 function buildRetestAdvice(recognitionContext: RecognitionContext, confidenceScore: number, rankedIssues: RankedIssue[]) {
   if (confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
-    return `建议 3~7 天后保持同一机位复测，下次先把${recognitionContext.viewLabel}视角下的机位稳定性和主体完整度收住，再看动作分差。`;
+    const actionTitle = rankedIssues.find((issue) => issue.issueType === 'action_gap')?.title;
+    return actionTitle
+      ? `建议 3~7 天后保持同一机位复测，下次先把${recognitionContext.viewLabel}视角下的机位稳定性收住，再确认${actionTitle}是不是真的在改善。`
+      : `建议 3~7 天后保持同一机位复测，下次先把${recognitionContext.viewLabel}视角下的机位稳定性和主体完整度收住，再看动作分差。`;
   }
 
-  const topActionIssue = rankedIssues.find((issue) => issue.kind === 'action_gap');
-  if (!topActionIssue) {
+  const topActionIssues = rankedIssues.filter((issue) => issue.issueType === 'action_gap').slice(0, 2);
+  if (topActionIssues.length === 0) {
     return `建议 3~7 天后保持同一机位复测，继续确认${recognitionContext.viewLabel}视角下这套动作能否稳定复现。`;
   }
 
-  return `建议 3~7 天后保持同一机位复测，下次优先看${recognitionContext.viewLabel}视角下的${DIMENSION_LABELS[topActionIssue.key as PublicDimensionKey]}是否继续变稳。`;
+  return `建议 3~7 天后保持同一机位复测，下次优先看${topActionIssues.map((issue) => issue.title).join('、')}这 1~2 个动作点有没有一起变稳。`;
 }
 
 export function getPoseQualityFailure(poseResult: PoseAnalysisResult): PoseQualityFailure | null {
@@ -838,12 +1321,22 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
       ? 'low_confidence'
       : 'analyzable';
   const evidenceNotes = buildEvidenceNotes(scores, confidenceScore, disposition, computed);
-  const rankedIssues = buildRankedIssues(publicScores, confidenceScore, evidenceNotes);
   const recognitionContext = buildRecognitionContext(poseResult.summary, poseResult.engine);
   const visualEvidence = buildVisualEvidence(task, poseResult);
   const dimensionEvidence = (Object.keys(DIMENSION_LABELS) as DimensionKey[]).map((key) => (
     buildDimensionEvidence(key, scores, poseResult.summary, poseResult.frameCount, computed)
   ));
+  const dimensionEvidenceMap = buildDimensionEvidenceMap(dimensionEvidence);
+  const rankedIssues = buildRankedIssues({
+    recognitionContext,
+    summary: poseResult.summary,
+    scores,
+    publicScores,
+    confidenceScore,
+    evidenceNotes,
+    computed,
+    dimensionEvidenceMap,
+  });
   const dimensionScores = (Object.keys(publicScores) as PublicDimensionKey[]).map((key) => ({
     name: DIMENSION_LABELS[key],
     score: publicScores[key],
@@ -856,23 +1349,22 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
         : '这项分数更偏向动作质量判断，不会因为机位问题被直接写差。',
   }));
 
-  const issues = rankedIssues.length > 0
-    ? rankedIssues.slice(0, 3).map(({ title, description, impact }) => ({ title, description, impact }))
+  const issues: ReportResult['issues'] = rankedIssues.length > 0
+    ? rankedIssues.slice(0, 3).map(({ severity: _severity, rankingBucket: _rankingBucket, leadSuggestion: _leadSuggestion, captureSuggestion: _captureSuggestion, ...issue }) => issue)
     : [{
       title: '当前动作框架和证据质量都比较稳定',
       description: `当前识别为${recognitionContext.viewLabel}视角，系统能稳定看到身体准备、挥拍臂准备和挥拍复现都没有明显短板。`,
       impact: '接下来更值得继续验证的是，能不能在同机位下把这套动作持续复现出来。',
+      issueType: 'action_gap' as const,
+      issueCategory: 'repeatability_gap',
+      targetDimensionKey: 'swing_repeatability',
+      confidenceImpact: 'low' as const,
+      observation: `当前识别为${recognitionContext.viewLabel}视角，系统能稳定看到身体准备、挥拍臂准备和挥拍复现都没有明显短板。`,
+      whyItMatters: '接下来更值得继续验证的是，能不能在同机位下把这套动作持续复现出来。',
+      nextTrainingFocus: '下一次训练先不要额外加新改动，继续用同一节奏把当前动作框架稳定复现出来。',
     }];
 
-  const suggestions = rankedIssues.length > 0
-    ? rankedIssues.slice(0, 3).map((item) => ({
-      ...item.suggestion,
-      description: `${item.suggestion.description} 当前识别为${recognitionContext.viewLabel}视角。`,
-    }))
-    : [{
-      title: '下次继续验证动作能否稳定复现',
-      description: `保持同一机位再录一条高远球视频，优先确认这次在${recognitionContext.viewLabel}视角下看到的较稳动作不是偶尔出现。`,
-    }];
+  const suggestions = buildSuggestions(recognitionContext, rankedIssues);
 
   const fallbacksUsed = [
     ...computed.bodyPreparationGroup.fallbacks,
@@ -885,11 +1377,11 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
     actionType: task.actionType,
     totalScore: totalScoreBreakdown.finalTotalScore,
     confidenceScore,
-    summaryText: buildSummaryText(publicScores, confidenceScore, poseResult.summary, poseResult.frameCount),
+    summaryText: buildSummaryText(rankedIssues, confidenceScore, poseResult.summary, poseResult.frameCount),
     dimensionScores,
     issues,
     suggestions,
-    compareSummary: buildCompareSummary(recognitionContext, confidenceScore),
+    compareSummary: buildCompareSummary(recognitionContext, confidenceScore, rankedIssues),
     retestAdvice: buildRetestAdvice(recognitionContext, confidenceScore, rankedIssues),
     evidenceNotes,
     createdAt: now(),

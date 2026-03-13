@@ -10,20 +10,20 @@ export function getValidBaselineItem(history: TaskHistoryItem[], selectedCompare
 }
 
 export function getComparisonTrendLabel(totalScoreDelta: number) {
-  if (totalScoreDelta > 0) return '这次整体在变好'
-  if (totalScoreDelta < 0) return '这次有一点回落'
-  return '这次整体基本持平'
+  if (totalScoreDelta > 0) return '这次训练方向在起作用'
+  if (totalScoreDelta < 0) return '这次先把关键动作收住'
+  return '这次主动作框架基本守住了'
 }
 
 export function getComparisonChangeLabel(comparison: RetestComparison) {
   const topImprovement = comparison.improvedDimensions[0]
-  if (topImprovement) return `${topImprovement.name} 在变好`
-  return '暂时没有明显单项提升'
+  if (topImprovement) return `${topImprovement.name} 这次更稳了`
+  return '暂时没有特别突出的单项提升'
 }
 
 export function getComparisonRiskLabel(comparison: RetestComparison) {
   const topRegression = comparison.declinedDimensions[0]
-  if (topRegression) return topRegression.name
+  if (topRegression) return `${topRegression.name} 需要先回看`
   return '当前没有明显回落项'
 }
 

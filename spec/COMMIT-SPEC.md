@@ -108,6 +108,7 @@ body 建议包含：
 - 纯文档改动：确认引用和路径正确
 - 单一子系统改动：至少验证受影响模块可用
 - 可运行代码改动：优先执行 `make test`
+- TypeScript、共享契约、构建脚本、Dockerfile、Compose 或生产构建相关改动：不能只停在 `make test`，至少补跑 `make build`
 - 交付前或较大改动：执行 `make verify`
 
 如果因为环境限制未执行某项检查，应在 handoff 或 PR 说明中明确写出。

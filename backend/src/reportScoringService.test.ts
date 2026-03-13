@@ -350,6 +350,245 @@ test('buildRuleBasedResult records fallback usage when new specialized features 
   assert.equal(report.scoringEvidence?.analysisDisposition, 'low_confidence');
 });
 
+test('buildRuleBasedResult ranks body preparation issue first and fills coach-style fields', () => {
+  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+    specializedFeatureSummary: buildSpecializedSummary({
+      sideOnReadinessScore: {
+        median: 0.22,
+        peak: 0.4,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      shoulderHipRotationScore: {
+        median: 0.3,
+        peak: 0.45,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      trunkCoilScore: {
+        median: 0.28,
+        peak: 0.4,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+    }),
+  }));
+
+  assert.equal(report.issues[0]?.title, '身体准备不足');
+  assert.equal(report.issues[0]?.issueCategory, 'body_preparation_gap');
+  assert.match(report.issues[0]?.observation ?? '', /侧身进入偏晚/);
+  assert.match(report.issues[0]?.whyItMatters ?? '', /击球点/);
+  assert.match(report.issues[0]?.nextTrainingFocus ?? '', /身体先转进去/);
+  assert.equal(report.suggestions[0]?.suggestionType, 'technique_focus');
+  assert.equal(report.suggestions[0]?.targetDimensionKey, 'body_preparation');
+});
+
+test('buildRuleBasedResult keeps racket-arm issue as one main issue and surfaces arm focus', () => {
+  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+    specializedFeatureSummary: buildSpecializedSummary({
+      hittingArmPreparationScore: {
+        median: 0.35,
+        peak: 0.55,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      wristAboveShoulderConfidence: {
+        median: 0.18,
+        peak: 0.32,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      racketSideElbowHeightScore: {
+        median: 0.25,
+        peak: 0.38,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      elbowExtensionScore: {
+        median: 0.29,
+        peak: 0.42,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+    }),
+  }));
+
+  assert.equal(report.issues.filter((item) => item.issueCategory === 'racket_arm_preparation_gap').length, 1);
+  assert.equal(report.issues[0]?.title, '挥拍臂准备不足');
+  assert.match(report.issues[0]?.description ?? '', /抬得还不够早/);
+  assert.equal(report.suggestions[0]?.linkedIssueCategory, 'arm_lift_focus_gap');
+  assert.equal(report.suggestions[0]?.focusPoint, '抬手位置不足');
+});
+
+test('buildRuleBasedResult prioritizes evidence issue when camera suitability is too low', () => {
+  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+    viewProfile: 'front',
+    viewConfidence: 0.56,
+    viewStability: 0.52,
+    rejectionReasons: ['invalid_camera_angle'],
+    debugCounts: {
+      tooSmallCount: 0,
+      lowStabilityCount: 0,
+      unknownViewCount: 5,
+      usableFrameCount: 8,
+      detectedFrameCount: 10,
+    },
+    specializedFeatureSummary: buildSpecializedSummary({
+      sideOnReadinessScore: {
+        median: 0.28,
+        peak: 0.45,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      shoulderHipRotationScore: {
+        median: 0.36,
+        peak: 0.5,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      trunkCoilScore: {
+        median: 0.31,
+        peak: 0.48,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+    }),
+  }));
+
+  assert.equal(report.issues[0]?.issueCategory, 'evidence_quality_gap');
+  assert.equal(report.issues[0]?.issueType, 'evidence_gap');
+  assert.match(report.issues[0]?.captureAdvice ?? '', /后方或后斜视角/);
+  assert.ok(report.suggestions.some((item) => item.suggestionType === 'capture_fix'));
+});
+
+test('buildRuleBasedResult keeps action issue ahead of light evidence issue when confidence is only slightly reduced', () => {
+  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+    coverageRatio: 0.2,
+    medianStabilityScore: 0.45,
+    specializedFeatureSummary: buildSpecializedSummary({
+      sideOnReadinessScore: {
+        median: 0.22,
+        peak: 0.4,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      shoulderHipRotationScore: {
+        median: 0.3,
+        peak: 0.45,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      trunkCoilScore: {
+        median: 0.28,
+        peak: 0.4,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+    }),
+  }));
+
+  assert.ok((report.confidenceScore ?? 0) < 70);
+  assert.ok((report.confidenceScore ?? 0) >= 65);
+  assert.equal(report.issues[0]?.issueCategory, 'body_preparation_gap');
+  assert.ok(report.issues.some((item) => item.issueCategory === 'evidence_quality_gap'));
+});
+
+test('buildRuleBasedResult caps suggestions at three and links primary suggestion to primary issue dimension', () => {
+  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+    viewProfile: 'front',
+    viewConfidence: 0.56,
+    viewStability: 0.52,
+    rejectionReasons: ['invalid_camera_angle'],
+    debugCounts: {
+      tooSmallCount: 0,
+      lowStabilityCount: 0,
+      unknownViewCount: 5,
+      usableFrameCount: 8,
+      detectedFrameCount: 10,
+    },
+    specializedFeatureSummary: buildSpecializedSummary({
+      sideOnReadinessScore: {
+        median: 0.22,
+        peak: 0.4,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      shoulderHipRotationScore: {
+        median: 0.3,
+        peak: 0.45,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      trunkCoilScore: {
+        median: 0.28,
+        peak: 0.4,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      hittingArmPreparationScore: {
+        median: 0.35,
+        peak: 0.55,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      wristAboveShoulderConfidence: {
+        median: 0.18,
+        peak: 0.32,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      racketSideElbowHeightScore: {
+        median: 0.25,
+        peak: 0.38,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      elbowExtensionScore: {
+        median: 0.29,
+        peak: 0.42,
+        observableFrameCount: 8,
+        observableCoverage: 1,
+        peakFrameIndex: 6,
+      },
+      contactPreparationScore: {
+        median: 0.44,
+        peak: 0.56,
+        observableFrameCount: 8,
+        observableCoverage: 0.75,
+        peakFrameIndex: 6,
+      },
+    }),
+    scoreVariance: 0.033,
+  }));
+
+  assert.equal(report.suggestions.length, 3);
+  assert.ok(report.suggestions.some((item) => item.targetDimensionKey === report.issues[0]?.targetDimensionKey));
+  assert.deepEqual(report.suggestions.map((item) => item.suggestionType), [
+    'technique_focus',
+    'capture_fix',
+    'retest_check',
+  ]);
+});
+
 test('hard rejection sample remains not analyzable', () => {
   const poseResult = buildPoseResult({
     rejectionReasons: ['body_not_detected'],

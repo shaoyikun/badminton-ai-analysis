@@ -1,1 +1,75 @@
-{"currentTask":{"taskId":"task_9a3dae0d","actionType":"clear","status":"completed","stage":"completed","progressPercent":100,"baselineTaskId":"task_086e2e8a","createdAt":"2026-03-12T17:00:44.638Z","updatedAt":"2026-03-12T17:00:47.640Z","startedAt":"2026-03-12T17:00:44.747Z","completedAt":"2026-03-12T17:00:47.640Z"},"baselineTask":{"taskId":"task_086e2e8a","actionType":"clear","status":"completed","stage":"completed","progressPercent":100,"baselineTaskId":"task_87a81e69","createdAt":"2026-03-12T16:22:26.493Z","updatedAt":"2026-03-12T16:22:29.345Z","startedAt":"2026-03-12T16:22:26.655Z","completedAt":"2026-03-12T16:22:29.345Z"},"comparison":{"previousTaskId":"task_086e2e8a","previousCreatedAt":"2026-03-12T16:22:29.339Z","currentTaskId":"task_9a3dae0d","currentCreatedAt":"2026-03-12T17:00:47.633Z","totalScoreDelta":-1,"improvedDimensions":[],"declinedDimensions":[{"name":"动作复现稳定性","previousScore":98,"currentScore":97,"delta":-1}],"unchangedDimensions":[{"name":"主体稳定度","previousScore":99,"currentScore":99,"delta":0},{"name":"侧身展开","previousScore":89,"currentScore":89,"delta":0},{"name":"挥拍臂上举","previousScore":64,"currentScore":64,"delta":0}],"summaryText":"和对比样本相比，这次总分下降 1 分，主要回落在 动作复现稳定性，建议优先回看这几个维度。","coachReview":{"headline":"正手高远球这次略有回落，但更像稳定性波动，不一定是方向走错。","progressNote":"主体稳定度 这次基本和对比样本持平，说明你至少把动作底子维持住了，没有明显跑偏。","keepDoing":"主体稳定度 这一项基本稳住了，说明当前动作主线没有散，后面继续沿着这个节奏练就行。","regressionNote":"动作复现稳定性 这次从 98 分掉到 97 分，这更像是击球节奏或准备阶段没接顺，建议先回看这一段，不要急着同时改太多点。","nextFocus":"下一次复测，先优先盯 动作复现稳定性，同时把 主体稳定度 保住，目标不是一次改完，而是先把最关键的短板收回来。","nextCheck":"下次录制时，先看 动作复现稳定性 有没有止跌回稳，再确认 主体稳定度 有没有被一起保住。"}}}
+{
+  "currentTask": {
+    "taskId": "task_9a3dae0d",
+    "actionType": "clear",
+    "status": "completed",
+    "stage": "completed",
+    "progressPercent": 100,
+    "baselineTaskId": "task_086e2e8a",
+    "createdAt": "2026-03-12T17:00:44.638Z",
+    "updatedAt": "2026-03-12T17:00:47.640Z",
+    "startedAt": "2026-03-12T17:00:44.747Z",
+    "completedAt": "2026-03-12T17:00:47.640Z"
+  },
+  "baselineTask": {
+    "taskId": "task_086e2e8a",
+    "actionType": "clear",
+    "status": "completed",
+    "stage": "completed",
+    "progressPercent": 100,
+    "baselineTaskId": "task_87a81e69",
+    "createdAt": "2026-03-12T16:22:26.493Z",
+    "updatedAt": "2026-03-12T16:22:29.345Z",
+    "startedAt": "2026-03-12T16:22:26.655Z",
+    "completedAt": "2026-03-12T16:22:29.345Z"
+  },
+  "comparison": {
+    "previousTaskId": "task_086e2e8a",
+    "previousCreatedAt": "2026-03-12T16:22:29.339Z",
+    "currentTaskId": "task_9a3dae0d",
+    "currentCreatedAt": "2026-03-12T17:00:47.633Z",
+    "totalScoreDelta": -1,
+    "improvedDimensions": [],
+    "declinedDimensions": [
+      {
+        "name": "动作复现稳定性",
+        "previousScore": 98,
+        "currentScore": 97,
+        "delta": -1
+      }
+    ],
+    "unchangedDimensions": [
+      {
+        "name": "主体稳定度",
+        "previousScore": 99,
+        "currentScore": 99,
+        "delta": 0
+      },
+      {
+        "name": "侧身展开",
+        "previousScore": 89,
+        "currentScore": 89,
+        "delta": 0
+      },
+      {
+        "name": "挥拍臂上举",
+        "previousScore": 64,
+        "currentScore": 64,
+        "delta": 0
+      }
+    ],
+    "summaryText": "和对比样本相比，这次主要回落在 动作复现稳定性，但 主体稳定度 还基本守住，更像阶段性波动，不是整套动作都退掉了。",
+    "coachReview": {
+      "headline": "正手高远球这次略有回落，但更像稳定性波动，不一定是训练方向走错。",
+      "progressNote": "主体稳定度 这次基本和对比样本持平，说明你至少把动作底子维持住了，没有明显跑偏。",
+      "keepDoing": "主体稳定度 这一项基本稳住了，说明当前动作主线没有散，后面继续沿着这个节奏练就行。",
+      "regressionNote": "动作复现稳定性 这次从 98 分掉到 97 分，更像是准备节奏或击球前衔接没接顺，建议先回看这一段，不要急着同时改太多点。",
+      "nextFocus": "下一次复测先只盯 动作复现稳定性、主体稳定度，先把 动作复现稳定性 收回来，同时把 主体稳定度 保住。",
+      "nextCheck": "下次录制时，先看 动作复现稳定性 有没有止跌回稳，再确认 主体稳定度 有没有被一起保住。",
+      "focusDimensions": [
+        "动作复现稳定性",
+        "主体稳定度"
+      ]
+    }
+  }
+}

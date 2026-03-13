@@ -111,11 +111,40 @@ export interface IssueItem {
   title: string;
   description: string;
   impact: string;
+  issueType?: 'action_gap' | 'evidence_gap';
+  issueCategory?: string;
+  targetDimensionKey?: string;
+  confidenceImpact?: 'low' | 'medium' | 'high';
+  observation?: string;
+  whyItMatters?: string;
+  nextTrainingFocus?: string;
+  captureAdvice?: string;
+  evidenceRefs?: Array<{
+    dimensionKey?: string;
+    featureKey?: string;
+    label?: string;
+    score?: number | null;
+    confidence?: number | null;
+    reference?: string;
+  }>;
 }
 
 export interface SuggestionItem {
   title: string;
   description: string;
+  suggestionType?: 'capture_fix' | 'technique_focus' | 'retest_check';
+  targetDimensionKey?: string;
+  recommendedNextCapture?: string;
+  focusPoint?: string;
+  linkedIssueCategory?: string;
+  evidenceRefs?: Array<{
+    dimensionKey?: string;
+    featureKey?: string;
+    label?: string;
+    score?: number | null;
+    confidence?: number | null;
+    reference?: string;
+  }>;
 }
 
 export interface VideoMetadata {
@@ -352,6 +381,7 @@ export interface RetestCoachReview {
   regressionNote?: string;
   nextFocus: string;
   nextCheck: string;
+  focusDimensions?: string[];
 }
 
 export interface RetestComparison {

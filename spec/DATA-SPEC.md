@@ -30,6 +30,37 @@
 - `totalScore` 只作为辅助摘要信息，不作为产品主叙事
 - `confidenceScore` 用于表达“当前报告有多可信”，不直接代表动作质量
 - `dimensionScores` 当前展示的是 `证据质量 / 身体准备 / 挥拍臂准备 / 挥拍复现稳定性`
+- `issues` 与 `suggestions` 会同时保留旧版 `title / description / impact` 兼容字段，并补充教练式结构化字段
+
+### issue item
+- title
+- description
+- impact
+- issueType（可选：`action_gap` / `evidence_gap`）
+- issueCategory（可选）
+- targetDimensionKey（可选）
+- confidenceImpact（可选：`low` / `medium` / `high`）
+- observation（可选）
+- whyItMatters（可选）
+- nextTrainingFocus（可选）
+- captureAdvice（可选）
+- evidenceRefs（可选）
+  - dimensionKey（可选）
+  - featureKey（可选）
+  - label（可选）
+  - score（可选）
+  - confidence（可选）
+  - reference（可选）
+
+### suggestion item
+- title
+- description
+- suggestionType（可选：`capture_fix` / `technique_focus` / `retest_check`）
+- targetDimensionKey（可选）
+- recommendedNextCapture（可选）
+- focusPoint（可选）
+- linkedIssueCategory（可选）
+- evidenceRefs（可选）
 
 ## 2. 任务状态与错误信息
 ### task summary
@@ -92,6 +123,7 @@
   - regressionNote（可选）
   - nextFocus
   - nextCheck
+  - focusDimensions（可选）
 
 ### delta item
 - name

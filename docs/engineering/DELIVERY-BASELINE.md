@@ -109,6 +109,13 @@ make down
 - 根 README、`.env.example`、`Makefile`、脚本、子系统 README 的命令和环境变量说明一致
 - 如有跳过项、残留风险或临时开关，已在交付说明中明确
 
+额外说明：
+
+- 不允许用 `make test` 代替 `make build`
+- backend 当前测试通过 `tsx` 直接执行 TypeScript 测试文件，这可以覆盖行为回归，但不能替代 `tsc -p tsconfig.json` 的完整静态类型检查
+- 因此凡是改动了 TypeScript 代码、共享 contracts、Docker 构建路径或 `npm run build` 依赖的内容，交付前至少要显式确认一次 `make build`
+- 若变更需要通过 Docker 启动或交付，则还要继续确认 `make verify` 或 `docker compose up --build -d` 不报错
+
 ## 手工回归路径
 
 以下路径用于判断“工程入口没有回归”，不是新增业务验收。
@@ -183,6 +190,11 @@ make verify-local
 - 只想确认 lint、测试、构建是否通过
 - 需要快速判断脚本和代码是否明显回归
 
+注意：
+
+- `make test` 通过只代表自动化测试场景通过，不代表 TypeScript 编译、前端生产构建或 Docker 镜像构建一定通过
+- 如果改动包含 TypeScript 类型、共享契约、构建脚本或 Docker 构建上下文，至少还要补跑 `make build`
+
 不包含：
 
 - `docker compose build backend frontend`
@@ -203,6 +215,7 @@ make verify
 
 - Docker CLI 可用
 - Docker daemon 正常运行
+- backend / frontend 生产构建、TypeScript 编译检查和 Docker Compose 构建检查都通过
 
 ## 常见故障排查
 

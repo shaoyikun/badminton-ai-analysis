@@ -25,6 +25,12 @@ make verify
 - `make build`：backend / frontend 生产构建 + Python 语法编译校验
 - `make verify`：严格交付门禁，包含前端 lint、全部测试、全部构建，以及 Docker Compose 构建校验
 
+注意：
+
+- `make test` 不等价于 `make build`
+- backend 当前测试通过 `tsx` 执行 TypeScript 测试文件，能覆盖行为回归，但不能替代 `tsc` 的完整类型检查
+- 只要改动触及 TypeScript 类型、共享 contracts、构建脚本或 Docker 构建路径，交付前至少要再确认一次 `make build`
+
 本地没有可用 Docker daemon 时，可临时使用：
 
 ```bash

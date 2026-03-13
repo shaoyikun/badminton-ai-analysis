@@ -110,7 +110,7 @@ test('对比页有结果时展示复测结论', async ({ page }) => {
   )
 
   await expect(page.getByText('复测结论')).toBeVisible()
-  await expect(page.getByRole('heading', { name: '这次有一点回落' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '这次先把关键动作收住' })).toBeVisible()
   await expect(page.getByText('参考分数变化')).toBeVisible()
   await expect(page.getByText('-1')).toBeVisible()
   await expect(page.getByRole('link', { name: '继续复测上传' })).toHaveAttribute('href', '/upload')

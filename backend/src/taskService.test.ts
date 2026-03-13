@@ -163,6 +163,155 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
   });
 });
 
+test('getRetestComparison writes improvement summary with focused coach review', async () => {
+  await withTempWorkspace(async () => {
+    const first = createTask('clear');
+    const second = createTask('clear');
+    const now = new Date().toISOString();
+
+    saveTask({
+      ...first,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      completedAt: now,
+    });
+    saveTask({
+      ...second,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      completedAt: now,
+      baselineTaskId: first.taskId,
+    });
+
+    const firstReport: ReportResult = {
+      taskId: first.taskId,
+      actionType: 'clear',
+      totalScore: 70,
+      summaryText: 'baseline',
+      dimensionScores: [
+        { name: '身体准备', score: 68 },
+        { name: '挥拍臂准备', score: 64 },
+        { name: '挥拍复现稳定性', score: 72 },
+      ],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: true,
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v2-evidence-confidence',
+      },
+    };
+    const secondReport: ReportResult = {
+      taskId: second.taskId,
+      actionType: 'clear',
+      totalScore: 76,
+      summaryText: 'current',
+      dimensionScores: [
+        { name: '身体准备', score: 74 },
+        { name: '挥拍臂准备', score: 69 },
+        { name: '挥拍复现稳定性', score: 72 },
+      ],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: true,
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v2-evidence-confidence',
+      },
+    };
+
+    saveReport(first.taskId, JSON.stringify(firstReport), firstReport.totalScore, firstReport.summaryText, firstReport.poseBased);
+    saveReport(second.taskId, JSON.stringify(secondReport), secondReport.totalScore, secondReport.summaryText, secondReport.poseBased);
+
+    const comparison = getRetestComparison(second.taskId, first.taskId);
+
+    assert.ok(comparison);
+    assert.match(comparison?.comparison.summaryText ?? '', /最明显的提升在 身体准备、挥拍臂准备/);
+    assert.deepEqual(comparison?.comparison.coachReview.focusDimensions, ['身体准备', '挥拍臂准备']);
+    assert.match(comparison?.comparison.coachReview.nextFocus ?? '', /先只盯 身体准备、挥拍臂准备/);
+    assert.match(comparison?.comparison.coachReview.nextCheck ?? '', /身体准备/);
+  });
+});
+
+test('getRetestComparison writes decline summary with explicit changed dimensions', async () => {
+  await withTempWorkspace(async () => {
+    const first = createTask('clear');
+    const second = createTask('clear');
+    const now = new Date().toISOString();
+
+    saveTask({
+      ...first,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      completedAt: now,
+    });
+    saveTask({
+      ...second,
+      status: 'completed',
+      stage: 'completed',
+      progressPercent: 100,
+      completedAt: now,
+      baselineTaskId: first.taskId,
+    });
+
+    const firstReport: ReportResult = {
+      taskId: first.taskId,
+      actionType: 'clear',
+      totalScore: 80,
+      summaryText: 'baseline',
+      dimensionScores: [
+        { name: '身体准备', score: 80 },
+        { name: '挥拍臂准备', score: 78 },
+        { name: '挥拍复现稳定性', score: 76 },
+      ],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: true,
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v2-evidence-confidence',
+      },
+    };
+    const secondReport: ReportResult = {
+      taskId: second.taskId,
+      actionType: 'clear',
+      totalScore: 74,
+      summaryText: 'current',
+      dimensionScores: [
+        { name: '身体准备', score: 80 },
+        { name: '挥拍臂准备', score: 74 },
+        { name: '挥拍复现稳定性', score: 70 },
+      ],
+      issues: [],
+      suggestions: [],
+      retestAdvice: 'retry',
+      createdAt: now,
+      poseBased: true,
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v2-evidence-confidence',
+      },
+    };
+
+    saveReport(first.taskId, JSON.stringify(firstReport), firstReport.totalScore, firstReport.summaryText, firstReport.poseBased);
+    saveReport(second.taskId, JSON.stringify(secondReport), secondReport.totalScore, secondReport.summaryText, secondReport.poseBased);
+
+    const comparison = getRetestComparison(second.taskId, first.taskId);
+
+    assert.ok(comparison);
+    assert.match(comparison?.comparison.summaryText ?? '', /主要回落在 挥拍复现稳定性、挥拍臂准备/);
+    assert.match(comparison?.comparison.summaryText ?? '', /身体准备 还基本守住/);
+    assert.deepEqual(comparison?.comparison.coachReview.focusDimensions, ['挥拍复现稳定性', '身体准备']);
+    assert.match(comparison?.comparison.coachReview.nextFocus ?? '', /先只盯 挥拍复现稳定性、身体准备/);
+    assert.match(comparison?.comparison.coachReview.regressionNote ?? '', /挥拍复现稳定性 这次从 76 分掉到 70 分/);
+  });
+});
+
 test('getRetestComparison degrades to total-score-only comparison across scoring model versions', async () => {
   await withTempWorkspace(async () => {
     const first = createTask('clear');
