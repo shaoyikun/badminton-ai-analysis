@@ -17,9 +17,16 @@
 - 前端长期路线按 React Web / React H5 规划，当前阶段不采用 React Native 作为默认实现路线
 
 ## 4. MVP 范围
-### 支持动作
-1. 正手高远球
-2. 杀球
+### 当前正式支持动作
+- 正手高远球 `clear`
+
+### 预留扩展动作
+- 杀球 `smash`
+
+说明：
+- 截至 2026-03-13，正式 runtime 范围以 `clear-only` 为准
+- `smash` 只作为后续扩动作目标，不构成当前公开能力
+- 是否重新开放 `smash` 以 `docs/action-scope.md` 和 `spec/PHASED-EVOLUTION-SPEC.md` 的 Phase 5-6 为准
 
 ### 输入约束
 - 单人视频
@@ -66,6 +73,7 @@
 - 总评分只作为辅助摘要信息
 - `suggestions` 的产品语义统一为复测关注点 / 后续观察建议
 - 历史记录和复测对比只允许同动作、已完成样本
+- 当前公开动作范围只有 `clear`，不允许在 spec 摘要中默认假设 `smash` 已上线
 
 ## 9. 商业化假设
 ### C 端
@@ -78,5 +86,6 @@
 
 ## 10. 相关主文档
 - `docs/prd/PRD.md`
+- `docs/action-scope.md`
 - `docs/data/VIDEO-CAPTURE-SPEC.md`
 - `docs/design/REPORT-TEMPLATE.md`

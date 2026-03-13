@@ -1,5 +1,9 @@
 # DATA-SPEC
 
+说明：
+- 当前公开动作范围以 `docs/action-scope.md` 为准；截至 2026-03-13，runtime 为 `clear-only`
+- 若未来重新开放 `smash`，必须先满足 `spec/PHASED-EVOLUTION-SPEC.md` 中的对应阶段条件
+
 ## 1. 分析结果结构
 ### report
 - taskId

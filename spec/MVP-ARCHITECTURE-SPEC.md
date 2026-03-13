@@ -123,6 +123,7 @@ MVP 前端只依赖下面这些接口：
 说明：
 - 现有 `/api/tasks/:taskId/analyze` 在 MVP 目标协议中重命名为 `/start`。
 - 现有 `/preprocess`、`/pose` 系列接口降级为内部调试接口，不进入 MVP 主协议。
+- 当前公开动作范围以 `clear-only` 为准；旧客户端若上传 `"smash"`，后端应继续返回 `unsupported_action_scope`。
 
 ## 5.2 核心任务对象
 
@@ -141,7 +142,7 @@ type TaskStage =
 
 interface TaskStatusResponse {
   taskId: string
-  actionType: 'clear' | 'smash'
+  actionType: 'clear'
   status: TaskStatus
   stage: TaskStage
   progressPercent: number
@@ -159,6 +160,7 @@ interface TaskStatusResponse {
 - `stage` 用于分析中页和排障
 - `progressPercent` 只做阶段性进度提示，不做精确耗时承诺
 - `failed` 为终态；用户重新上传时创建新任务，不复用失败任务
+- `smash` 的重新开放不属于当前 MVP 摘要范围，需按 `spec/PHASED-EVOLUTION-SPEC.md` 的 Phase 5-6 单独推进
 
 ## 5.3 报告对象
 报告主结构继续沿用 `DATA-SPEC.md` 中的 `ReportResult`，但 MVP 必填字段必须包括：
