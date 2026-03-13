@@ -24,6 +24,17 @@ async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
   }
 }
 
+function buildPhaseBreakdown(
+  overrides?: Partial<Record<'preparation' | 'backswing' | 'contactCandidate' | 'followThrough', 'ok' | 'attention' | 'insufficient_evidence'>>,
+): NonNullable<ReportResult['phaseBreakdown']> {
+  return [
+    { phaseKey: 'preparation', label: '准备', status: overrides?.preparation ?? 'ok', summary: '准备阶段摘要' },
+    { phaseKey: 'backswing', label: '引拍', status: overrides?.backswing ?? 'ok', summary: '引拍阶段摘要' },
+    { phaseKey: 'contactCandidate', label: '击球候选', status: overrides?.contactCandidate ?? 'ok', summary: '击球候选阶段摘要' },
+    { phaseKey: 'followThrough', label: '随挥', status: overrides?.followThrough ?? 'ok', summary: '随挥阶段摘要' },
+  ];
+}
+
 test('saveUpload strips directory segments and stores source video under artifact task directory', async () => {
   await withTempWorkspace(async (workspace) => {
     const task = createTask('clear');
@@ -237,8 +248,12 @@ test('getRetestComparison writes improvement summary with focused coach review',
       retestAdvice: 'retry',
       createdAt: now,
       poseBased: true,
+      phaseBreakdown: buildPhaseBreakdown({
+        preparation: 'attention',
+        backswing: 'attention',
+      }),
       scoringEvidence: {
-        scoringModelVersion: 'rule-v2-evidence-confidence',
+        scoringModelVersion: 'rule-v3-phase-aware',
       },
     };
     const secondReport: ReportResult = {
@@ -256,8 +271,9 @@ test('getRetestComparison writes improvement summary with focused coach review',
       retestAdvice: 'retry',
       createdAt: now,
       poseBased: true,
+      phaseBreakdown: buildPhaseBreakdown(),
       scoringEvidence: {
-        scoringModelVersion: 'rule-v2-evidence-confidence',
+        scoringModelVersion: 'rule-v3-phase-aware',
       },
     };
 
@@ -267,10 +283,12 @@ test('getRetestComparison writes improvement summary with focused coach review',
     const comparison = getRetestComparison(second.taskId, first.taskId);
 
     assert.ok(comparison);
-    assert.match(comparison?.comparison.summaryText ?? '', /最明显的提升在 身体准备、挥拍臂准备/);
-    assert.deepEqual(comparison?.comparison.coachReview.focusDimensions, ['身体准备', '挥拍臂准备']);
-    assert.match(comparison?.comparison.coachReview.nextFocus ?? '', /先只盯 身体准备、挥拍臂准备/);
-    assert.match(comparison?.comparison.coachReview.nextCheck ?? '', /身体准备/);
+    assert.ok(comparison.comparison);
+    assert.match(comparison.comparison.summaryText ?? '', /最明显的提升在 身体准备、挥拍臂准备/);
+    assert.deepEqual(comparison.comparison.coachReview.focusDimensions, ['身体准备', '挥拍臂准备']);
+    assert.match(comparison.comparison.coachReview.nextFocus ?? '', /先只盯 身体准备、挥拍臂准备/);
+    assert.match(comparison.comparison.coachReview.nextCheck ?? '', /身体准备/);
+    assert.equal(comparison.comparison.phaseDeltas[0]?.phaseKey, 'preparation');
   });
 });
 
@@ -311,8 +329,9 @@ test('getRetestComparison writes decline summary with explicit changed dimension
       retestAdvice: 'retry',
       createdAt: now,
       poseBased: true,
+      phaseBreakdown: buildPhaseBreakdown(),
       scoringEvidence: {
-        scoringModelVersion: 'rule-v2-evidence-confidence',
+        scoringModelVersion: 'rule-v3-phase-aware',
       },
     };
     const secondReport: ReportResult = {
@@ -330,8 +349,12 @@ test('getRetestComparison writes decline summary with explicit changed dimension
       retestAdvice: 'retry',
       createdAt: now,
       poseBased: true,
+      phaseBreakdown: buildPhaseBreakdown({
+        contactCandidate: 'attention',
+        followThrough: 'attention',
+      }),
       scoringEvidence: {
-        scoringModelVersion: 'rule-v2-evidence-confidence',
+        scoringModelVersion: 'rule-v3-phase-aware',
       },
     };
 
@@ -341,15 +364,17 @@ test('getRetestComparison writes decline summary with explicit changed dimension
     const comparison = getRetestComparison(second.taskId, first.taskId);
 
     assert.ok(comparison);
-    assert.match(comparison?.comparison.summaryText ?? '', /主要回落在 挥拍复现稳定性、挥拍臂准备/);
-    assert.match(comparison?.comparison.summaryText ?? '', /身体准备 还基本守住/);
-    assert.deepEqual(comparison?.comparison.coachReview.focusDimensions, ['挥拍复现稳定性', '身体准备']);
-    assert.match(comparison?.comparison.coachReview.nextFocus ?? '', /先只盯 挥拍复现稳定性、身体准备/);
-    assert.match(comparison?.comparison.coachReview.regressionNote ?? '', /挥拍复现稳定性 这次从 76 分掉到 70 分/);
+    assert.ok(comparison.comparison);
+    assert.match(comparison.comparison.summaryText ?? '', /主要回落在 挥拍复现稳定性、挥拍臂准备/);
+    assert.match(comparison.comparison.summaryText ?? '', /身体准备 还基本守住/);
+    assert.deepEqual(comparison.comparison.coachReview.focusDimensions, ['挥拍复现稳定性', '身体准备']);
+    assert.match(comparison.comparison.coachReview.nextFocus ?? '', /先只盯 挥拍复现稳定性、身体准备/);
+    assert.match(comparison.comparison.coachReview.regressionNote ?? '', /挥拍复现稳定性 这次从 76 分掉到 70 分/);
+    assert.ok(comparison.comparison.phaseDeltas.some((item) => item.phaseKey === 'followThrough' && item.changed));
   });
 });
 
-test('getRetestComparison degrades to total-score-only comparison across scoring model versions', async () => {
+test('getRetestComparison disables comparison across scoring model versions', async () => {
   await withTempWorkspace(async () => {
     const first = createTask('clear');
     const second = createTask('clear');
@@ -396,7 +421,7 @@ test('getRetestComparison degrades to total-score-only comparison across scoring
       createdAt: now,
       poseBased: true,
       scoringEvidence: {
-        scoringModelVersion: 'rule-v2-evidence-confidence',
+        scoringModelVersion: 'rule-v3-phase-aware',
       },
     };
 
@@ -406,10 +431,7 @@ test('getRetestComparison degrades to total-score-only comparison across scoring
     const comparison = getRetestComparison(second.taskId, first.taskId);
 
     assert.ok(comparison);
-    assert.equal(comparison?.comparison.totalScoreDelta, 5);
-    assert.deepEqual(comparison?.comparison.improvedDimensions, []);
-    assert.deepEqual(comparison?.comparison.declinedDimensions, []);
-    assert.deepEqual(comparison?.comparison.unchangedDimensions, []);
-    assert.match(comparison?.comparison.summaryText ?? '', /评分模型已升级/);
+    assert.equal(comparison.comparison, null);
+    assert.equal(comparison.unavailableReason, 'scoring_model_mismatch');
   });
 });

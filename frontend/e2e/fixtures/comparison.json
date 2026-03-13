@@ -58,7 +58,41 @@
         "delta": 0
       }
     ],
-    "summaryText": "和对比样本相比，这次主要回落在 动作复现稳定性，但 主体稳定度 还基本守住，更像阶段性波动，不是整套动作都退掉了。",
+    "phaseDeltas": [
+      {
+        "phaseKey": "preparation",
+        "label": "准备",
+        "previousStatus": "ok",
+        "currentStatus": "ok",
+        "changed": false,
+        "summary": "准备阶段和基线基本一致。"
+      },
+      {
+        "phaseKey": "backswing",
+        "label": "引拍",
+        "previousStatus": "ok",
+        "currentStatus": "attention",
+        "changed": true,
+        "summary": "引拍阶段比基线更需要回看。"
+      },
+      {
+        "phaseKey": "contactCandidate",
+        "label": "击球候选",
+        "previousStatus": "ok",
+        "currentStatus": "ok",
+        "changed": false,
+        "summary": "击球候选阶段和基线基本一致。"
+      },
+      {
+        "phaseKey": "followThrough",
+        "label": "随挥",
+        "previousStatus": "ok",
+        "currentStatus": "insufficient_evidence",
+        "changed": true,
+        "summary": "随挥阶段比基线更需要回看。"
+      }
+    ],
+    "summaryText": "和对比样本相比，这次主要回落在 动作复现稳定性，但 主体稳定度 还基本守住，更像阶段性波动，不是整套动作都退掉了。 阶段上最明显的变化出现在引拍阶段。",
     "coachReview": {
       "headline": "正手高远球这次略有回落，但更像稳定性波动，不一定是训练方向走错。",
       "progressNote": "主体稳定度 这次基本和对比样本持平，说明你至少把动作底子维持住了，没有明显跑偏。",

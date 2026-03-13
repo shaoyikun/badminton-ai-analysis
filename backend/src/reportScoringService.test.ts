@@ -145,13 +145,12 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       detectionStatus: 'detected' as const,
     },
     followThrough: {
-      anchorFrameIndex: null,
-      windowStartFrameIndex: null,
-      windowEndFrameIndex: null,
-      score: null,
+      anchorFrameIndex: 7,
+      windowStartFrameIndex: 6,
+      windowEndFrameIndex: 7,
+      score: 0.88,
       sourceMetric: 'postContactMotionScore',
-      detectionStatus: 'missing' as const,
-      missingReason: 'no_post_contact_frames' as const,
+      detectionStatus: 'detected' as const,
     },
   };
 
@@ -237,7 +236,7 @@ test('buildPoseSummary keeps specialized summary fields for downstream consumers
   assert.equal(summary?.temporalConsistency, 0.725);
   assert.equal(summary?.motionContinuity, 0.88);
   assert.equal(summary?.phaseCandidates?.preparation.anchorFrameIndex, 6);
-  assert.equal(summary?.phaseCandidates?.followThrough.missingReason, 'no_post_contact_frames');
+  assert.equal(summary?.phaseCandidates?.followThrough.anchorFrameIndex, 7);
   assert.deepEqual(summary?.specializedFeatureSummary?.contactPreparationScore, {
     median: 0.63,
     peak: 0.81,
@@ -265,12 +264,19 @@ test('buildRuleBasedResult produces high-confidence report for a high-quality sa
     evidence_quality: 79,
     body_preparation: 72,
     racket_arm_preparation: 72,
-    swing_repeatability: 76,
+    swing_repeatability: 74,
   });
   assert.equal(report.scoringEvidence?.cameraSuitability, 89);
   assert.equal(report.scoringEvidence?.confidenceBreakdown?.finalConfidenceScore, 85);
   assert.deepEqual(report.evidenceNotes, []);
   assert.equal(report.scoringEvidence?.fallbacksUsed?.length, 0);
+  assert.equal(report.scoringEvidence?.scoringModelVersion, 'rule-v3-phase-aware');
+  assert.deepEqual(report.phaseBreakdown?.map((item) => item.phaseKey), [
+    'preparation',
+    'backswing',
+    'contactCandidate',
+    'followThrough',
+  ]);
   assert.equal(report.visualEvidence?.bestFrameImagePath, 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg');
   assert.equal(report.visualEvidence?.bestFrameOverlayPath, 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg');
 });
@@ -304,6 +310,41 @@ test('buildRuleBasedResult keeps jitter-heavy sample analyzable but lowers repea
   const poseResult = buildPoseResult({
     scoreVariance: 0.031,
     coverageRatio: 0.75,
+    phaseCandidates: {
+      preparation: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.81,
+        sourceMetric: 'contactPreparationScore',
+        detectionStatus: 'detected',
+      },
+      backswing: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.83,
+        sourceMetric: 'hittingArmPreparationScore',
+        detectionStatus: 'detected',
+      },
+      contactCandidate: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 6,
+        windowEndFrameIndex: 6,
+        score: 0.52,
+        sourceMetric: 'compositeScore',
+        detectionStatus: 'detected',
+      },
+      followThrough: {
+        anchorFrameIndex: null,
+        windowStartFrameIndex: null,
+        windowEndFrameIndex: null,
+        score: null,
+        sourceMetric: 'postContactMotionScore',
+        detectionStatus: 'missing',
+        missingReason: 'no_post_contact_frames',
+      },
+    },
     specializedFeatureSummary: buildSpecializedSummary({
       contactPreparationScore: {
         median: 0.56,
@@ -321,6 +362,7 @@ test('buildRuleBasedResult keeps jitter-heavy sample analyzable but lowers repea
   assert.ok((report.scoringEvidence?.dimensionScoresByKey?.swing_repeatability ?? 0) < 70);
   assert.ok((report.confidenceScore ?? 0) >= 70);
   assert.ok(report.evidenceNotes?.some((note) => note.includes('复现证据偏散')));
+  assert.equal(report.phaseBreakdown?.find((item) => item.phaseKey === 'followThrough')?.status, 'insufficient_evidence');
 });
 
 test('buildRuleBasedResult records fallback usage when new specialized features are unavailable', () => {
@@ -388,7 +430,7 @@ test('buildRuleBasedResult records fallback usage when new specialized features 
   assert.deepEqual(report.scoringEvidence?.fallbacksUsed, [
     'medianBodyTurnScore_fallback',
     'medianRacketArmLiftScore_fallback',
-    'contactPreparationScore_fallback',
+    'phase_repeatability_fallback',
   ]);
   assert.ok((report.confidenceScore ?? 0) < 70);
   assert.equal(report.scoringEvidence?.analysisDisposition, 'low_confidence');
@@ -426,6 +468,8 @@ test('buildRuleBasedResult ranks body preparation issue first and fills coach-st
   assert.match(report.issues[0]?.observation ?? '', /侧身进入偏晚/);
   assert.match(report.issues[0]?.whyItMatters ?? '', /击球点/);
   assert.match(report.issues[0]?.nextTrainingFocus ?? '', /身体先转进去/);
+  assert.match(report.summaryText ?? '', /准备阶段/);
+  assert.match(report.retestAdvice, /准备阶段/);
   assert.equal(report.suggestions[0]?.suggestionType, 'technique_focus');
   assert.equal(report.suggestions[0]?.targetDimensionKey, 'body_preparation');
 });

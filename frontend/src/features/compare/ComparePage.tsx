@@ -6,10 +6,10 @@ import { RetestView } from '../../components/result-views/RetestView'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 
 export function ComparePage() {
-  const { comparison, history, selectedCompareTaskId } = useAnalysisTask()
+  const { comparison, comparisonUnavailableReason, history, selectedCompareTaskId } = useAnalysisTask()
   const validBaseline = getValidBaselineItem(history, selectedCompareTaskId)
 
-  if (!comparison && !validBaseline) {
+  if (!comparison && !validBaseline && !comparisonUnavailableReason) {
     return (
       <EmptyState
         badge="暂无对比"
@@ -23,7 +23,7 @@ export function ComparePage() {
 
   return (
     <div className="page-stack">
-      <RetestView comparison={comparison} />
+      <RetestView comparison={comparison} unavailableReason={comparisonUnavailableReason ?? null} />
       <BottomCTA
         primary={{ label: '继续复测上传', to: '/upload' }}
         secondary={{ label: '更换对比基线', to: '/history', tone: 'secondary' }}

@@ -2,6 +2,7 @@ import type { RetestComparison, ReportResult } from '../../hooks/useAnalysisTask
 import {
   DimensionScoreSection,
   IssueBreakdownSection,
+  PhaseBreakdownCard,
   PoseOverlayGalleryCard,
   RecognitionContextCard,
   ReportHeroCard,
@@ -21,6 +22,7 @@ export function ReportView({
     <>
       <ReportHeroCard report={report} comparison={comparison} />
       <RecognitionContextCard report={report} />
+      <PhaseBreakdownCard report={report} />
       <PoseOverlayGalleryCard report={report} />
       <TrainingFocusCard report={report} />
       <IssueBreakdownSection report={report} />

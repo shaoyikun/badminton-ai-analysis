@@ -20,6 +20,10 @@ test('报告页回访加载成功', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /本次基于 9\/9 帧稳定识别结果生成/ })).toBeVisible()
   await expect(page.getByText('总评分')).toBeVisible()
   await expect(page.getByRole('heading', { name: '识别信息' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '动作阶段拆解' })).toBeVisible()
+  const phaseCard = page.locator('.phase-breakdown-card')
+  await expect(phaseCard.getByText(/^准备$/)).toBeVisible()
+  await expect(phaseCard.getByText(/^引拍$/)).toBeVisible()
   await expect(page.getByRole('heading', { name: '骨架识别图' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '动作问题拆解' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '分维度评分' })).toBeVisible()
@@ -113,6 +117,30 @@ test('对比页有结果时展示复测结论', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '这次先把关键动作收住' })).toBeVisible()
   await expect(page.getByText('参考分数变化')).toBeVisible()
   await expect(page.getByText('-1')).toBeVisible()
+  await expect(page.getByText('引拍阶段比基线更需要回看。')).toBeVisible()
   await expect(page.getByRole('link', { name: '继续复测上传' })).toHaveAttribute('href', '/upload')
   await expect(page.getByRole('link', { name: '更换对比基线' })).toHaveAttribute('href', '/history')
+})
+
+test('对比页在模型升级时展示不可比提示', async ({ page }) => {
+  await mockApi(page, {
+    comparison: {
+      ...comparisonResponse,
+      comparison: null,
+      unavailableReason: 'scoring_model_mismatch',
+    },
+  })
+
+  await gotoWithSession(
+    page,
+    '/compare',
+    buildSessionSnapshot({
+      taskId: currentTaskId,
+      latestCompletedTaskId: currentTaskId,
+      selectedCompareTaskId: comparisonHistoryTaskId,
+    }),
+  )
+
+  await expect(page.getByText('当前这次暂时不能直接和旧基线比较')).toBeVisible()
+  await expect(page.getByText('评分模型已经升级')).toBeVisible()
 })

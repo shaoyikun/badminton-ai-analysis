@@ -247,6 +247,15 @@ test('history detail and comparison endpoints read from dedicated projections', 
       retestAdvice: 'retry',
       createdAt: now,
       poseBased: false,
+      phaseBreakdown: [
+        { phaseKey: 'preparation', label: '准备', status: 'ok', summary: '准备阶段稳定' },
+        { phaseKey: 'backswing', label: '引拍', status: 'ok', summary: '引拍阶段稳定' },
+        { phaseKey: 'contactCandidate', label: '击球候选', status: 'ok', summary: '击球候选阶段稳定' },
+        { phaseKey: 'followThrough', label: '随挥', status: 'ok', summary: '随挥阶段稳定' },
+      ],
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v3-phase-aware',
+      },
     };
     const secondReport: ReportResult = {
       taskId: secondTaskId,
@@ -259,6 +268,15 @@ test('history detail and comparison endpoints read from dedicated projections', 
       retestAdvice: 'retry',
       createdAt: now,
       poseBased: false,
+      phaseBreakdown: [
+        { phaseKey: 'preparation', label: '准备', status: 'ok', summary: '准备阶段稳定' },
+        { phaseKey: 'backswing', label: '引拍', status: 'ok', summary: '引拍阶段稳定' },
+        { phaseKey: 'contactCandidate', label: '击球候选', status: 'ok', summary: '击球候选阶段稳定' },
+        { phaseKey: 'followThrough', label: '随挥', status: 'ok', summary: '随挥阶段稳定' },
+      ],
+      scoringEvidence: {
+        scoringModelVersion: 'rule-v3-phase-aware',
+      },
     };
     saveReport(firstTaskId, JSON.stringify(firstReport), firstReport.totalScore, firstReport.summaryText, firstReport.poseBased);
     saveReport(secondTaskId, JSON.stringify(secondReport), secondReport.totalScore, secondReport.summaryText, secondReport.poseBased);
@@ -285,9 +303,9 @@ test('history detail and comparison endpoints read from dedicated projections', 
       url: `/api/tasks/${secondTaskId}/comparison`,
     });
     assert.equal(comparisonResponse.statusCode, 200);
-    const comparisonPayload = comparisonResponse.json() as { baselineTask: { taskId: string }; comparison: { totalScoreDelta: number } };
+    const comparisonPayload = comparisonResponse.json() as { baselineTask: { taskId: string }; comparison: { totalScoreDelta: number } | null };
     assert.equal(comparisonPayload.baselineTask.taskId, firstTaskId);
-    assert.equal(comparisonPayload.comparison.totalScoreDelta, 5);
+    assert.equal(comparisonPayload.comparison?.totalScoreDelta, 5);
   });
 });
 

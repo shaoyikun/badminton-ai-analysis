@@ -25,6 +25,28 @@ function getRecognitionLead(report: ReportResult) {
   return `系统当前把这条视频识别为${viewLabel}视角，并推断主要是${sideLabel}。`
 }
 
+function getPhaseStatusLabel(status?: NonNullable<ReportResult['phaseBreakdown']>[number]['status']) {
+  switch (status) {
+    case 'ok':
+      return { label: '较稳', tone: 'positive' as const }
+    case 'attention':
+      return { label: '优先回看', tone: 'caution' as const }
+    case 'insufficient_evidence':
+      return { label: '证据不足', tone: 'neutral' as const }
+    default:
+      return { label: '待确认', tone: 'neutral' as const }
+  }
+}
+
+function getPhaseDeltaTitle(comparison: RetestComparison, phaseKey: NonNullable<ReportResult['phaseBreakdown']>[number]['phaseKey']) {
+  const phaseDelta = comparison.phaseDeltas.find((item) => item.phaseKey === phaseKey)
+  if (!phaseDelta) return '和基线接近'
+  if (!phaseDelta.changed) return '和基线接近'
+  if (phaseDelta.previousStatus === 'attention' && phaseDelta.currentStatus === 'ok') return '比基线更稳'
+  if (phaseDelta.previousStatus === 'insufficient_evidence' && phaseDelta.currentStatus !== 'insufficient_evidence') return '比基线更清楚'
+  return '比基线更需要回看'
+}
+
 export function PoseSummaryCard({ poseResult }: { poseResult: PoseResult | null }) {
   if (!poseResult) return null
 
@@ -86,6 +108,41 @@ export function RecognitionContextCard({ report }: { report: ReportResult }) {
           <strong>{report.recognitionContext.engine ?? '—'}</strong>
           <p>后续叠加图会直接基于这次关键点识别结果生成。</p>
         </div>
+      </div>
+    </section>
+  )
+}
+
+export function PhaseBreakdownCard({ report }: { report: ReportResult }) {
+  if (!report.phaseBreakdown?.length) return null
+
+  return (
+    <section className="surface-card phase-breakdown-card">
+      <div className="section-head">
+        <div>
+          <h2>动作阶段拆解</h2>
+          <p className="muted-copy">直接按 4 段看这次动作在哪一段更稳、哪一段更需要先收住。</p>
+        </div>
+      </div>
+
+      <div className="phase-breakdown-grid">
+        {report.phaseBreakdown.map((phase) => {
+          const status = getPhaseStatusLabel(phase.status)
+          return (
+            <div key={phase.phaseKey} className={`phase-breakdown-item ${status.tone}`}>
+              <div className="phase-breakdown-head">
+                <span>{phase.label}</span>
+                <span className={`status-pill ${status.tone}`}>{status.label}</span>
+              </div>
+              <strong>{phase.summary}</strong>
+              <p>
+                {phase.detectedFrom?.anchorFrameIndex !== undefined && phase.detectedFrom?.anchorFrameIndex !== null
+                  ? `锚点帧 ${phase.detectedFrom.anchorFrameIndex}，窗口 ${phase.detectedFrom.windowStartFrameIndex ?? '—'}-${phase.detectedFrom.windowEndFrameIndex ?? '—'}`
+                  : '当前没有稳定的阶段锚点。'}
+              </p>
+            </div>
+          )
+        })}
       </div>
     </section>
   )
@@ -410,8 +467,14 @@ export function HistoryCard({ history, selectedCompareTaskId, onSelectCompare, o
   )
 }
 
-export function ComparisonHighlightCard({ comparison }: { comparison: RetestComparison | null }) {
-  if (!comparison) return null
+export function ComparisonHighlightCard({
+  comparison,
+  unavailableReason,
+}: {
+  comparison: RetestComparison | null
+  unavailableReason: 'scoring_model_mismatch' | null
+}) {
+  if (!comparison || unavailableReason) return null
 
   return (
     <section className="surface-card comparison-highlight-card report-history-compare-card">
@@ -460,7 +523,27 @@ export function ComparisonHighlightCard({ comparison }: { comparison: RetestComp
   )
 }
 
-export function ComparisonCard({ comparison }: { comparison: RetestComparison | null }) {
+export function ComparisonCard({
+  comparison,
+  unavailableReason,
+}: {
+  comparison: RetestComparison | null
+  unavailableReason: 'scoring_model_mismatch' | null
+}) {
+  if (unavailableReason === 'scoring_model_mismatch') {
+    return (
+      <section className="surface-card comparison-summary-card comparison-unavailable-card">
+        <span className="eyebrow-copy">复测结论</span>
+        <h2>当前这次暂时不能直接和旧基线比较</h2>
+        <p className="body-copy">评分模型已经升级，这次复测不会再沿用旧版本样本做 comparison。后续请用新模型下的样本作为新的复测基线。</p>
+        <div className="key-point-panel">
+          <span>为什么要这样处理</span>
+          <p>这次已经进入分阶段报告版本。为了避免把旧模型和新模型混在一起误判进步或退步，系统会直接禁用跨版本对比。</p>
+        </div>
+      </section>
+    )
+  }
+
   if (!comparison) {
     return (
       <div className="surface-card">
@@ -511,6 +594,24 @@ export function ComparisonCard({ comparison }: { comparison: RetestComparison | 
         <p>{comparison.coachReview.nextFocus}</p>
         <p>{comparison.coachReview.nextCheck}</p>
       </div>
+
+      {comparison.phaseDeltas.length > 0 ? (
+        <div className="phase-breakdown-grid compare-phase-grid">
+          {comparison.phaseDeltas.map((phase) => {
+            const status = getPhaseStatusLabel(phase.currentStatus)
+            return (
+              <div key={phase.phaseKey} className={`phase-breakdown-item ${status.tone}`}>
+                <div className="phase-breakdown-head">
+                  <span>{phase.label}</span>
+                  <span className={`status-pill ${status.tone}`}>{getPhaseDeltaTitle(comparison, phase.phaseKey)}</span>
+                </div>
+                <strong>{phase.summary}</strong>
+                <p>{`基线：${getPhaseStatusLabel(phase.previousStatus).label} · 当前：${getPhaseStatusLabel(phase.currentStatus).label}`}</p>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
 
       {comparison.summaryText ? (
         <div className="key-point-panel">

@@ -26,6 +26,12 @@ import { toTaskResource } from '../types/task';
 
 type RecognizedActionType = ActionType | 'smash';
 
+const PHASE_STATUS_WEIGHTS = {
+  ok: 0,
+  attention: 1,
+  insufficient_evidence: 2,
+} as const;
+
 function clampDelta(value: number) {
   return Math.round(value);
 }
@@ -60,6 +66,32 @@ function uniqueNames(names: Array<string | undefined>) {
 
 function formatNameList(names: string[]) {
   return names.join('、');
+}
+
+function buildPhaseDeltas(previous: ReportResult, current: ReportResult): RetestComparison['phaseDeltas'] {
+  const previousPhases = previous.phaseBreakdown ?? [];
+  const currentPhases = current.phaseBreakdown ?? [];
+
+  return currentPhases.map((phase) => {
+    const previousPhase = previousPhases.find((item) => item.phaseKey === phase.phaseKey);
+    const previousStatus = previousPhase?.status ?? 'insufficient_evidence';
+    const currentStatus = phase.status;
+    const changed = previousStatus !== currentStatus;
+    const summary = !changed
+      ? `${phase.label}阶段和基线基本一致。`
+      : PHASE_STATUS_WEIGHTS[currentStatus] < PHASE_STATUS_WEIGHTS[previousStatus]
+        ? `${phase.label}阶段比基线更稳了。`
+        : `${phase.label}阶段比基线更需要回看。`;
+
+    return {
+      phaseKey: phase.phaseKey,
+      label: phase.label,
+      previousStatus,
+      currentStatus,
+      changed,
+      summary,
+    };
+  });
 }
 
 const activeAnalysisTasks = new Map<string, Promise<void>>();
@@ -128,34 +160,8 @@ function buildCoachReview(actionType: ActionType, comparison: Omit<RetestCompari
 }
 
 function buildRetestComparison(actionType: ActionType, previous: ReportResult, current: ReportResult): RetestComparison {
-  const previousModelVersion = previous.scoringEvidence?.scoringModelVersion;
-  const currentModelVersion = current.scoringEvidence?.scoringModelVersion;
-  const comparableByDimension = Boolean(
-    previousModelVersion
-      && currentModelVersion
-      && previousModelVersion === currentModelVersion,
-  );
   const totalScoreDelta = clampDelta(current.totalScore - previous.totalScore);
-
-  if (!comparableByDimension) {
-    const summaryText = '评分模型已升级，本次仅保留总分级对比，维度结果不直接可比。';
-    const comparison = {
-      previousTaskId: previous.taskId,
-      previousCreatedAt: previous.createdAt,
-      currentTaskId: current.taskId,
-      currentCreatedAt: current.createdAt,
-      totalScoreDelta,
-      improvedDimensions: [],
-      declinedDimensions: [],
-      unchangedDimensions: [],
-      summaryText,
-    };
-
-    return {
-      ...comparison,
-      coachReview: buildCoachReview(actionType, comparison),
-    };
-  }
+  const phaseDeltas = buildPhaseDeltas(previous, current);
 
   const deltas = current.dimensionScores.map((dimension) => {
     const previousDimension = previous.dimensionScores.find((item) => item.name === dimension.name);
@@ -171,6 +177,7 @@ function buildRetestComparison(actionType: ActionType, previous: ReportResult, c
   const improvedDimensions = deltas.filter((item) => item.delta > 0).sort((a, b) => b.delta - a.delta);
   const declinedDimensions = deltas.filter((item) => item.delta < 0).sort((a, b) => a.delta - b.delta);
   const unchangedDimensions = deltas.filter((item) => item.delta === 0);
+  const changedPhase = phaseDeltas.find((item) => item.changed);
 
   let summaryText = '和对比样本相比，这次数据整体比较接近，建议继续保持同机位复测，观察动作稳定性。';
   if (totalScoreDelta > 0 && improvedDimensions.length > 0) {
@@ -188,6 +195,9 @@ function buildRetestComparison(actionType: ActionType, previous: ReportResult, c
   } else if (unchangedDimensions.length > 0) {
     summaryText = `和对比样本相比，这次最主要的是 ${unchangedDimensions[0].name} 还守住了，说明主动作框架没有明显跑掉。`;
   }
+  if (changedPhase) {
+    summaryText = `${summaryText} 阶段上最明显的变化出现在${changedPhase.label}阶段。`;
+  }
 
   const comparison = {
     previousTaskId: previous.taskId,
@@ -198,6 +208,7 @@ function buildRetestComparison(actionType: ActionType, previous: ReportResult, c
     improvedDimensions,
     declinedDimensions,
     unchangedDimensions,
+    phaseDeltas,
     summaryText,
   };
 
@@ -268,11 +279,21 @@ export function getRetestComparison(taskId: string, baselineTaskId?: string): Co
 
   const baselineReport = readReport(baseline.taskId);
   if (!baselineReport) return undefined;
+  const baselineModelVersion = baselineReport.scoringEvidence?.scoringModelVersion;
+  const currentModelVersion = currentReport.scoringEvidence?.scoringModelVersion;
+  const comparableByModel = Boolean(
+    baselineModelVersion
+      && currentModelVersion
+      && baselineModelVersion === currentModelVersion,
+  );
 
   return {
     currentTask: toTaskResource(currentTask),
     baselineTask: toTaskResource(baseline),
-    comparison: buildRetestComparison(currentTask.actionType, baselineReport, currentReport),
+    comparison: comparableByModel
+      ? buildRetestComparison(currentTask.actionType, baselineReport, currentReport)
+      : null,
+    unavailableReason: comparableByModel ? undefined : 'scoring_model_mismatch',
   };
 }
 

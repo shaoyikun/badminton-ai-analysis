@@ -6,9 +6,9 @@
 
 ### 当前结论
 
-- 当前项目状态：`phase_1_completed`
-- 当前已完成到：`Phase 1：动作阶段锚点`
-- 当前下一阶段：`Phase 2：分阶段报告`
+- 当前项目状态：`phase_2_completed`
+- 当前已完成到：`Phase 2：分阶段报告`
+- 当前下一阶段：`Phase 3：离线评测基线`
 - 当前下一阶段状态：`not_started`
 - 最后更新日期：`2026-03-13`
 
@@ -17,8 +17,8 @@
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
 | Phase 1 | `completed` | 动作阶段锚点、debug 可见性、测试与文档已完成 |
-| Phase 2 | `not_started` | 可在下一会话开始消费阶段信息 |
-| Phase 3 | `blocked` | 依赖 Phase 2 输出稳定评分/字段 |
+| Phase 2 | `completed` | 分阶段报告、comparison 兼容策略、前端展示、测试与文档已完成 |
+| Phase 3 | `not_started` | 可开始建立 clear-only 的最小离线评测闭环 |
 | Phase 4 | `blocked` | 依赖 Phase 3 评测基线 |
 | Phase 5 | `blocked` | 依赖 clear 主链路评测稳定 |
 | Phase 6 | `blocked` | 依赖 smash 影子模式完成 |

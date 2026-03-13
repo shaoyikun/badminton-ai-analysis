@@ -1197,6 +1197,7 @@ img {
 }
 
 .recognition-metadata-grid,
+.phase-breakdown-grid,
 .pose-overlay-hero,
 .pose-overlay-grid {
   display: grid;
@@ -1210,6 +1211,47 @@ img {
 
 .recognition-metadata-item {
   padding: 14px;
+}
+
+.phase-breakdown-card {
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(246, 249, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.phase-breakdown-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.phase-breakdown-item {
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(47, 107, 255, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.phase-breakdown-item.positive {
+  background: linear-gradient(180deg, rgba(240, 255, 248, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%);
+}
+
+.phase-breakdown-item.caution {
+  background: linear-gradient(180deg, rgba(255, 248, 234, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%);
+}
+
+.phase-breakdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.compare-phase-grid {
+  margin-top: 14px;
+}
+
+.comparison-unavailable-card {
+  background: linear-gradient(180deg, rgba(250, 248, 255, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%);
 }
 
 .pose-overlay-card {
@@ -1845,6 +1887,10 @@ img {
   .inline-actions.two-up,
   .token-grid.two-up,
   .phase-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .phase-breakdown-grid {
     grid-template-columns: 1fr;
   }
 }

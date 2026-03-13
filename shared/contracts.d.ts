@@ -107,6 +107,15 @@ export interface DimensionScore {
   note?: string;
 }
 
+export interface ReportEvidenceRef {
+  dimensionKey?: string;
+  featureKey?: string;
+  label?: string;
+  score?: number | null;
+  confidence?: number | null;
+  reference?: string;
+}
+
 export interface IssueItem {
   title: string;
   description: string;
@@ -119,14 +128,7 @@ export interface IssueItem {
   whyItMatters?: string;
   nextTrainingFocus?: string;
   captureAdvice?: string;
-  evidenceRefs?: Array<{
-    dimensionKey?: string;
-    featureKey?: string;
-    label?: string;
-    score?: number | null;
-    confidence?: number | null;
-    reference?: string;
-  }>;
+  evidenceRefs?: ReportEvidenceRef[];
 }
 
 export interface SuggestionItem {
@@ -137,14 +139,7 @@ export interface SuggestionItem {
   recommendedNextCapture?: string;
   focusPoint?: string;
   linkedIssueCategory?: string;
-  evidenceRefs?: Array<{
-    dimensionKey?: string;
-    featureKey?: string;
-    label?: string;
-    score?: number | null;
-    confidence?: number | null;
-    reference?: string;
-  }>;
+  evidenceRefs?: ReportEvidenceRef[];
 }
 
 export interface VideoMetadata {
@@ -423,6 +418,35 @@ export interface RetestCoachReview {
   focusDimensions?: string[];
 }
 
+export type ReportPhaseKey = 'preparation' | 'backswing' | 'contactCandidate' | 'followThrough';
+
+export type ReportPhaseAssessmentStatus = 'ok' | 'attention' | 'insufficient_evidence';
+
+export interface ReportPhaseAssessment {
+  phaseKey: ReportPhaseKey;
+  label: string;
+  status: ReportPhaseAssessmentStatus;
+  summary: string;
+  evidenceRefs?: ReportEvidenceRef[];
+  detectedFrom?: {
+    anchorFrameIndex?: number | null;
+    windowStartFrameIndex?: number | null;
+    windowEndFrameIndex?: number | null;
+    sourceMetric?: PosePhaseSourceMetric;
+    detectionStatus?: PosePhaseDetectionStatus;
+    missingReason?: PosePhaseMissingReason;
+  };
+}
+
+export interface ReportPhaseDelta {
+  phaseKey: ReportPhaseKey;
+  label: string;
+  previousStatus: ReportPhaseAssessmentStatus;
+  currentStatus: ReportPhaseAssessmentStatus;
+  changed: boolean;
+  summary: string;
+}
+
 export interface RetestComparison {
   previousTaskId: string;
   previousCreatedAt?: string;
@@ -432,6 +456,7 @@ export interface RetestComparison {
   improvedDimensions: RetestDeltaItem[];
   declinedDimensions: RetestDeltaItem[];
   unchangedDimensions: RetestDeltaItem[];
+  phaseDeltas: ReportPhaseDelta[];
   summaryText: string;
   coachReview: RetestCoachReview;
 }
@@ -512,6 +537,7 @@ export interface ReportResult {
   createdAt?: string;
   poseBased?: boolean;
   recognitionContext?: RecognitionContext;
+  phaseBreakdown?: ReportPhaseAssessment[];
   visualEvidence?: VisualEvidence;
   standardComparison?: StandardComparison;
   scoringEvidence?: {
@@ -634,5 +660,6 @@ export interface HistoryDetailResponse {
 export interface ComparisonResponse {
   currentTask: TaskResource;
   baselineTask: TaskResource;
-  comparison: RetestComparison;
+  comparison: RetestComparison | null;
+  unavailableReason?: 'scoring_model_mismatch';
 }

@@ -116,6 +116,32 @@
       "racketSideConfidence": 0.0468,
       "engine": "mediapipe-pose"
     },
+    "phaseBreakdown": [
+      {
+        "phaseKey": "preparation",
+        "label": "准备",
+        "status": "ok",
+        "summary": "准备阶段已经比较稳定，身体准备能较早进入动作。"
+      },
+      {
+        "phaseKey": "backswing",
+        "label": "引拍",
+        "status": "attention",
+        "summary": "引拍阶段还没完全撑开，挥拍臂准备仍然偏低。"
+      },
+      {
+        "phaseKey": "contactCandidate",
+        "label": "击球候选",
+        "status": "ok",
+        "summary": "击球候选阶段比较清楚，击球前准备和节奏衔接相对稳定。"
+      },
+      {
+        "phaseKey": "followThrough",
+        "label": "随挥",
+        "status": "insufficient_evidence",
+        "summary": "随挥阶段证据不足，这次视频里出手后的连续动作没有被稳定捕捉到。"
+      }
+    ],
     "visualEvidence": {
       "bestFrameIndex": 7,
       "bestFrameImagePath": "artifacts/tasks/task_9a3dae0d/preprocess/frame-07.jpg",

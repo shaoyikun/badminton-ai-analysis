@@ -112,6 +112,7 @@ type AnalysisSessionContextValue = {
   poseResult: PoseAnalysisResult | null
   history: TaskHistoryItem[]
   comparison: RetestComparison | null
+  comparisonUnavailableReason: ComparisonResponse['unavailableReason'] | null
   selectedCompareTaskId: string
   setSelectedCompareTaskId: (value: string) => void
   selectedHistoryReport: ReportResult | null
@@ -143,8 +144,8 @@ type AnalysisSessionContextValue = {
   ensureLatestReportLoaded: () => Promise<ReportResult | null>
   fetchHistory: (nextActionType?: ActionType) => Promise<TaskHistoryItem[]>
   fetchHistoryReport: (targetTaskId: string) => Promise<ReportResult | null>
-  fetchComparison: (currentTaskId?: string, previousTaskId?: string) => Promise<RetestComparison | null>
-  applyCustomComparison: (previousTaskId: string) => Promise<RetestComparison | null>
+  fetchComparison: (currentTaskId?: string, previousTaskId?: string) => Promise<ComparisonResponse | null>
+  applyCustomComparison: (previousTaskId: string) => Promise<ComparisonResponse | null>
   analyzeHistoryTrend: () => string
   appendLog: (text: string) => void
 }
@@ -303,6 +304,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const [poseResult, setPoseResult] = useState<PoseAnalysisResult | null>(null)
   const [history, setHistory] = useState<TaskHistoryItem[]>([])
   const [comparison, setComparison] = useState<RetestComparison | null>(null)
+  const [comparisonUnavailableReason, setComparisonUnavailableReason] = useState<ComparisonResponse['unavailableReason'] | null>(null)
   const [selectedCompareTaskId, setSelectedCompareTaskId] = useState(initialSession.selectedCompareTaskId)
   const [selectedHistoryReport, setSelectedHistoryReport] = useState<ReportResult | null>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -435,6 +437,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     const data = await readApiPayload<ComparisonResponse>(response)
     if (!response.ok) {
       setComparison(null)
+      setComparisonUnavailableReason(null)
       const error = parseErrorPayload(data as ErrorResponse)
       if (previousTaskId) appendLog(`自定义对比失败：${error?.message ?? '未知错误'}`)
       return null
@@ -442,8 +445,9 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
 
     const payload = data as ComparisonResponse
     setComparison(payload.comparison ?? null)
+    setComparisonUnavailableReason(payload.unavailableReason ?? null)
     setSelectedCompareTaskId(payload.baselineTask.taskId)
-    return payload.comparison ?? null
+    return payload
   }, [appendLog, latestCompletedTaskId, report?.taskId, taskId])
 
   const fetchResult = useCallback(async (targetTaskId?: string, showSuccessLog = true) => {
@@ -522,6 +526,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       setReport(null)
       setPoseResult(null)
       setComparison(null)
+      setComparisonUnavailableReason(null)
       setSelectedHistoryReport(null)
       setSelectedCompareTaskId('')
 
@@ -769,6 +774,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     poseResult,
     history,
     comparison,
+    comparisonUnavailableReason,
     selectedCompareTaskId,
     setSelectedCompareTaskId,
     selectedHistoryReport,

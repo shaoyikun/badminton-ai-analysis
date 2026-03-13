@@ -20,6 +20,7 @@
 - createdAt（可选）
 - poseBased（可选）
 - recognitionContext（可选，识别出的拍摄视角 / 挥拍侧等上下文）
+- phaseBreakdown（可选，正式报告使用的 4 段阶段结果）
 - visualEvidence（可选，最佳帧与全部抽帧骨架叠加图）
 - history（可选，同动作历史样本摘要列表）
 - comparison（默认对比上一条同动作样本的复测结果）
@@ -35,6 +36,25 @@
 - `confidenceScore` 用于表达“当前报告有多可信”，不直接代表动作质量
 - `dimensionScores` 当前展示的是 `证据质量 / 身体准备 / 挥拍臂准备 / 挥拍复现稳定性`
 - `issues` 与 `suggestions` 会同时保留旧版 `title / description / impact` 兼容字段，并补充教练式结构化字段
+
+### phaseBreakdown
+- phaseKey（`preparation` / `backswing` / `contactCandidate` / `followThrough`）
+- label
+- status（`ok` / `attention` / `insufficient_evidence`）
+- summary
+- evidenceRefs（可选）
+- detectedFrom（可选）
+  - anchorFrameIndex（可选）
+  - windowStartFrameIndex（可选）
+  - windowEndFrameIndex（可选）
+  - sourceMetric（可选）
+  - detectionStatus（可选）
+  - missingReason（可选）
+
+说明：
+- `phaseBreakdown` 是 Phase 2 正式对用户可见的分阶段结果，固定为 4 段
+- 它消费 Phase 1 的 `summary.phaseCandidates`，但允许在阶段证据不足时返回 `insufficient_evidence`
+- 阶段结果用于解释“哪一个阶段最需要先回看”，不是新的独立总分体系
 
 ### issue item
 - title
@@ -119,6 +139,13 @@
 - improvedDimensions
 - declinedDimensions
 - unchangedDimensions
+- phaseDeltas
+  - phaseKey
+  - label
+  - previousStatus
+  - currentStatus
+  - changed
+  - summary
 - summaryText
 - coachReview
   - headline
@@ -136,8 +163,9 @@
 - delta
 
 说明：
-- 只有双方使用同一 `scoringModelVersion` 时，`improvedDimensions / declinedDimensions / unchangedDimensions` 才保证可比
-- 跨模型时服务端只保留 `totalScoreDelta`，维度 delta 数组允许为空
+- 只有双方使用同一 `scoringModelVersion` 时，`comparison` 才会返回完整内容
+- Phase 2 起，跨模型时服务端直接返回 `comparison: null`，并补 `unavailableReason: scoring_model_mismatch`
+- 同模型 comparison 除维度 delta 外，还会返回 `phaseDeltas` 说明 4 段阶段里哪一段更稳或更需要回看
 
 ## 5. 标准动作对比结构
 ### standardComparison
@@ -230,6 +258,7 @@
 - `analysisDisposition` 用于区分“硬拒绝”“低置信完成”“正常可分析”
 - `cameraSuitability` 只参与置信度，不直接进入 `totalScore`
 - `fallbacksUsed` 用于标记哪些维度仍由旧 turn/lift 或全局稳定性代理补足
+- Phase 2 起，`swing_repeatability` 优先使用 `contactCandidate` / `followThrough` 阶段证据；若阶段证据不足，会明确记录为阶段回退
 
 ### preprocess
 - metadata（可选）
