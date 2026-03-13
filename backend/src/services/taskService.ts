@@ -21,7 +21,7 @@ import { createTaskRecord, enterStage, failTask, markTaskStarted, markTaskUpload
 import { fileExists, prepareTaskArtifactsDir, readJsonFile, storeUploadedVideo, writePoseResult, writePreprocessManifest, writeReportFile } from './artifactStore';
 import { buildRuleBasedResult, getPoseQualityFailure } from './reportScoringService';
 import { buildShadowRuleBasedResult } from './shadowReportScoringService';
-import { getMaxFileSizeBytes, extractFrames, probeVideo, scanVideoSegments, validateUploadedVideo } from './preprocessService';
+import { getMaxFileSizeBytes, extractFrames, probeVideo, resolveSelectedSegmentFromScan, scanVideoSegments, validateUploadedVideo } from './preprocessService';
 import { buildPoseSummary, readPoseResult, runPoseAnalysis } from './poseService';
 import { buildErrorSnapshot } from './errorCatalog';
 import { createTask as createTaskEntry, findLatestCompletedTask, getReportRow, getTask, listCompletedHistory, listProcessingTasks, saveReport, saveTask } from './taskRepository';
@@ -421,6 +421,7 @@ async function executePreprocessStage(task: AnalysisTaskRecord) {
       segmentScan: {
         ...segmentScan,
         selectedSegmentId: artifacts.selectedSegmentId ?? segmentScan.selectedSegmentId,
+        selectedSegmentWindow: artifacts.selectedSegmentWindow ?? segmentScan.selectedSegmentWindow,
         segmentSelectionMode: artifacts.segmentSelectionMode ?? segmentScan.segmentSelectionMode,
       },
       artifacts,
@@ -541,17 +542,22 @@ export async function startAnalysis(taskId: string) {
 
 export const startMockAnalysis = startAnalysis;
 
-function ensureSelectedSegment(task: AnalysisTaskRecord, selectedSegmentId?: string) {
+function ensureSelectedSegment(task: AnalysisTaskRecord, selectedSegmentId?: string, selectedWindowOverride?: StartTaskRequest['selectedWindowOverride']) {
   const segmentScan = task.artifacts.preprocess?.segmentScan;
+  const metadata = task.artifacts.preprocess?.metadata ?? task.artifacts.upload;
   if (!segmentScan?.swingSegments?.length) {
     throw buildErrorSnapshot('invalid_task_state', 'segment scan is not ready');
   }
-
-  const nextSelectedSegmentId = selectedSegmentId ?? segmentScan.selectedSegmentId ?? segmentScan.recommendedSegmentId;
-  const matched = segmentScan.swingSegments.find((segment) => segment.segmentId === nextSelectedSegmentId);
-  if (!matched) {
-    throw buildErrorSnapshot('invalid_task_state', `selected segment ${nextSelectedSegmentId ?? 'unknown'} is unavailable`);
+  if (!metadata) {
+    throw buildErrorSnapshot('invalid_task_state', 'video metadata is unavailable');
   }
+
+  const { selectedSegment, selectedWindow, segmentSelectionMode } = resolveSelectedSegmentFromScan(
+    metadata,
+    segmentScan,
+    selectedSegmentId ?? segmentScan.selectedSegmentId ?? segmentScan.recommendedSegmentId,
+    selectedWindowOverride,
+  );
 
   return mergeArtifacts(task, {
     preprocess: {
@@ -560,7 +566,9 @@ function ensureSelectedSegment(task: AnalysisTaskRecord, selectedSegmentId?: str
       metadata: task.artifacts.preprocess?.metadata,
       segmentScan: {
         ...segmentScan,
-        selectedSegmentId: matched.segmentId,
+        selectedSegmentId: selectedSegment.segmentId,
+        selectedSegmentWindow: selectedWindow,
+        segmentSelectionMode,
       },
       artifacts: task.artifacts.preprocess?.artifacts,
     },
@@ -576,7 +584,7 @@ export async function startAnalysisWithSelection(taskId: string, request?: Start
   if (!task) return undefined;
   if (task.status === 'processing') return task;
 
-  const prepared = saveTask(ensureSelectedSegment(task, request?.selectedSegmentId));
+  const prepared = saveTask(ensureSelectedSegment(task, request?.selectedSegmentId, request?.selectedWindowOverride));
   const started = saveTask(markTaskStarted(prepared));
   queueAnalysisTask(taskId);
   return started;

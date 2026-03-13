@@ -64,7 +64,7 @@ test('extractFrames samples inside the recommended segment window while keeping 
     });
 
     setSwingSegmentDetectorForTests(async () => ({
-      segmentDetectionVersion: 'coarse_motion_scan_v1',
+      segmentDetectionVersion: 'coarse_motion_scan_v2',
       segmentSelectionMode: 'auto_recommended',
       recommendedSegmentId: 'segment-02',
       swingSegments: [
@@ -79,7 +79,7 @@ test('extractFrames samples inside the recommended segment window while keeping 
           confidence: 0.55,
           rankingScore: 0.44,
           coarseQualityFlags: ['too_short'],
-          detectionSource: 'coarse_motion_scan_v1',
+          detectionSource: 'coarse_motion_scan_v2',
         },
         {
           segmentId: 'segment-02',
@@ -92,17 +92,23 @@ test('extractFrames samples inside the recommended segment window while keeping 
           confidence: 0.82,
           rankingScore: 0.79,
           coarseQualityFlags: [],
-          detectionSource: 'coarse_motion_scan_v1',
+          detectionSource: 'coarse_motion_scan_v2',
         },
       ],
     }));
 
     const artifacts = await extractFrames('task_preprocess_segment', sourcePath, metadata);
 
-    assert.equal(artifacts.segmentDetectionVersion, 'coarse_motion_scan_v1');
+    assert.equal(artifacts.segmentDetectionVersion, 'coarse_motion_scan_v2');
     assert.equal(artifacts.recommendedSegmentId, 'segment-02');
     assert.equal(artifacts.selectedSegmentId, 'segment-02');
     assert.equal(artifacts.segmentSelectionMode, 'auto_recommended');
+    assert.deepEqual(artifacts.selectedSegmentWindow, {
+      startTimeMs: 1380,
+      endTimeMs: 2460,
+      startFrame: 15,
+      endFrame: 27,
+    });
     assert.deepEqual(artifacts.framePlan.sourceWindow, {
       startTimeMs: 1380,
       endTimeMs: 2460,
@@ -113,6 +119,57 @@ test('extractFrames samples inside the recommended segment window while keeping 
     assert.ok((artifacts.sampledFrames[0]?.timestampSeconds ?? 0) > 1.38);
     assert.ok((artifacts.sampledFrames[artifacts.sampledFrames.length - 1]?.timestampSeconds ?? 0) < 2.46);
     assert.ok(artifacts.sampledFrames.every((frame) => frame.timestampSeconds > 1));
+  });
+});
+
+test('extractFrames respects selected segment window override from the scan summary', async (t) => {
+  if (!await hasFfmpeg()) {
+    t.skip('ffmpeg is unavailable in the current test environment');
+    return;
+  }
+
+  await withTempWorkspace(async (workspace) => {
+    const sourcePath = path.join(workspace, 'clip.mp4');
+    await createFixtureVideo(sourcePath, 3);
+    const metadata = await probeVideo(sourcePath, {
+      fileName: 'clip.mp4',
+      mimeType: 'video/mp4',
+    });
+
+    const artifacts = await extractFrames('task_preprocess_override', sourcePath, metadata, {
+      status: 'completed',
+      segmentDetectionVersion: 'coarse_motion_scan_v2',
+      recommendedSegmentId: 'segment-01',
+      selectedSegmentId: 'segment-01',
+      selectedSegmentWindow: {
+        startTimeMs: 200,
+        endTimeMs: 2900,
+      },
+      segmentSelectionMode: 'auto_recommended',
+      swingSegments: [{
+        segmentId: 'segment-01',
+        startTimeMs: 500,
+        endTimeMs: 1700,
+        startFrame: 5,
+        endFrame: 17,
+        durationMs: 1200,
+        motionScore: 0.51,
+        confidence: 0.72,
+        rankingScore: 0.66,
+        coarseQualityFlags: [],
+        detectionSource: 'coarse_motion_scan_v2',
+      }],
+    });
+
+    assert.deepEqual(artifacts.selectedSegmentWindow, {
+      startTimeMs: 200,
+      endTimeMs: 2900,
+      startFrame: 5,
+      endFrame: 17,
+    });
+    assert.deepEqual(artifacts.framePlan.sourceWindow, artifacts.selectedSegmentWindow);
+    assert.ok((artifacts.sampledFrames[0]?.timestampSeconds ?? 0) > 0.2);
+    assert.ok((artifacts.sampledFrames[artifacts.sampledFrames.length - 1]?.timestampSeconds ?? 0) < 2.9);
   });
 });
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { SwingSegmentCandidate } from '../../../../shared/contracts'
+import type { SegmentSelectionWindow, SwingSegmentCandidate } from '../../../../shared/contracts'
 import { formatFileSize } from '../../components/result-views/utils'
 import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { BottomCTA } from '../../components/ui/BottomCTA'
@@ -13,6 +13,10 @@ import {
   getUploadBlockingReasons,
   UPLOAD_CONSTRAINTS,
 } from './uploadFlow'
+
+const SEGMENT_ADJUST_STEP_MS = 120
+const MIN_SELECTED_SEGMENT_WINDOW_MS = 420
+const MAX_SELECTED_SEGMENT_WINDOW_MS = 3200
 
 function formatDuration(seconds?: number) {
   if (seconds === undefined) return '读取中'
@@ -39,6 +43,10 @@ function formatQualityFlag(flag: string) {
       return '起始可能截断'
     case 'edge_clipped_end':
       return '结尾可能截断'
+    case 'preparation_maybe_clipped':
+      return '准备段可能被截掉'
+    case 'follow_through_maybe_clipped':
+      return '随挥可能被截掉'
     case 'subject_maybe_small':
       return '主体可能偏小'
     case 'motion_maybe_occluded':
@@ -46,6 +54,33 @@ function formatQualityFlag(flag: string) {
     default:
       return flag
   }
+}
+
+function normalizeWindow(window: SegmentSelectionWindow, videoDurationMs: number) {
+  const requestedStart = Math.max(0, Math.min(window.startTimeMs, Math.max(0, videoDurationMs - 1)))
+  const requestedEnd = Math.max(requestedStart + 1, Math.min(window.endTimeMs, videoDurationMs))
+  let startTimeMs = requestedStart
+  let endTimeMs = requestedEnd
+
+  if ((endTimeMs - startTimeMs) < MIN_SELECTED_SEGMENT_WINDOW_MS) {
+    const needed = MIN_SELECTED_SEGMENT_WINDOW_MS - (endTimeMs - startTimeMs)
+    const expandBefore = Math.min(startTimeMs, Math.ceil(needed / 2))
+    startTimeMs -= expandBefore
+    endTimeMs = Math.min(videoDurationMs, endTimeMs + (needed - expandBefore))
+    if ((endTimeMs - startTimeMs) < MIN_SELECTED_SEGMENT_WINDOW_MS) {
+      startTimeMs = Math.max(0, endTimeMs - MIN_SELECTED_SEGMENT_WINDOW_MS)
+    }
+  }
+
+  if ((endTimeMs - startTimeMs) > MAX_SELECTED_SEGMENT_WINDOW_MS) {
+    endTimeMs = startTimeMs + MAX_SELECTED_SEGMENT_WINDOW_MS
+  }
+
+  return {
+    ...window,
+    startTimeMs,
+    endTimeMs,
+  } satisfies SegmentSelectionWindow
 }
 
 function SegmentPreviewVideo({
@@ -130,19 +165,58 @@ function SegmentSelectionCard({
   segments,
   recommendedSegmentId,
   selectedSegmentId,
+  selectedWindow,
   onSelect,
+  onAdjustWindow,
+  onResetWindow,
   previewUrl,
+  videoDurationMs,
 }: {
   segments: SwingSegmentCandidate[]
   recommendedSegmentId?: string
   selectedSegmentId: string
+  selectedWindow: SegmentSelectionWindow | null
   onSelect: (segmentId: string) => void
+  onAdjustWindow: (nextWindow: SegmentSelectionWindow) => void
+  onResetWindow: () => void
   previewUrl: string
+  videoDurationMs: number
 }) {
   const activeSegment =
     segments.find((segment) => segment.segmentId === selectedSegmentId) ??
     segments.find((segment) => segment.segmentId === recommendedSegmentId) ??
     segments[0]
+  const baseWindow = activeSegment ? {
+    startTimeMs: activeSegment.startTimeMs,
+    endTimeMs: activeSegment.endTimeMs,
+    startFrame: activeSegment.startFrame,
+    endFrame: activeSegment.endFrame,
+  } satisfies SegmentSelectionWindow : null
+  const effectiveWindow = activeSegment ? normalizeWindow(selectedWindow ?? baseWindow ?? {
+    startTimeMs: activeSegment.startTimeMs,
+    endTimeMs: activeSegment.endTimeMs,
+  }, videoDurationMs) : null
+  const isWindowAdjusted = Boolean(
+    baseWindow
+    && effectiveWindow
+    && (
+      baseWindow.startTimeMs !== effectiveWindow.startTimeMs
+      || baseWindow.endTimeMs !== effectiveWindow.endTimeMs
+    )
+  )
+
+  function handleAdjust(boundary: 'start' | 'end', deltaMs: number) {
+    if (!activeSegment || !effectiveWindow) return
+    const nextWindow = normalizeWindow({
+      ...effectiveWindow,
+      startFrame: activeSegment.startFrame,
+      endFrame: activeSegment.endFrame,
+      ...(boundary === 'start'
+        ? { startTimeMs: effectiveWindow.startTimeMs + deltaMs }
+        : { endTimeMs: effectiveWindow.endTimeMs + deltaMs }),
+    }, videoDurationMs)
+    onAdjustWindow(nextWindow)
+  }
 
   return (
     <section className="surface-card swing-segments-card">
@@ -171,6 +245,10 @@ function SegmentSelectionCard({
       <div className="segment-chip-row">
         {segments.map((segment) => {
           const isActive = segment.segmentId === activeSegment?.segmentId
+          const chipWindow = isActive && effectiveWindow ? effectiveWindow : {
+            startTimeMs: segment.startTimeMs,
+            endTimeMs: segment.endTimeMs,
+          }
           return (
             <button
               key={segment.segmentId}
@@ -181,13 +259,13 @@ function SegmentSelectionCard({
               {previewUrl ? (
                 <SegmentPreviewVideo
                   src={previewUrl}
-                  startTimeMs={segment.startTimeMs}
-                  endTimeMs={segment.endTimeMs}
-                  posterLabel={`${formatSegmentTimestamp(segment.startTimeMs)} - ${formatSegmentTimestamp(segment.endTimeMs)}`}
+                  startTimeMs={chipWindow.startTimeMs}
+                  endTimeMs={chipWindow.endTimeMs}
+                  posterLabel={`${formatSegmentTimestamp(chipWindow.startTimeMs)} - ${formatSegmentTimestamp(chipWindow.endTimeMs)}`}
                 />
               ) : null}
               <strong>{segment.segmentId}</strong>
-              <span>{formatSegmentTimestamp(segment.startTimeMs)} - {formatSegmentTimestamp(segment.endTimeMs)}</span>
+              <span>{formatSegmentTimestamp(chipWindow.startTimeMs)} - {formatSegmentTimestamp(chipWindow.endTimeMs)}</span>
               {segment.segmentId === recommendedSegmentId ? <em>推荐</em> : null}
               {segment.segmentId === selectedSegmentId ? <em>已选中</em> : null}
             </button>
@@ -197,23 +275,26 @@ function SegmentSelectionCard({
 
       {activeSegment ? (
         <div className="segment-detail-card">
-          {previewUrl ? (
+          {previewUrl && effectiveWindow ? (
             <SegmentPreviewVideo
               src={previewUrl}
-              startTimeMs={activeSegment.startTimeMs}
-              endTimeMs={activeSegment.endTimeMs}
-              posterLabel={`当前选中片段预览 · ${formatSegmentTimestamp(activeSegment.startTimeMs)} - ${formatSegmentTimestamp(activeSegment.endTimeMs)}`}
+              startTimeMs={effectiveWindow.startTimeMs}
+              endTimeMs={effectiveWindow.endTimeMs}
+              posterLabel={`当前选中片段预览 · ${formatSegmentTimestamp(effectiveWindow.startTimeMs)} - ${formatSegmentTimestamp(effectiveWindow.endTimeMs)}`}
               emphasized
             />
           ) : null}
           <div className="segment-detail-head">
             <div>
               <strong>{activeSegment.segmentId}</strong>
-              <p>{formatSegmentTimestamp(activeSegment.startTimeMs)} - {formatSegmentTimestamp(activeSegment.endTimeMs)}，时长 {formatSegmentDuration(activeSegment.durationMs)}</p>
+              {effectiveWindow ? (
+                <p>{formatSegmentTimestamp(effectiveWindow.startTimeMs)} - {formatSegmentTimestamp(effectiveWindow.endTimeMs)}，时长 {formatSegmentDuration(effectiveWindow.endTimeMs - effectiveWindow.startTimeMs)}</p>
+              ) : null}
             </div>
             <div className="segment-badge-row">
               {activeSegment.segmentId === recommendedSegmentId ? <span className="status-pill brand">系统推荐</span> : null}
               {activeSegment.segmentId === selectedSegmentId ? <span className="status-pill success">待进入精分析</span> : null}
+              {isWindowAdjusted ? <span className="status-pill neutral">已微调</span> : null}
             </div>
           </div>
 
@@ -232,6 +313,23 @@ function SegmentSelectionCard({
               <span className="segment-flag positive">当前没有明显粗粒度风险标记</span>
             )}
           </div>
+
+          {effectiveWindow && baseWindow ? (
+            <div className="info-list compact">
+              <div className="list-row">当前会送去精分析的时间窗：{formatSegmentTimestamp(effectiveWindow.startTimeMs)} - {formatSegmentTimestamp(effectiveWindow.endTimeMs)}</div>
+              <div className="list-row">如果系统切得偏紧，可以只在这里轻微往前或往后补一点。</div>
+            </div>
+          ) : null}
+
+          {effectiveWindow ? (
+            <div className="segment-adjust-grid">
+              <button type="button" className="secondary-btn" onClick={() => handleAdjust('start', -SEGMENT_ADJUST_STEP_MS)}>起点提前</button>
+              <button type="button" className="secondary-btn" onClick={() => handleAdjust('start', SEGMENT_ADJUST_STEP_MS)}>起点后移</button>
+              <button type="button" className="secondary-btn" onClick={() => handleAdjust('end', -SEGMENT_ADJUST_STEP_MS)}>终点前移</button>
+              <button type="button" className="secondary-btn" onClick={() => handleAdjust('end', SEGMENT_ADJUST_STEP_MS)}>终点延后</button>
+              <button type="button" className="secondary-btn" onClick={onResetWindow}>恢复系统切段</button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -251,6 +349,8 @@ export function UploadPage() {
     segmentScan,
     selectedSegmentId,
     setSelectedSegmentId,
+    selectedSegmentWindow,
+    setSelectedSegmentWindow,
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
     isBusy,
@@ -268,6 +368,11 @@ export function UploadPage() {
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file])
 
   const currentVideoSummary = file ? selectedVideoSummary : null
+  const videoDurationMs = Math.max(
+    1,
+    Math.round((currentVideoSummary?.durationSeconds ?? 0) * 1000),
+    ...(segmentScan?.swingSegments ?? []).map((segment) => segment.endTimeMs),
+  )
   const readinessItems = useMemo(
     () => buildUploadReadinessItems(file, currentVideoSummary),
     [currentVideoSummary, file],
@@ -381,8 +486,21 @@ export function UploadPage() {
             segments={segmentScan?.swingSegments ?? []}
             recommendedSegmentId={segmentScan?.recommendedSegmentId}
             selectedSegmentId={selectedSegmentId}
+            selectedWindow={selectedSegmentWindow}
             onSelect={setSelectedSegmentId}
+            onAdjustWindow={setSelectedSegmentWindow}
+            onResetWindow={() => {
+              const activeSegment = (segmentScan?.swingSegments ?? []).find((segment) => segment.segmentId === selectedSegmentId)
+              if (!activeSegment) return
+              setSelectedSegmentWindow({
+                startTimeMs: activeSegment.startTimeMs,
+                endTimeMs: activeSegment.endTimeMs,
+                startFrame: activeSegment.startFrame,
+                endFrame: activeSegment.endFrame,
+              })
+            }}
             previewUrl={previewUrl}
+            videoDurationMs={videoDurationMs}
           />
         </section>
       ) : null}

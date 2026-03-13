@@ -20,6 +20,12 @@
 - evidenceNotes（可选）
 - createdAt（可选）
 - poseBased（可选）
+- swingSegments（可选，粗粒度候选片段列表）
+- recommendedSegmentId（可选，系统默认推荐的候选片段）
+- selectedSegmentId（可选，最终进入精分析的候选片段 id）
+- selectedSegmentWindow（可选，最终实际抽帧与分析的时间窗）
+- segmentDetectionVersion（可选，当前候选片段检测版本）
+- segmentSelectionMode（可选，自动推荐或整段回退）
 - recognitionContext（可选，识别出的拍摄视角 / 挥拍侧等上下文）
 - phaseBreakdown（可选，正式报告使用的 4 段阶段结果）
 - visualEvidence（可选，最佳帧与全部抽帧骨架叠加图）
@@ -40,6 +46,7 @@
 - `issues` 与 `suggestions` 会同时保留旧版 `title / description / impact` 兼容字段，并补充教练式结构化字段
 - `poseSummary.rejectionReasons` / `scoringEvidence.rejectionReasons` 保留 pose 层原始触发信号，不直接等价于任务失败
 - 最终应以 `analysisDisposition` 与 `scoringEvidence.rejectionDecision` 判断是“硬拒绝”“低置信完成”还是“正常可分析”
+- `selectedSegmentId` 只表达“选中了哪一段候选”；真正进入抽帧与报告的窗口以 `selectedSegmentWindow` 为准
 
 ### phaseBreakdown
 - phaseKey（`preparation` / `backswing` / `contactCandidate` / `followThrough`）
@@ -106,12 +113,35 @@
 - previousCompletedTaskId（可选）
 - createdAt
 - updatedAt
+- segmentScan（可选，上传后粗扫得到的候选片段与当前选择）
 
 说明：
 - MVP 目标协议以 `status + stage + error snapshot` 表达任务状态；`preprocessStatus`、`poseStatus` 仍可在内部或调试接口保留，但不再作为前端主状态机
 - 错误信息不再使用零散字段自由组合，统一走稳定 `errorCode`
 - 常见失败态错误码包括 `upload_failed`、`invalid_duration`、`multi_person_detected`、`body_not_detected`、`poor_lighting_or_occlusion`、`insufficient_pose_coverage`、`preprocess_failed`、`pose_failed`
 - `invalid_camera_angle` 与边界型 `insufficient_pose_coverage` 在当前基线下优先下沉到 `completed + low_confidence`，不再默认进入失败态
+
+### segment scan summary
+- status（当前固定为 `completed`）
+- segmentDetectionVersion
+- swingSegments
+- recommendedSegmentId
+- selectedSegmentId（可选）
+- selectedSegmentWindow（可选）
+- segmentSelectionMode（可选）
+
+说明：
+- `selectedSegmentWindow` 支持用户在上传页对当前候选做轻量前后微调。
+- 若用户没有微调，它默认等于 `selectedSegmentId` 对应候选的窗口。
+- backend 最终抽帧与报告回显都以 `selectedSegmentWindow` 为准。
+
+### start task request
+- selectedSegmentId（可选）
+- selectedWindowOverride（可选）
+
+说明：
+- `selectedWindowOverride` 仅允许在已选候选的基础上做轻量时间窗修正，不支持跨候选自由裁剪。
+- backend 会把该 override clamp 到视频总时长与合法分析窗口范围内，再写回 `segmentScan.selectedSegmentWindow`。
 
 ### error response
 - error

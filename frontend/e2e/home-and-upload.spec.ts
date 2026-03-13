@@ -83,6 +83,22 @@ test('粗扫后可选片段并进入处理中页', async ({ page }) => {
   await expect(page.getByText('正在校验与抽帧')).toBeVisible()
 })
 
+test('粗扫后可轻量微调当前候选片段时间窗', async ({ page }) => {
+  await mockApi(page)
+
+  await page.goto('/upload')
+  await page.setInputFiles('input[type="file"]', validVideoPath)
+  await page.getByRole('checkbox', { name: '我已确认这段视频只包含当前动作，主体清晰、完整，且基本符合拍摄要求。' }).check()
+  await page.getByRole('button', { name: '上传并粗扫片段' }).click()
+
+  await expect(page.getByText('当前会送去精分析的时间窗：6.32s - 8.12s')).toBeVisible()
+  await page.getByRole('button', { name: '起点提前' }).click()
+  await expect(page.getByText('当前会送去精分析的时间窗：6.20s - 8.12s')).toBeVisible()
+  await expect(page.getByText('已微调')).toBeVisible()
+  await page.getByRole('button', { name: '恢复系统切段' }).click()
+  await expect(page.getByText('当前会送去精分析的时间窗：6.32s - 8.12s')).toBeVisible()
+})
+
 test('首页切换到杀球后可进入对应上传与处理中链路', async ({ page }) => {
   const smashScenario = buildActionScenario('smash')
   await mockApi(page, {

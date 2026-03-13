@@ -138,7 +138,21 @@ export async function mockApi(page: Page, options: MockApiOptions = {}) {
     }
 
     if (method === 'POST' && pathname.endsWith('/start')) {
-      return json(route, options.startTaskResponse ?? processingLifecycle.processing)
+      if (options.startTaskResponse) {
+        return json(route, options.startTaskResponse)
+      }
+
+      const requestBody = request.postDataJSON?.() as { selectedSegmentId?: string; selectedWindowOverride?: unknown } | undefined
+      return json(route, {
+        ...processingLifecycle.processing,
+        segmentScan: processingLifecycle.processing.segmentScan
+          ? {
+              ...processingLifecycle.processing.segmentScan,
+              selectedSegmentId: requestBody?.selectedSegmentId ?? processingLifecycle.processing.segmentScan.selectedSegmentId,
+              selectedSegmentWindow: requestBody?.selectedWindowOverride ?? processingLifecycle.processing.segmentScan.selectedSegmentWindow,
+            }
+          : processingLifecycle.processing.segmentScan,
+      })
     }
 
     return json(route, buildErrorResponse('task_not_found', `Unhandled mock for ${pathname}`), 404)

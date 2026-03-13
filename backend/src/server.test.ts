@@ -80,9 +80,15 @@ test('task lifecycle endpoints expose new task resource shape', async (t) => {
             },
             segmentScan: {
               status: 'completed' as const,
-              segmentDetectionVersion: 'coarse_motion_scan_v1',
+              segmentDetectionVersion: 'coarse_motion_scan_v2',
               recommendedSegmentId: 'segment-02',
               selectedSegmentId: 'segment-02',
+              selectedSegmentWindow: {
+                startTimeMs: 6300,
+                endTimeMs: 8100,
+                startFrame: 48,
+                endFrame: 62,
+              },
               segmentSelectionMode: 'auto_recommended' as const,
               swingSegments: [
                 {
@@ -96,7 +102,7 @@ test('task lifecycle endpoints expose new task resource shape', async (t) => {
                   confidence: 0.71,
                   rankingScore: 0.61,
                   coarseQualityFlags: ['too_short'],
-                  detectionSource: 'coarse_motion_scan_v1',
+                  detectionSource: 'coarse_motion_scan_v2',
                 },
                 {
                   segmentId: 'segment-02',
@@ -109,7 +115,7 @@ test('task lifecycle endpoints expose new task resource shape', async (t) => {
                   confidence: 0.88,
                   rankingScore: 0.83,
                   coarseQualityFlags: [],
-                  detectionSource: 'coarse_motion_scan_v1',
+                  detectionSource: 'coarse_motion_scan_v2',
                 },
               ],
             },
@@ -390,13 +396,31 @@ test('start endpoint persists the user-selected segment before analysis starts',
     const startResponse = await app.inject({
       method: 'POST',
       url: `/api/tasks/${created.taskId}/start`,
-      payload: { selectedSegmentId: 'segment-01' },
+      payload: {
+        selectedSegmentId: 'segment-01',
+        selectedWindowOverride: {
+          startTimeMs: 900,
+          endTimeMs: 2400,
+        },
+      },
     });
 
     assert.equal(startResponse.statusCode, 200);
-    const started = startResponse.json() as { segmentScan?: { selectedSegmentId?: string } };
+    const started = startResponse.json() as { segmentScan?: { selectedSegmentId?: string; selectedSegmentWindow?: { startTimeMs: number; endTimeMs: number } } };
     assert.equal(started.segmentScan?.selectedSegmentId, 'segment-01');
+    assert.deepEqual(started.segmentScan?.selectedSegmentWindow, {
+      startTimeMs: 900,
+      endTimeMs: 2400,
+      startFrame: 8,
+      endFrame: 16,
+    });
     assert.equal(getTask(created.taskId)?.artifacts.preprocess?.segmentScan?.selectedSegmentId, 'segment-01');
+    assert.deepEqual(getTask(created.taskId)?.artifacts.preprocess?.segmentScan?.selectedSegmentWindow, {
+      startTimeMs: 900,
+      endTimeMs: 2400,
+      startFrame: 8,
+      endFrame: 16,
+    });
   });
 });
 

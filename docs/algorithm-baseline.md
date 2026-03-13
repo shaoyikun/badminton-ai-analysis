@@ -7,8 +7,8 @@
 1. 前端创建任务并上传完整视频。
 2. backend 用 `ffprobe` 读取视频元数据。
 3. backend 先调用 `analysis-service/app.py detect-segments <video-path>` 做一次轻量整段粗扫描，输出多个 `swingSegments` 候选、`recommendedSegmentId` 和基础质量标记。
-4. 前端先展示候选片段，并默认高亮 `recommendedSegmentId`；用户确认 `selectedSegmentId` 后，再调用最终分析启动接口。
-5. backend 只对 `selectedSegmentId` 对应窗口执行 `ffmpeg` 均匀抽帧，并把这个选择写进 preprocess manifest。
+4. 前端先展示候选片段，并默认高亮 `recommendedSegmentId`；用户先确认 `selectedSegmentId`，必要时再对起止时间做轻量微调，然后调用最终分析启动接口。
+5. backend 只对最终确认的 `selectedSegmentWindow` 执行 `ffmpeg` 均匀抽帧，并把这次选择写进 preprocess manifest。
 6. backend 通过子进程调用 `analysis-service/app.py <preprocess-task-dir>`。
 7. Python `pose_estimator.py` 优先走 MediaPipe Tasks `VIDEO` mode，对选中片段抽帧序列做时序姿态估计与 EMA smoothing，生成 keypoints、per-frame metrics、summary。
 8. backend 读取 pose result，先把 `summary.rejectionReasons` 分成“硬拒绝”与“低置信提示”两类。
@@ -22,12 +22,16 @@
 - 真实用户视频经常包含多次挥拍，且早期挥拍可能不完整、被遮挡，或者没有覆盖到最清晰的一次。
 - 因此本阶段先解决“系统到底分析哪一次挥拍”，而不是一次性把所有片段都做精分析。
 
-### 当前检测逻辑
+### 当前检测逻辑（`coarse_motion_scan_v2`）
 
 - `analysis-service/services/swing_segment_detector.py` 使用低分辨率、低帧率灰度视频做粗扫描。
 - 每个扫描帧计算灰度帧差，得到 `motionScore` 序列，并做短窗口平滑。
-- 阈值使用 `max(percentile75, median + 2.2 * MAD, minPeak)`。
-- 超过阈值的连续活跃区间会被合并成候选片段，再追加前后 padding。
+- 阈值使用 `max(percentile65, median + 1.3 * MAD, minPeak)`。
+- 超过阈值的连续活跃区间会先被合并成候选窗口。
+- 对每个候选窗口，系统会再次做“完整性优先”的边界扩展：
+  - 起点采用更宽松的回溯阈值，优先向前补架拍和慢动作准备段。
+  - 终点也会做补足，但力度小于起点，避免无意义地拖得过长。
+  - 最终窗口会再做最小时长和最大片段时长约束。
 - 每个候选片段都会输出：
   - `segmentId`
   - `startTimeMs / endTimeMs`
@@ -38,7 +42,7 @@
   - `rankingScore`
   - `coarseQualityFlags`
 - 若没有稳定区间：
-  - 先回退成围绕最强运动峰的单窗口
+  - 先回退成围绕最强运动峰、偏向补前段的单窗口
   - 仍无可靠峰值时，再回退整段视频窗口，保证旧链路不被卡死
 
 ### 当前推荐逻辑
@@ -47,6 +51,7 @@
   - 更清晰的运动峰值
   - 更高的窗口内部运动密度
   - 更接近完整挥拍经验时长的 `durationFitness`
+  - 更完整的准备段 / 随挥覆盖
   - 更少的质量 penalty
 - 质量 penalty 当前主要来自：
   - `motion_too_weak`
@@ -54,25 +59,28 @@
   - `too_long`
   - `edge_clipped_start`
   - `edge_clipped_end`
+  - `preparation_maybe_clipped`
+  - `follow_through_maybe_clipped`
   - `subject_maybe_small`
   - `motion_maybe_occluded`
 - 若多个片段 `rankingScore` 接近：
-  - 优先 flags 更少的片段
-  - 再优先时间更靠后的片段
-  - 用来更稳地覆盖“前几次不完整，后一次才完整”的场景
+  - 优先截断风险更少的片段
+  - 再优先 flags 更少、时长更完整的片段
+  - 只有在前面都接近时，才把更靠后的时间位置当作兜底 tie-break
 
 ### 与当前 report / 前端的关系
 
 - 当前默认只精分析一个片段，不会一次性精分析全部候选。
 - 上传页现在已经支持“两步式”交互：
   - 第一步上传完整视频并拿到粗扫候选
-  - 第二步由用户确认 `selectedSegmentId` 后再启动最终分析
+  - 第二步由用户确认 `selectedSegmentId`，必要时微调 `selectedSegmentWindow` 后再启动最终分析
 - `ReportResult` 和 preprocess manifest 会同时回显：
   - `swingSegments`
   - `recommendedSegmentId`
   - `segmentDetectionVersion`
   - `segmentSelectionMode`
   - `selectedSegmentId`
+  - `selectedSegmentWindow`
 - 这意味着用户现在已经能明确知道“系统将要分析哪一段”和“这份报告实际分析了哪一段”。
 - 后续若要支持“结果页直接切换片段并重新分析”，推荐做法仍然是：
   - 先复用已有候选列表和默认推荐标签

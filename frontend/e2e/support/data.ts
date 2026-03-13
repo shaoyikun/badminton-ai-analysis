@@ -8,6 +8,7 @@ import type {
   HistoryDetailResponse,
   HistoryListResponse,
   PoseAnalysisResult,
+  SegmentSelectionWindow,
   SegmentScanSummary,
   TaskStatusResponse,
   UploadTaskResponse,
@@ -20,6 +21,7 @@ type SessionSnapshot = {
   selectedCompareTaskIds: Partial<Record<ActionType, string>>
   selectedVideoSummary: null
   uploadChecklistConfirmed: boolean
+  selectedSegmentWindow: SegmentSelectionWindow | null
   errorState: {
     errorCode?: FlowErrorCode | string
     title: string
@@ -59,7 +61,7 @@ const segmentFields = {
       confidence: 0.68,
       rankingScore: 0.6,
       coarseQualityFlags: ['too_short'],
-      detectionSource: 'coarse_motion_scan_v1',
+      detectionSource: 'coarse_motion_scan_v2',
     },
     {
       segmentId: 'segment-02',
@@ -72,12 +74,18 @@ const segmentFields = {
       confidence: 0.87,
       rankingScore: 0.82,
       coarseQualityFlags: [],
-      detectionSource: 'coarse_motion_scan_v1',
+      detectionSource: 'coarse_motion_scan_v2',
     },
   ],
   recommendedSegmentId: 'segment-02',
   selectedSegmentId: 'segment-02',
-  segmentDetectionVersion: 'coarse_motion_scan_v1',
+  selectedSegmentWindow: {
+    startTimeMs: 6320,
+    endTimeMs: 8120,
+    startFrame: 48,
+    endFrame: 62,
+  },
+  segmentDetectionVersion: 'coarse_motion_scan_v2',
   segmentSelectionMode: 'auto_recommended',
 } as const
 
@@ -86,6 +94,7 @@ const uploadSegmentScan: SegmentScanSummary = {
   segmentDetectionVersion: segmentFields.segmentDetectionVersion,
   recommendedSegmentId: segmentFields.recommendedSegmentId,
   selectedSegmentId: segmentFields.recommendedSegmentId,
+  selectedSegmentWindow: segmentFields.selectedSegmentWindow,
   segmentSelectionMode: segmentFields.segmentSelectionMode,
   swingSegments: [...segmentFields.swingSegments],
 }
@@ -215,6 +224,7 @@ export function buildSessionSnapshot(
     selectedCompareTaskIds,
     selectedVideoSummary: null,
     uploadChecklistConfirmed: false,
+    selectedSegmentWindow: null,
     errorState: null,
     debugEnabled: false,
     ...overrides,

@@ -1587,6 +1587,7 @@ export function buildShadowRuleBasedResult(
     segmentDetectionVersion: task.artifacts.preprocess?.artifacts?.segmentDetectionVersion,
     segmentSelectionMode: task.artifacts.preprocess?.artifacts?.segmentSelectionMode,
     selectedSegmentId: task.artifacts.preprocess?.artifacts?.selectedSegmentId,
+    selectedSegmentWindow: task.artifacts.preprocess?.artifacts?.selectedSegmentWindow,
     recognitionContext,
     phaseBreakdown,
     visualEvidence,

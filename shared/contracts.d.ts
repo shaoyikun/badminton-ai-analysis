@@ -168,8 +168,12 @@ export type SwingSegmentQualityFlag =
   | 'too_long'
   | 'edge_clipped_start'
   | 'edge_clipped_end'
+  | 'preparation_maybe_clipped'
+  | 'follow_through_maybe_clipped'
   | 'subject_maybe_small'
   | 'motion_maybe_occluded';
+
+export type SwingSegmentDetectionSource = 'coarse_motion_scan_v1' | 'coarse_motion_scan_v2';
 
 export interface SwingSegmentCandidate {
   segmentId: string;
@@ -182,7 +186,7 @@ export interface SwingSegmentCandidate {
   confidence: number;
   rankingScore: number;
   coarseQualityFlags: SwingSegmentQualityFlag[];
-  detectionSource: 'coarse_motion_scan_v1';
+  detectionSource: SwingSegmentDetectionSource;
 }
 
 export interface SegmentSelectionWindow {
@@ -200,6 +204,7 @@ export interface SegmentScanSummary {
   swingSegments: SwingSegmentCandidate[];
   recommendedSegmentId: string;
   selectedSegmentId?: string;
+  selectedSegmentWindow?: SegmentSelectionWindow;
   segmentSelectionMode?: SegmentSelectionMode;
 }
 
@@ -213,6 +218,7 @@ export interface PreprocessArtifacts {
   recommendedSegmentId?: string;
   segmentSelectionMode?: SegmentSelectionMode;
   selectedSegmentId?: string;
+  selectedSegmentWindow?: SegmentSelectionWindow;
   framePlan: {
     strategy: string;
     targetFrameCount: number;
@@ -589,6 +595,7 @@ export interface ReportResult {
   segmentDetectionVersion?: string;
   segmentSelectionMode?: SegmentSelectionMode;
   selectedSegmentId?: string;
+  selectedSegmentWindow?: SegmentSelectionWindow;
   recognitionContext?: RecognitionContext;
   phaseBreakdown?: ReportPhaseAssessment[];
   visualEvidence?: VisualEvidence;
@@ -689,6 +696,7 @@ export interface CreateTaskRequest {
 
 export interface StartTaskRequest {
   selectedSegmentId?: string;
+  selectedWindowOverride?: SegmentSelectionWindow;
 }
 
 export interface CreateTaskResponse extends TaskResource {}

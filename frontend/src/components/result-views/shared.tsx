@@ -41,6 +41,10 @@ function formatSegmentQualityFlag(flag: string) {
       return '起始可能截断'
     case 'edge_clipped_end':
       return '结尾可能截断'
+    case 'preparation_maybe_clipped':
+      return '准备段可能被截掉'
+    case 'follow_through_maybe_clipped':
+      return '随挥可能被截掉'
     case 'subject_maybe_small':
       return '主体可能偏小'
     case 'motion_maybe_occluded':
@@ -158,6 +162,8 @@ export function SwingSegmentsCard({ report }: { report: ReportResult }) {
   const activeSegment = segments.find((segment) => segment.segmentId === activeSegmentId) ?? segments[0]
   const isRecommended = activeSegment.segmentId === report.recommendedSegmentId
   const isSelected = activeSegment.segmentId === report.selectedSegmentId
+  const effectiveStartTimeMs = isSelected ? (report.selectedSegmentWindow?.startTimeMs ?? activeSegment.startTimeMs) : activeSegment.startTimeMs
+  const effectiveEndTimeMs = isSelected ? (report.selectedSegmentWindow?.endTimeMs ?? activeSegment.endTimeMs) : activeSegment.endTimeMs
 
   return (
     <section className="surface-card swing-segments-card">
@@ -206,7 +212,7 @@ export function SwingSegmentsCard({ report }: { report: ReportResult }) {
         <div className="segment-detail-head">
           <div>
             <strong>{activeSegment.segmentId}</strong>
-            <p>{formatSegmentTimestamp(activeSegment.startTimeMs)} - {formatSegmentTimestamp(activeSegment.endTimeMs)}，时长 {formatDurationMs(activeSegment.durationMs)}</p>
+            <p>{formatSegmentTimestamp(effectiveStartTimeMs)} - {formatSegmentTimestamp(effectiveEndTimeMs)}，时长 {formatDurationMs(effectiveEndTimeMs - effectiveStartTimeMs)}</p>
           </div>
           <div className="segment-badge-row">
             {isRecommended ? <span className="status-pill brand">推荐片段</span> : null}
@@ -236,7 +242,7 @@ export function SwingSegmentsCard({ report }: { report: ReportResult }) {
           </p>
         ) : (
           <p className="muted-copy">
-            当前这份报告的抽帧、姿态识别和动作建议都基于这个片段生成。
+            当前这份报告的抽帧、姿态识别和动作建议都基于这个片段生成；如果你在上传页做过前后微调，这里展示的是实际分析窗口。
           </p>
         )}
       </div>

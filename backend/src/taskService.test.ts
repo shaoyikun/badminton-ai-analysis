@@ -71,13 +71,41 @@ test('startMockAnalysis returns before background worker finishes', async () => 
       ...getTask(task.taskId)!,
       artifacts: {
         ...getTask(task.taskId)!.artifacts,
+        upload: {
+          fileName: 'clip.mp4',
+          fileSizeBytes: 1024,
+          mimeType: 'video/mp4',
+          durationSeconds: 8,
+          estimatedFrames: 80,
+          width: 720,
+          height: 1280,
+          frameRate: 10,
+          metadataSource: 'manual',
+        },
         preprocess: {
           status: 'queued',
+          metadata: {
+            fileName: 'clip.mp4',
+            fileSizeBytes: 1024,
+            mimeType: 'video/mp4',
+            durationSeconds: 8,
+            estimatedFrames: 80,
+            width: 720,
+            height: 1280,
+            frameRate: 10,
+            metadataSource: 'manual',
+          },
           segmentScan: {
             status: 'completed',
-            segmentDetectionVersion: 'coarse_motion_scan_v1',
+            segmentDetectionVersion: 'coarse_motion_scan_v2',
             recommendedSegmentId: 'segment-01',
             selectedSegmentId: 'segment-01',
+            selectedSegmentWindow: {
+              startTimeMs: 1000,
+              endTimeMs: 2000,
+              startFrame: 10,
+              endFrame: 20,
+            },
             segmentSelectionMode: 'auto_recommended',
             swingSegments: [{
               segmentId: 'segment-01',
@@ -90,7 +118,7 @@ test('startMockAnalysis returns before background worker finishes', async () => 
               confidence: 0.8,
               rankingScore: 0.78,
               coarseQualityFlags: [],
-              detectionSource: 'coarse_motion_scan_v1',
+              detectionSource: 'coarse_motion_scan_v2',
             }],
           },
         },
@@ -475,9 +503,15 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
               metadataExtractedAt: '2026-03-13T10:00:00.000Z',
               artifactsDir: 'artifacts/tasks/task_low_confidence/preprocess',
               manifestPath: 'artifacts/tasks/task_low_confidence/preprocess/manifest.json',
-              segmentDetectionVersion: 'coarse_motion_scan_v1',
+              segmentDetectionVersion: 'coarse_motion_scan_v2',
               recommendedSegmentId: 'segment-02',
               selectedSegmentId: 'segment-02',
+              selectedSegmentWindow: {
+                startTimeMs: 1200,
+                endTimeMs: 2360,
+                startFrame: 13,
+                endFrame: 24,
+              },
               segmentSelectionMode: 'auto_recommended',
               swingSegments: [
                 {
@@ -491,7 +525,7 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
                   confidence: 0.5,
                   rankingScore: 0.42,
                   coarseQualityFlags: ['too_short'],
-                  detectionSource: 'coarse_motion_scan_v1',
+                  detectionSource: 'coarse_motion_scan_v2',
                 },
                 {
                   segmentId: 'segment-02',
@@ -504,7 +538,7 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
                   confidence: 0.84,
                   rankingScore: 0.8,
                   coarseQualityFlags: [],
-                  detectionSource: 'coarse_motion_scan_v1',
+                  detectionSource: 'coarse_motion_scan_v2',
                 },
               ],
               framePlan: {
@@ -544,6 +578,12 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
       assert.ok((report?.confidenceScore ?? 100) < 70);
       assert.equal(report?.recommendedSegmentId, 'segment-02');
       assert.equal(report?.selectedSegmentId, 'segment-02');
+      assert.deepEqual(report?.selectedSegmentWindow, {
+        startTimeMs: 1200,
+        endTimeMs: 2360,
+        startFrame: 13,
+        endFrame: 24,
+      });
       assert.equal(report?.segmentSelectionMode, 'auto_recommended');
       assert.equal(report?.swingSegments?.length, 2);
     } finally {

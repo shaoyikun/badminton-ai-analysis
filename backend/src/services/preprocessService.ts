@@ -17,7 +17,9 @@ import { getPreprocessDir } from './artifactStore';
 import { detectSwingSegmentsForVideo, type SwingSegmentDetectionResult } from './analysisService';
 
 const DEFAULT_FRAME_RATE = 25;
-const FULL_VIDEO_FALLBACK_SEGMENT_VERSION = 'coarse_motion_scan_v1';
+const FULL_VIDEO_FALLBACK_SEGMENT_VERSION = 'coarse_motion_scan_v2';
+const MIN_SELECTED_SEGMENT_WINDOW_MS = 420;
+const MAX_SELECTED_SEGMENT_WINDOW_MS = 3200;
 const execFileAsync = promisify(execFile);
 type SwingSegmentDetector = (sourcePath: string) => Promise<SwingSegmentDetectionResult>;
 let swingSegmentDetector: SwingSegmentDetector = detectSwingSegmentsForVideo;
@@ -80,7 +82,7 @@ function buildFallbackSegment(metadata: VideoMetadata): SwingSegmentCandidate {
     confidence: 0.2,
     rankingScore: 0.2,
     coarseQualityFlags: ['motion_too_weak'],
-    detectionSource: 'coarse_motion_scan_v1',
+    detectionSource: FULL_VIDEO_FALLBACK_SEGMENT_VERSION,
   };
 }
 
@@ -105,7 +107,7 @@ function sanitizeSegments(segments: SwingSegmentCandidate[] | undefined, metadat
       confidence: Number((segment.confidence ?? 0).toFixed(4)),
       rankingScore: Number((segment.rankingScore ?? 0).toFixed(4)),
       coarseQualityFlags: [...new Set(segment.coarseQualityFlags ?? [])],
-      detectionSource: segment.detectionSource ?? 'coarse_motion_scan_v1',
+      detectionSource: segment.detectionSource ?? FULL_VIDEO_FALLBACK_SEGMENT_VERSION,
     };
   });
 }
@@ -165,17 +167,31 @@ export async function scanVideoSegments(sourcePath: string, metadata: VideoMetad
     swingSegments,
     recommendedSegmentId,
     selectedSegmentId: selectedSegment.segmentId,
+    selectedSegmentWindow: buildSourceWindow(selectedSegment),
     segmentSelectionMode,
   };
 }
 
-function resolveSelectedSegmentFromScan(metadata: VideoMetadata, segmentScan: SegmentScanSummary, preferredSegmentId?: string) {
-  return resolveSelectedSegment(
+export function resolveSelectedSegmentFromScan(
+  metadata: VideoMetadata,
+  segmentScan: SegmentScanSummary,
+  preferredSegmentId?: string,
+  overrideWindow?: SegmentSelectionWindow,
+) {
+  const resolved = resolveSelectedSegment(
     metadata,
     sanitizeSegments(segmentScan.swingSegments, metadata),
     preferredSegmentId ?? segmentScan.selectedSegmentId ?? segmentScan.recommendedSegmentId,
     segmentScan.recommendedSegmentId,
   );
+  return {
+    ...resolved,
+    selectedWindow: normalizeSelectedWindow(
+      metadata,
+      resolved.selectedSegment,
+      overrideWindow ?? segmentScan.selectedSegmentWindow,
+    ),
+  };
 }
 
 function buildSourceWindow(selectedSegment: SwingSegmentCandidate): SegmentSelectionWindow {
@@ -184,6 +200,42 @@ function buildSourceWindow(selectedSegment: SwingSegmentCandidate): SegmentSelec
     endTimeMs: selectedSegment.endTimeMs,
     startFrame: selectedSegment.startFrame,
     endFrame: selectedSegment.endFrame,
+  };
+}
+
+function normalizeSelectedWindow(
+  metadata: VideoMetadata,
+  selectedSegment: SwingSegmentCandidate,
+  overrideWindow?: SegmentSelectionWindow,
+): SegmentSelectionWindow {
+  const durationMs = getVideoDurationMs(metadata);
+  const baseWindow = buildSourceWindow(selectedSegment);
+  if (!overrideWindow) {
+    return baseWindow;
+  }
+
+  const requestedStart = clamp(Math.round(overrideWindow.startTimeMs ?? baseWindow.startTimeMs), 0, durationMs - 1);
+  const requestedEnd = clamp(Math.round(overrideWindow.endTimeMs ?? baseWindow.endTimeMs), requestedStart + 1, durationMs);
+  let startTimeMs = requestedStart;
+  let endTimeMs = requestedEnd;
+
+  if ((endTimeMs - startTimeMs) < MIN_SELECTED_SEGMENT_WINDOW_MS) {
+    const needed = MIN_SELECTED_SEGMENT_WINDOW_MS - (endTimeMs - startTimeMs);
+    const expandBefore = Math.min(startTimeMs, Math.ceil(needed / 2));
+    startTimeMs -= expandBefore;
+    endTimeMs = clamp(endTimeMs + (needed - expandBefore), startTimeMs + 1, durationMs);
+    startTimeMs = clamp(endTimeMs - MIN_SELECTED_SEGMENT_WINDOW_MS, 0, startTimeMs);
+  }
+
+  if ((endTimeMs - startTimeMs) > MAX_SELECTED_SEGMENT_WINDOW_MS) {
+    endTimeMs = startTimeMs + MAX_SELECTED_SEGMENT_WINDOW_MS;
+  }
+
+  return {
+    startTimeMs,
+    endTimeMs,
+    startFrame: baseWindow.startFrame,
+    endFrame: baseWindow.endFrame,
   };
 }
 
@@ -300,14 +352,15 @@ export async function extractFrames(
   const scan = segmentScan ?? await scanVideoSegments(sourcePath, metadata);
   const {
     selectedSegment,
+    selectedWindow,
     recommendedSegmentId,
     segmentSelectionMode,
-  } = resolveSelectedSegmentFromScan(metadata, scan, scan.selectedSegmentId);
-  const selectedDurationSeconds = Math.max(0.3, selectedSegment.durationMs / 1000);
+  } = resolveSelectedSegmentFromScan(metadata, scan, scan.selectedSegmentId, scan.selectedSegmentWindow);
+  const selectedDurationSeconds = Math.max(0.3, (selectedWindow.endTimeMs - selectedWindow.startTimeMs) / 1000);
   const targetFrameCount = getTargetFrameCount(selectedDurationSeconds);
   const sampleTimestamps = buildSampleTimestampsInWindow(
-    selectedSegment.startTimeMs / 1000,
-    selectedSegment.endTimeMs / 1000,
+    selectedWindow.startTimeMs / 1000,
+    selectedWindow.endTimeMs / 1000,
     targetFrameCount,
   );
   const artifactsDir = getPreprocessDir(taskId);
@@ -350,11 +403,12 @@ export async function extractFrames(
     recommendedSegmentId,
     segmentSelectionMode,
     selectedSegmentId: selectedSegment.segmentId,
+    selectedSegmentWindow: selectedWindow,
     framePlan: {
       strategy: 'segment-aware-uniform-sampling-ffmpeg-v1',
       targetFrameCount,
       sampleTimestamps,
-      sourceWindow: buildSourceWindow(selectedSegment),
+      sourceWindow: selectedWindow,
     },
     sampledFrames,
   };
