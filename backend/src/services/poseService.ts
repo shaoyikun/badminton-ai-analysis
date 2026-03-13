@@ -15,6 +15,7 @@ export function buildPoseSummary(result: PoseAnalysisResult): PoseInfo['summary'
     coverageRatio: result.summary?.coverageRatio,
     bestFrameIndex: result.summary?.bestFrameIndex,
     bestPreparationFrameIndex: result.summary?.bestPreparationFrameIndex,
+    phaseCandidates: result.summary?.phaseCandidates,
     medianStabilityScore: result.summary?.medianStabilityScore,
     medianBodyTurnScore: result.summary?.medianBodyTurnScore,
     medianRacketArmLiftScore: result.summary?.medianRacketArmLiftScore,

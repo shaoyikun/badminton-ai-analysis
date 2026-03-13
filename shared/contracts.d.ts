@@ -232,6 +232,39 @@ export interface PoseSpecializedFeatureSummaryItem {
   peakFrameIndex: number | null;
 }
 
+export type PosePhaseDetectionStatus = 'detected' | 'missing';
+
+export type PosePhaseMissingReason =
+  | 'no_usable_frames'
+  | 'insufficient_preparation_evidence'
+  | 'no_pre_contact_frames'
+  | 'contact_not_separable'
+  | 'no_post_contact_frames';
+
+export type PosePhaseSourceMetric =
+  | 'contactPreparationScore'
+  | 'hittingArmPreparationScore'
+  | 'compositeScore'
+  | 'bestFrameIndex'
+  | 'postContactMotionScore';
+
+export interface PosePhaseCandidate {
+  anchorFrameIndex: number | null;
+  windowStartFrameIndex: number | null;
+  windowEndFrameIndex: number | null;
+  score: number | null;
+  sourceMetric: PosePhaseSourceMetric;
+  detectionStatus: PosePhaseDetectionStatus;
+  missingReason?: PosePhaseMissingReason;
+}
+
+export interface PosePhaseCandidates {
+  preparation: PosePhaseCandidate;
+  backswing: PosePhaseCandidate;
+  contactCandidate: PosePhaseCandidate;
+  followThrough: PosePhaseCandidate;
+}
+
 export interface PoseFrameMetrics {
   stabilityScore: number;
   shoulderSpan: number | null;
@@ -293,6 +326,7 @@ export interface PoseRejectionReasonDetail {
 export interface PoseOverallSummary {
   bestFrameIndex: number | null;
   bestPreparationFrameIndex?: number | null;
+  phaseCandidates?: PosePhaseCandidates;
   usableFrameCount: number;
   coverageRatio: number;
   medianStabilityScore: number;
@@ -344,6 +378,7 @@ export interface PoseInfo {
     coverageRatio?: number;
     bestFrameIndex?: number | null;
     bestPreparationFrameIndex?: number | null;
+    phaseCandidates?: PosePhaseCandidates;
     medianStabilityScore?: number;
     medianBodyTurnScore?: number;
     medianRacketArmLiftScore?: number;

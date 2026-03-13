@@ -119,6 +119,41 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       ...buildSpecializedSummary(),
       ...summaryOverrides.specializedFeatureSummary,
     };
+  const phaseCandidates = summaryOverrides?.phaseCandidates ?? {
+    preparation: {
+      anchorFrameIndex: 6,
+      windowStartFrameIndex: 5,
+      windowEndFrameIndex: 6,
+      score: 0.81,
+      sourceMetric: 'contactPreparationScore',
+      detectionStatus: 'detected' as const,
+    },
+    backswing: {
+      anchorFrameIndex: 6,
+      windowStartFrameIndex: 5,
+      windowEndFrameIndex: 6,
+      score: 0.83,
+      sourceMetric: 'hittingArmPreparationScore',
+      detectionStatus: 'detected' as const,
+    },
+    contactCandidate: {
+      anchorFrameIndex: 6,
+      windowStartFrameIndex: 6,
+      windowEndFrameIndex: 6,
+      score: 0.67,
+      sourceMetric: 'compositeScore',
+      detectionStatus: 'detected' as const,
+    },
+    followThrough: {
+      anchorFrameIndex: null,
+      windowStartFrameIndex: null,
+      windowEndFrameIndex: null,
+      score: null,
+      sourceMetric: 'postContactMotionScore',
+      detectionStatus: 'missing' as const,
+      missingReason: 'no_post_contact_frames' as const,
+    },
+  };
 
   return {
     engine: 'mediapipe-pose',
@@ -143,6 +178,7 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       dominantRacketSide: 'right',
       racketSideConfidence: 0.71,
       bestPreparationFrameIndex: 6,
+      phaseCandidates,
       specializedFeatureSummary,
       bestFrameOverlayRelativePath: 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg',
       overlayFrameCount: 1,
@@ -200,6 +236,8 @@ test('buildPoseSummary keeps specialized summary fields for downstream consumers
   assert.equal(summary?.bestPreparationFrameIndex, 6);
   assert.equal(summary?.temporalConsistency, 0.725);
   assert.equal(summary?.motionContinuity, 0.88);
+  assert.equal(summary?.phaseCandidates?.preparation.anchorFrameIndex, 6);
+  assert.equal(summary?.phaseCandidates?.followThrough.missingReason, 'no_post_contact_frames');
   assert.deepEqual(summary?.specializedFeatureSummary?.contactPreparationScore, {
     median: 0.63,
     peak: 0.81,

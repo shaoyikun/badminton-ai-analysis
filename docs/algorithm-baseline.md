@@ -77,7 +77,11 @@
 - `specializedFeatureSummary`
   - 每个专项特征都会输出 `median / peak / observableFrameCount / observableCoverage / peakFrameIndex`。
 - `bestPreparationFrameIndex`
-  - 取 `contactPreparationScore` 的峰值帧，作为下一阶段动作阶段切分的准备态锚点。
+  - 取 `contactPreparationScore` 的峰值帧，等价于 `summary.phaseCandidates.preparation.anchorFrameIndex`。
+- `phaseCandidates`
+  - 当前固定输出 `preparation / backswing / contactCandidate / followThrough` 四个阶段候选。
+  - 每个候选都包含 `anchorFrameIndex / windowStartFrameIndex / windowEndFrameIndex / score / sourceMetric / detectionStatus`，缺失时额外输出 `missingReason`。
+  - `contactCandidate` 是“击球候选”，不是精确击球点。
 - `viewProfile`
   - 基于 smoothed keypoints 推断；低 `viewConfidence` 或视角频繁跳变的帧在汇总时按 `unknown` 处理。
 - `dominantRacketSide`
@@ -186,25 +190,30 @@
   - 现在有跨帧平滑和保守汇总，但还没有真正的时序视角分类器。
 - `camera_suitability` 仍然是规则门控
   - 现在它不会直接把动作判差，但本质上仍是轻量机位适配估计，不是完整视角分类器。
-- `repeatability` 仍未做动作阶段切分
-  - 现在多了 `temporalConsistency` 和 `motionContinuity`，但还不知道准备、引拍、击球、随挥这些阶段。
+- `repeatability` 仍未做真正的分阶段消费
+  - 现在已经能输出 `phaseCandidates` 作为准备、引拍、击球候选、随挥的时序骨架，但评分层还没有正式消费这些阶段窗口。
 - 当前 report 仍主要依赖 summary 聚合
   - 虽然已经把动作问题和证据问题拆开，但仍然不关心最佳帧前后关系，也不关心峰值出现在哪个动作阶段。
 
 ## 当前缺少的时序与专项特征
 
-- 阶段切分仍未完成
-  - 现在只有 `contactPreparationScore` 和 `bestPreparationFrameIndex` 作为准备态锚点，还没有完整的准备 / 引拍 / 击球 / 随挥切分。
+- 阶段锚点已落地，但仍停留在候选层
+  - 现在有 `summary.phaseCandidates` 输出准备 / 引拍 / 击球候选 / 随挥候选，但还没有球拍、羽球或击球点证据来验证真实 contact。
 - 球拍和来球证据仍缺失
   - 当前仍然没有球拍、羽球、击球点或来球检测。
 - repeatability 仍然是全局稳定性
-  - 现在还没有把 `repeatability` 升级成“分阶段稳定性”。
+  - 现在还没有把 `repeatability` 升级成“明确消费阶段窗口的分阶段稳定性”。
 - 动作上下文仍有限
-  - 系统仍不知道抽到的帧是否覆盖了真正击球瞬间，只能判断准备态证据。
+  - 系统能给出时序候选，但仍不知道抽到的帧是否真的覆盖了准确击球瞬间。
 
 ## 调试建议
 
 - 看 pose 原始结果时，先看 `summary.rejectionReasonDetails` 和 `summary.debugCounts`，确认是覆盖率、主体尺寸、稳定度还是视角问题。
+- 看阶段锚点时，优先看 `summary.phaseCandidates`：
+  - `preparation.anchorFrameIndex` 和 `bestPreparationFrameIndex` 应保持一致。
+  - `contactCandidate.sourceMetric=bestFrameIndex` 代表当前还无法从准备态可靠分离出击球候选，只能回退到全局最佳帧。
+  - `missingReason` 用来区分是准备证据缺失、contact 不可分离，还是没有 post-contact 帧。
+- 看本地 debug markdown 时，直接查看 `## Phase Candidates` 段落。
 - 看单帧时，优先对比 `rawMetrics`、`smoothedMetrics`、`finalMetrics`，再看 `metrics.debug.statusReasons`、`subjectScaleSource`、`frameInference`。
 - 看 report 时，优先对比 `scoringEvidence.dimensionEvidence[].inputs`、`confidenceBreakdown` 和 `rejectionDecision`，确认是动作输入变了，还是只是证据置信度在下降。
 - 本地开发可直接运行：

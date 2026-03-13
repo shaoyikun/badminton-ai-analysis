@@ -331,6 +331,41 @@ test('debug pose endpoint returns richer pose payload without changing route sha
         viewStability: 1,
         dominantRacketSide: 'right',
         racketSideConfidence: 0.72,
+        phaseCandidates: {
+          preparation: {
+            anchorFrameIndex: 1,
+            windowStartFrameIndex: 1,
+            windowEndFrameIndex: 1,
+            score: 0.72,
+            sourceMetric: 'contactPreparationScore',
+            detectionStatus: 'detected',
+          },
+          backswing: {
+            anchorFrameIndex: 1,
+            windowStartFrameIndex: 1,
+            windowEndFrameIndex: 1,
+            score: 0.66,
+            sourceMetric: 'hittingArmPreparationScore',
+            detectionStatus: 'detected',
+          },
+          contactCandidate: {
+            anchorFrameIndex: 1,
+            windowStartFrameIndex: 1,
+            windowEndFrameIndex: 1,
+            score: 0.67,
+            sourceMetric: 'compositeScore',
+            detectionStatus: 'detected',
+          },
+          followThrough: {
+            anchorFrameIndex: null,
+            windowStartFrameIndex: null,
+            windowEndFrameIndex: null,
+            score: null,
+            sourceMetric: 'postContactMotionScore',
+            detectionStatus: 'missing',
+            missingReason: 'no_post_contact_frames',
+          },
+        },
         bestFrameOverlayRelativePath: 'artifacts/tasks/debug/pose/overlays/frame-01-overlay.jpg',
         overlayFrameCount: 1,
         debugCounts: {
@@ -385,6 +420,8 @@ test('debug pose endpoint returns richer pose payload without changing route sha
     const payload = response.json() as typeof poseResult;
     assert.equal(payload.summary.rejectionReasonDetails?.[0]?.code, 'invalid_camera_angle');
     assert.equal(payload.summary.debugCounts?.detectedFrameCount, 1);
+    assert.equal(payload.summary.phaseCandidates?.preparation.anchorFrameIndex, 1);
+    assert.equal(payload.summary.phaseCandidates?.followThrough.missingReason, 'no_post_contact_frames');
     assert.equal(payload.frames[0]?.metrics?.compositeScore, 0.67);
   });
 });

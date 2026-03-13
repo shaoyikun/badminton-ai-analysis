@@ -365,6 +365,113 @@ class PoseEstimatorTests(unittest.TestCase):
         self.assertEqual(contact_summary["observableFrameCount"], 3)
         self.assertEqual(non_racket_summary["observableFrameCount"], 2)
         self.assertEqual(non_racket_summary["observableCoverage"], 0.6667)
+        self.assertEqual(summary["phaseCandidates"]["preparation"]["anchorFrameIndex"], 2)
+
+    def test_phase_candidates_cover_full_sequence_for_stable_sample(self) -> None:
+        frames = [
+            make_summary_frame(1, composite_score=0.41, body_turn_score=0.5, racket_arm_lift_score=0.48, specialized_overrides={
+                "contactPreparationScore": 0.48,
+                "hittingArmPreparationScore": 0.52,
+            }),
+            make_summary_frame(2, composite_score=0.55, body_turn_score=0.54, racket_arm_lift_score=0.58, specialized_overrides={
+                "contactPreparationScore": 0.74,
+                "hittingArmPreparationScore": 0.7,
+            }),
+            make_summary_frame(3, composite_score=0.63, body_turn_score=0.58, racket_arm_lift_score=0.64, specialized_overrides={
+                "contactPreparationScore": 0.92,
+                "hittingArmPreparationScore": 0.73,
+            }),
+            make_summary_frame(4, composite_score=0.71, body_turn_score=0.64, racket_arm_lift_score=0.69, specialized_overrides={
+                "contactPreparationScore": 0.79,
+                "hittingArmPreparationScore": 0.88,
+            }),
+            make_summary_frame(5, composite_score=0.9, body_turn_score=0.67, racket_arm_lift_score=0.74, specialized_overrides={
+                "contactPreparationScore": 0.56,
+                "hittingArmPreparationScore": 0.61,
+            }),
+            make_summary_frame(6, composite_score=0.52, body_turn_score=0.31, racket_arm_lift_score=0.29, specialized_overrides={
+                "contactPreparationScore": 0.37,
+                "hittingArmPreparationScore": 0.34,
+            }),
+            make_summary_frame(7, composite_score=0.28, body_turn_score=0.18, racket_arm_lift_score=0.16, specialized_overrides={
+                "contactPreparationScore": 0.21,
+                "hittingArmPreparationScore": 0.2,
+            }),
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=7)
+        phase_candidates = summary["phaseCandidates"]
+
+        self.assertEqual(summary["bestPreparationFrameIndex"], 3)
+        self.assertEqual(phase_candidates["preparation"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["backswing"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["contactCandidate"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["followThrough"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["preparation"]["windowStartFrameIndex"], 2)
+        self.assertEqual(phase_candidates["preparation"]["windowEndFrameIndex"], 4)
+        self.assertEqual(phase_candidates["backswing"]["anchorFrameIndex"], 4)
+        self.assertEqual(phase_candidates["contactCandidate"]["anchorFrameIndex"], 5)
+        self.assertEqual(phase_candidates["followThrough"]["anchorFrameIndex"], 6)
+        self.assertLessEqual(phase_candidates["preparation"]["anchorFrameIndex"], phase_candidates["backswing"]["anchorFrameIndex"])
+        self.assertLessEqual(phase_candidates["backswing"]["anchorFrameIndex"], phase_candidates["contactCandidate"]["anchorFrameIndex"])
+        self.assertLessEqual(phase_candidates["contactCandidate"]["anchorFrameIndex"], phase_candidates["followThrough"]["anchorFrameIndex"])
+
+    def test_phase_candidates_mark_missing_preparation_evidence(self) -> None:
+        frames = [
+            make_summary_frame(1, composite_score=0.44, specialized_overrides={
+                "contactPreparationScore": None,
+                "hittingArmPreparationScore": 0.48,
+            }),
+            make_summary_frame(2, composite_score=0.51, specialized_overrides={
+                "contactPreparationScore": None,
+                "hittingArmPreparationScore": 0.54,
+            }),
+            make_summary_frame(3, composite_score=0.62, specialized_overrides={
+                "contactPreparationScore": None,
+                "hittingArmPreparationScore": 0.59,
+            }),
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=3)
+        phase_candidates = summary["phaseCandidates"]
+
+        self.assertEqual(phase_candidates["preparation"]["detectionStatus"], "missing")
+        self.assertEqual(phase_candidates["preparation"]["missingReason"], "insufficient_preparation_evidence")
+        self.assertEqual(phase_candidates["backswing"]["detectionStatus"], "missing")
+        self.assertEqual(phase_candidates["backswing"]["missingReason"], "insufficient_preparation_evidence")
+        self.assertEqual(phase_candidates["contactCandidate"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["contactCandidate"]["sourceMetric"], "bestFrameIndex")
+        self.assertEqual(phase_candidates["contactCandidate"]["anchorFrameIndex"], summary["bestFrameIndex"])
+        self.assertEqual(summary["bestPreparationFrameIndex"], None)
+
+    def test_phase_candidates_allow_missing_follow_through_after_truncated_contact(self) -> None:
+        frames = [
+            make_summary_frame(1, composite_score=0.45, specialized_overrides={
+                "contactPreparationScore": 0.52,
+                "hittingArmPreparationScore": 0.5,
+            }),
+            make_summary_frame(2, composite_score=0.58, specialized_overrides={
+                "contactPreparationScore": 0.76,
+                "hittingArmPreparationScore": 0.68,
+            }),
+            make_summary_frame(3, composite_score=0.67, specialized_overrides={
+                "contactPreparationScore": 0.89,
+                "hittingArmPreparationScore": 0.81,
+            }),
+            make_summary_frame(4, composite_score=0.93, specialized_overrides={
+                "contactPreparationScore": 0.57,
+                "hittingArmPreparationScore": 0.62,
+            }),
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=4)
+        phase_candidates = summary["phaseCandidates"]
+
+        self.assertEqual(phase_candidates["preparation"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["backswing"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["contactCandidate"]["detectionStatus"], "detected")
+        self.assertEqual(phase_candidates["followThrough"]["detectionStatus"], "missing")
+        self.assertEqual(phase_candidates["followThrough"]["missingReason"], "no_post_contact_frames")
 
     def test_ema_smoothing_reduces_composite_score_variance(self) -> None:
         raw_sequence = [make_keypoints(wrist_jitter=jitter) for jitter in [0.0, 0.08, -0.07, 0.09, -0.06, 0.07]]

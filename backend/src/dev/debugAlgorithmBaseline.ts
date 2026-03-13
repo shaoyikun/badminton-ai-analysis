@@ -180,6 +180,13 @@ function formatObservableFeatureCount(metrics: PoseAnalysisResult['frames'][numb
   return `${entries.filter((entry) => entry?.observable).length}/${entries.length}`;
 }
 
+const phaseLabels = {
+  preparation: '准备态',
+  backswing: '引拍',
+  contactCandidate: '击球候选',
+  followThrough: '随挥候选',
+} satisfies Record<keyof NonNullable<PoseAnalysisResult['summary']['phaseCandidates']>, string>;
+
 export function renderAlgorithmBaselineMarkdown(snapshot: AlgorithmBaselineDebugSnapshot) {
   const summary = snapshot.poseResult.summary;
   const frameLines = snapshot.poseResult.frames.map((frame) => {
@@ -192,6 +199,10 @@ export function renderAlgorithmBaselineMarkdown(snapshot: AlgorithmBaselineDebug
   const specializedSummaryLines = Object.entries(summary.specializedFeatureSummary ?? {}).map(([featureName, featureSummary]) => (
     `| ${featureName} | ${formatDebugValue(featureSummary.median)} | ${formatDebugValue(featureSummary.peak)} | ${formatDebugValue(featureSummary.observableFrameCount)} | ${formatDebugValue(featureSummary.observableCoverage)} | ${formatDebugValue(featureSummary.peakFrameIndex)} |`
   ));
+  const phaseLines = Object.entries(phaseLabels).map(([phaseKey, phaseLabel]) => {
+    const candidate = summary.phaseCandidates?.[phaseKey as keyof typeof phaseLabels];
+    return `| ${phaseLabel} | ${formatDebugValue(candidate?.detectionStatus)} | ${formatDebugValue(candidate?.anchorFrameIndex)} | ${formatDebugValue(candidate?.windowStartFrameIndex)}-${formatDebugValue(candidate?.windowEndFrameIndex)} | ${formatDebugValue(candidate?.score)} | ${formatDebugValue(candidate?.sourceMetric)} | ${formatDebugValue(candidate?.missingReason)} |`;
+  });
 
   return [
     '# Algorithm Baseline Debug Summary',
@@ -225,6 +236,12 @@ export function renderAlgorithmBaselineMarkdown(snapshot: AlgorithmBaselineDebug
     '| feature | median | peak | observableFrames | observableCoverage | peakFrameIndex |',
     '| --- | --- | --- | --- | --- | --- |',
     ...(specializedSummaryLines.length > 0 ? specializedSummaryLines : ['| none | — | — | — | — | — |']),
+    '',
+    '## Phase Candidates',
+    '',
+    '| phase | status | anchorFrame | window | score | sourceMetric | missingReason |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
+    ...phaseLines,
     '',
     '## Per-frame Metrics',
     '',

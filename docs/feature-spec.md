@@ -70,7 +70,34 @@
 额外输出：
 
 - `summary.bestPreparationFrameIndex`
-  - 取 `contactPreparationScore` 的峰值帧，作为下一阶段动作阶段切分的锚点
+  - 等价于 `summary.phaseCandidates.preparation.anchorFrameIndex`
+  - 继续保留，供当前 report 和历史夹具兼容
+- `summary.phaseCandidates`
+  - 当前固定输出 4 个阶段候选：
+    - `preparation`：准备态
+    - `backswing`：引拍
+    - `contactCandidate`：击球候选
+    - `followThrough`：随挥候选
+  - 每个阶段都输出：
+    - `anchorFrameIndex`
+    - `windowStartFrameIndex`
+    - `windowEndFrameIndex`
+    - `score`
+    - `sourceMetric`
+    - `detectionStatus`
+    - `missingReason`（仅缺失时出现）
+  - 当前来源规则：
+    - `preparation`：`contactPreparationScore` 峰值帧，窗口取连续且分数 `>= max(0.75 * peak, 0.45)` 的 usable 帧
+    - `backswing`：`preparation.windowStartFrameIndex` 到 `contactCandidate.anchorFrameIndex` 之间 `hittingArmPreparationScore` 最高帧
+    - `contactCandidate`：优先取 `preparation` 之后 `compositeScore` 最高帧；只有这一阶段允许回退到 `bestFrameIndex`
+    - `followThrough`：`contactCandidate` 之后 `postContactMotionScore` 最高帧，其中分数由相邻 usable 帧的 `compositeScore + bodyTurnScore + racketArmLiftScore` 变化量组成
+  - 当前固定缺失原因：
+    - `no_usable_frames`
+    - `insufficient_preparation_evidence`
+    - `no_pre_contact_frames`
+    - `contact_not_separable`
+    - `no_post_contact_frames`
+  - 这些字段只表达“阶段候选与时序骨架”，不代表真实击球点定位
 
 ## 与当前 report 的关系
 
@@ -99,5 +126,5 @@
 
 - `bodyTurnScore` 与 `racketArmLiftScore` 还没有完全删除
   - 目前只作为兼容 fallback 和 debug 诊断输入
-- `repeatability` 还没有完成真正的动作阶段切分
-  - `scoreVariance` 现在只被当作“阶段稳定性粗代理”，已明显降权
+- `repeatability` 还没有完成真正的分阶段消费
+  - 虽然 `summary.phaseCandidates` 已经提供准备 / 引拍 / 击球候选 / 随挥候选骨架，但 report 还没有正式消费这些阶段窗口

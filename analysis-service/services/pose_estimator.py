@@ -78,6 +78,8 @@ HEAD_CENTER_OFFSET_TARGET = 0.38
 HEAD_TILT_TARGET = 0.22
 NON_RACKET_ELBOW_HEIGHT_TARGET = 0.28
 NON_RACKET_ARM_SPREAD_TARGET = 0.75
+PREPARATION_WINDOW_PEAK_RATIO = 0.75
+PREPARATION_WINDOW_MIN_SCORE = 0.45
 
 SPECIALIZED_FEATURE_NAMES = (
     'shoulderHipRotationScore',
@@ -1279,6 +1281,248 @@ def _summarize_specialized_features(usable_frames: List[Dict[str, Any]]) -> Dict
     return summary
 
 
+def _missing_phase_candidate(source_metric: str, missing_reason: str) -> Dict[str, Any]:
+    return {
+        'anchorFrameIndex': None,
+        'windowStartFrameIndex': None,
+        'windowEndFrameIndex': None,
+        'score': None,
+        'sourceMetric': source_metric,
+        'detectionStatus': 'missing',
+        'missingReason': missing_reason,
+    }
+
+
+def _detected_phase_candidate(
+    source_metric: str,
+    anchor_frame_index: int,
+    *,
+    window_start_frame_index: Optional[int] = None,
+    window_end_frame_index: Optional[int] = None,
+    score: Optional[float] = None,
+) -> Dict[str, Any]:
+    return {
+        'anchorFrameIndex': anchor_frame_index,
+        'windowStartFrameIndex': window_start_frame_index if window_start_frame_index is not None else anchor_frame_index,
+        'windowEndFrameIndex': window_end_frame_index if window_end_frame_index is not None else anchor_frame_index,
+        'score': _round(score) if score is not None else None,
+        'sourceMetric': source_metric,
+        'detectionStatus': 'detected',
+    }
+
+
+def _frame_specialized_score(frame: Dict[str, Any], feature_name: str) -> Optional[float]:
+    feature_values = (frame.get('finalMetrics') or {}).get('specialized') or {}
+    feature_value = feature_values.get(feature_name)
+    if feature_value is None:
+        return None
+    return float(feature_value)
+
+
+def _frame_metric_score(frame: Dict[str, Any], metric_name: str) -> Optional[float]:
+    final_metrics = frame.get('finalMetrics') or {}
+    metric_value = final_metrics.get(metric_name)
+    if metric_value is None:
+        return None
+    return float(metric_value)
+
+
+def _best_frame_fallback_candidate(usable_frames: List[Dict[str, Any]], best_frame_index: Optional[int]) -> Optional[Dict[str, Any]]:
+    if best_frame_index is None:
+        return None
+
+    fallback_frame = next((frame for frame in usable_frames if frame['frameIndex'] == best_frame_index), None)
+    fallback_score = _frame_metric_score(fallback_frame, 'compositeScore') if fallback_frame else None
+    return _detected_phase_candidate(
+        'bestFrameIndex',
+        best_frame_index,
+        score=fallback_score,
+    )
+
+
+def _build_preparation_candidate(usable_frames: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not usable_frames:
+        return _missing_phase_candidate('contactPreparationScore', 'no_usable_frames')
+
+    observed_entries = []
+    for position, frame in enumerate(usable_frames):
+        score = _frame_specialized_score(frame, 'contactPreparationScore')
+        if score is None:
+            continue
+        observed_entries.append((position, frame, score))
+
+    if not observed_entries:
+        return _missing_phase_candidate('contactPreparationScore', 'insufficient_preparation_evidence')
+
+    anchor_position, anchor_frame, peak_score = max(observed_entries, key=lambda item: item[2])
+    threshold = max(peak_score * PREPARATION_WINDOW_PEAK_RATIO, PREPARATION_WINDOW_MIN_SCORE)
+    left = anchor_position
+    right = anchor_position
+
+    while left > 0:
+        previous_score = _frame_specialized_score(usable_frames[left - 1], 'contactPreparationScore')
+        if previous_score is None or previous_score < threshold:
+            break
+        left -= 1
+
+    while right < len(usable_frames) - 1:
+        next_score = _frame_specialized_score(usable_frames[right + 1], 'contactPreparationScore')
+        if next_score is None or next_score < threshold:
+            break
+        right += 1
+
+    return _detected_phase_candidate(
+        'contactPreparationScore',
+        anchor_frame['frameIndex'],
+        window_start_frame_index=usable_frames[left]['frameIndex'],
+        window_end_frame_index=usable_frames[right]['frameIndex'],
+        score=peak_score,
+    )
+
+
+def _build_contact_candidate(
+    usable_frames: List[Dict[str, Any]],
+    preparation_candidate: Dict[str, Any],
+    best_frame_index: Optional[int],
+) -> Dict[str, Any]:
+    if not usable_frames:
+        return _missing_phase_candidate('compositeScore', 'no_usable_frames')
+
+    if preparation_candidate.get('detectionStatus') != 'detected' or preparation_candidate.get('anchorFrameIndex') is None:
+        return _best_frame_fallback_candidate(usable_frames, best_frame_index) or _missing_phase_candidate('bestFrameIndex', 'contact_not_separable')
+
+    anchor_frame_index = int(preparation_candidate['anchorFrameIndex'])
+    candidate_frames = [frame for frame in usable_frames if frame['frameIndex'] >= anchor_frame_index]
+    observed_entries = []
+    for frame in candidate_frames:
+        score = _frame_metric_score(frame, 'compositeScore')
+        if score is None:
+            continue
+        observed_entries.append((frame, score))
+
+    if not observed_entries:
+        return _best_frame_fallback_candidate(usable_frames, best_frame_index) or _missing_phase_candidate('bestFrameIndex', 'contact_not_separable')
+
+    anchor_frame, anchor_score = max(observed_entries, key=lambda item: item[1])
+    return _detected_phase_candidate(
+        'compositeScore',
+        anchor_frame['frameIndex'],
+        score=anchor_score,
+    )
+
+
+def _build_backswing_candidate(
+    usable_frames: List[Dict[str, Any]],
+    preparation_candidate: Dict[str, Any],
+    contact_candidate: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not usable_frames:
+        return _missing_phase_candidate('hittingArmPreparationScore', 'no_usable_frames')
+
+    preparation_window_start = preparation_candidate.get('windowStartFrameIndex')
+    contact_anchor = contact_candidate.get('anchorFrameIndex')
+
+    if preparation_candidate.get('detectionStatus') != 'detected' or preparation_window_start is None:
+        return _missing_phase_candidate('hittingArmPreparationScore', 'insufficient_preparation_evidence')
+
+    if contact_candidate.get('detectionStatus') != 'detected' or contact_anchor is None:
+        return _missing_phase_candidate('hittingArmPreparationScore', 'contact_not_separable')
+
+    if int(preparation_window_start) > int(contact_anchor):
+        return _missing_phase_candidate('hittingArmPreparationScore', 'no_pre_contact_frames')
+
+    candidate_frames = [
+        frame for frame in usable_frames
+        if int(preparation_window_start) <= frame['frameIndex'] <= int(contact_anchor)
+    ]
+    observed_entries = []
+    for frame in candidate_frames:
+        score = _frame_specialized_score(frame, 'hittingArmPreparationScore')
+        if score is None:
+            continue
+        observed_entries.append((frame, score))
+
+    if not observed_entries:
+        return _missing_phase_candidate('hittingArmPreparationScore', 'no_pre_contact_frames')
+
+    anchor_frame, anchor_score = max(observed_entries, key=lambda item: item[1])
+    return _detected_phase_candidate(
+        'hittingArmPreparationScore',
+        anchor_frame['frameIndex'],
+        window_start_frame_index=int(preparation_window_start),
+        window_end_frame_index=int(contact_anchor),
+        score=anchor_score,
+    )
+
+
+def _post_contact_motion_score(previous_frame: Dict[str, Any], current_frame: Dict[str, Any]) -> Optional[float]:
+    deltas = []
+    for metric_name in ['compositeScore', 'bodyTurnScore', 'racketArmLiftScore']:
+        previous_value = _frame_metric_score(previous_frame, metric_name)
+        current_value = _frame_metric_score(current_frame, metric_name)
+        if previous_value is None or current_value is None:
+            continue
+        deltas.append(abs(current_value - previous_value))
+
+    if not deltas:
+        return None
+
+    return _round(sum(deltas))
+
+
+def _build_follow_through_candidate(usable_frames: List[Dict[str, Any]], contact_candidate: Dict[str, Any]) -> Dict[str, Any]:
+    if not usable_frames:
+        return _missing_phase_candidate('postContactMotionScore', 'no_usable_frames')
+
+    contact_anchor = contact_candidate.get('anchorFrameIndex')
+    if contact_candidate.get('detectionStatus') != 'detected' or contact_anchor is None:
+        return _missing_phase_candidate('postContactMotionScore', 'contact_not_separable')
+
+    post_contact_frames = [frame for frame in usable_frames if frame['frameIndex'] > int(contact_anchor)]
+    if not post_contact_frames:
+        return _missing_phase_candidate('postContactMotionScore', 'no_post_contact_frames')
+
+    observed_entries = []
+    previous_frame: Optional[Dict[str, Any]] = None
+    for frame in usable_frames:
+        if previous_frame is None:
+            previous_frame = frame
+            continue
+        if frame['frameIndex'] <= int(contact_anchor):
+            previous_frame = frame
+            continue
+
+        score = _post_contact_motion_score(previous_frame, frame)
+        if score is not None:
+            observed_entries.append((frame, score))
+        previous_frame = frame
+
+    if not observed_entries:
+        return _missing_phase_candidate('postContactMotionScore', 'contact_not_separable')
+
+    anchor_frame, anchor_score = max(observed_entries, key=lambda item: item[1])
+    return _detected_phase_candidate(
+        'postContactMotionScore',
+        anchor_frame['frameIndex'],
+        window_start_frame_index=post_contact_frames[0]['frameIndex'],
+        window_end_frame_index=post_contact_frames[-1]['frameIndex'],
+        score=anchor_score,
+    )
+
+
+def _build_phase_candidates(usable_frames: List[Dict[str, Any]], best_frame_index: Optional[int]) -> Dict[str, Dict[str, Any]]:
+    preparation_candidate = _build_preparation_candidate(usable_frames)
+    contact_candidate = _build_contact_candidate(usable_frames, preparation_candidate, best_frame_index)
+    backswing_candidate = _build_backswing_candidate(usable_frames, preparation_candidate, contact_candidate)
+    follow_through_candidate = _build_follow_through_candidate(usable_frames, contact_candidate)
+    return {
+        'preparation': preparation_candidate,
+        'backswing': backswing_candidate,
+        'contactCandidate': contact_candidate,
+        'followThrough': follow_through_candidate,
+    }
+
+
 def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) -> Dict[str, Any]:
     detected_frames = [frame for frame in frames if frame['status'] in {'detected', 'usable'} and frame.get('finalMetrics')]
     if not detected_frames:
@@ -1298,6 +1542,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         return {
             'bestFrameIndex': None,
             'bestPreparationFrameIndex': None,
+            'phaseCandidates': _build_phase_candidates([], None),
             'usableFrameCount': 0,
             'coverageRatio': 0.0,
             'medianStabilityScore': 0.0,
@@ -1360,7 +1605,6 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
     dominant_racket_side, racket_side_confidence = _summarize_racket_side(usable_frames or detected_frames)
     unknown_view_count = sum(1 for profile in stable_profiles if profile == 'unknown')
     specialized_feature_summary = _summarize_specialized_features(usable_frames)
-    best_preparation_frame_index = specialized_feature_summary['contactPreparationScore']['peakFrameIndex']
     rejection_reason_details = _build_rejection_reason_details(
         frame_count=len(frames),
         detected_count=detected_count,
@@ -1378,11 +1622,14 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
 
     best_frame_candidates = usable_frames or detected_frames
     best_frame = max(best_frame_candidates, key=lambda frame: frame['finalMetrics']['compositeScore'])
+    phase_candidates = _build_phase_candidates(usable_frames, best_frame['frameIndex'] if best_frame else None)
+    best_preparation_frame_index = phase_candidates['preparation']['anchorFrameIndex']
     overlay_frame_count = sum(1 for frame in frames if frame.get('overlayRelativePath'))
 
     return {
         'bestFrameIndex': best_frame['frameIndex'],
         'bestPreparationFrameIndex': best_preparation_frame_index,
+        'phaseCandidates': phase_candidates,
         'usableFrameCount': usable_frame_count,
         'coverageRatio': coverage_ratio,
         'medianStabilityScore': median_stability_score,

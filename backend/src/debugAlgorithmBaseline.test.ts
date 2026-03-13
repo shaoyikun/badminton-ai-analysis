@@ -41,6 +41,40 @@ function buildPoseResult(): PoseAnalysisResult {
       dominantRacketSide: 'right',
       racketSideConfidence: 0.73,
       bestPreparationFrameIndex: 1,
+      phaseCandidates: {
+        preparation: {
+          anchorFrameIndex: 1,
+          windowStartFrameIndex: 1,
+          windowEndFrameIndex: 2,
+          score: 0.72,
+          sourceMetric: 'contactPreparationScore',
+          detectionStatus: 'detected',
+        },
+        backswing: {
+          anchorFrameIndex: 1,
+          windowStartFrameIndex: 1,
+          windowEndFrameIndex: 1,
+          score: 0.66,
+          sourceMetric: 'hittingArmPreparationScore',
+          detectionStatus: 'detected',
+        },
+        contactCandidate: {
+          anchorFrameIndex: 1,
+          windowStartFrameIndex: 1,
+          windowEndFrameIndex: 1,
+          score: 0.67,
+          sourceMetric: 'compositeScore',
+          detectionStatus: 'detected',
+        },
+        followThrough: {
+          anchorFrameIndex: 2,
+          windowStartFrameIndex: 2,
+          windowEndFrameIndex: 2,
+          score: 0.17,
+          sourceMetric: 'postContactMotionScore',
+          detectionStatus: 'detected',
+        },
+      },
       specializedFeatureSummary: {
         contactPreparationScore: {
           median: 0.68,
@@ -214,6 +248,8 @@ test('loadDebugArtifactsContext uses manifest when it exists', () => {
     assert.equal(snapshot.report.visualEvidence?.overlayFrames.length, 2);
     assert.match(markdown, /## Pose Summary/);
     assert.match(markdown, /## Specialized Feature Summary/);
+    assert.match(markdown, /## Phase Candidates/);
+    assert.match(markdown, /\| 准备态 \| detected \| 1 \| 1-2 \| 0.72 \| contactPreparationScore \| — \|/);
     assert.match(markdown, /## Scoring Evidence/);
   });
 });
@@ -236,5 +272,6 @@ test('loadDebugArtifactsContext reconstructs sampled frames when manifest is mis
     assert.equal(snapshot.report.visualEvidence?.overlayFrames[0]?.index, 1);
     assert.match(markdown, /\| 1 \| usable \| rear_left_oblique \| right \|/);
     assert.match(markdown, /contactPreparationScore/);
+    assert.match(markdown, /随挥候选/);
   });
 });
