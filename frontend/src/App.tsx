@@ -1,4 +1,3 @@
-import './App.css'
 import { AppRouter } from './app/AppRouter'
 import { AnalysisSessionProvider } from './hooks/useAnalysisTask'
 import { MobileAppShell } from './app/MobileAppShell'

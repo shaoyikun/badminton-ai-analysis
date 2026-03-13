@@ -63,9 +63,9 @@ description: Use when changing the upload-to-analysis task flow, especially cand
    - 字段名和真实 contracts 一致
    - 页面逻辑不要依赖 mock 才成立
 7. 前端页面跳转与任务状态要对齐当前实现：
-   - `/upload`
-   - `/processing`
-   - `/report`
+   - `/analyses/new`
+   - `/analyses/:taskId/processing`
+   - `/analyses/:taskId/report`
    - `/error`
 8. 复用优先：优先扩展现有 provider、task service、upload helper、progress mapping 和 mock builder，不要新增第二套状态机。
 9. 模块拆分优先：上传准备、候选片段选择、轮询、状态映射、跳转副作用应拆成聚焦模块，不要让单个页面或 provider 同时承担所有职责。

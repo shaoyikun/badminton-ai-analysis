@@ -1,0 +1,86 @@
+.skeletonCard {
+  min-height: 180px;
+}
+
+.skeletonLine {
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(20, 33, 61, 0.08), rgba(47, 107, 255, 0.16), rgba(20, 33, 61, 0.08));
+}
+
+.shortLine {
+  width: 60%;
+}
+
+.heroGrid,
+.retestGrid,
+.phaseGrid,
+.dimensionGrid,
+.segmentList {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.scoreWrap {
+  margin-top: 8px;
+}
+
+.focusCard {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: rgba(20, 33, 61, 0.04);
+}
+
+.dimensionGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dimensionCard,
+.phaseCard {
+  display: grid;
+  gap: var(--space-2);
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: rgba(20, 33, 61, 0.05);
+
+  p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+  }
+}
+
+.phaseHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.segmentButton {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+
+.segmentButtonActive {
+  border-color: rgba(47, 107, 255, 0.3);
+  background: linear-gradient(135deg, rgba(47, 107, 255, 0.1) 0%, rgba(91, 182, 255, 0.12) 100%);
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.evidenceFrame {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: rgba(20, 33, 61, 0.06);
+
+  img {
+    display: block;
+    width: 100%;
+  }
+}

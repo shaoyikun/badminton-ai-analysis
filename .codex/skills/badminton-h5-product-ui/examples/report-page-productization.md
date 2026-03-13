@@ -4,7 +4,7 @@
 
 # Before
 
-- 路由是 `/report`
+- 路由是 `/analyses/:taskId/report`
 - 当前页面已通过 `ReportView` 展示报告内容
 - 报告对象里包含 summary、issues、comparison、standardComparison、dimensionScores
 

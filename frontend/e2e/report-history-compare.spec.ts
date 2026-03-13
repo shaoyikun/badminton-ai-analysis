@@ -9,12 +9,16 @@ import {
 import { gotoWithSession } from './support/helpers'
 import { mockApi } from './support/mockApi'
 
+const reportPath = `/analyses/${currentTaskId}/report`
+const comparePath = `/analyses/${currentTaskId}/comparison`
+const uploadPath = '/analyses/new'
+
 test('报告页回访加载成功', async ({ page }) => {
   await mockApi(page)
 
   await gotoWithSession(
     page,
-    '/report',
+    reportPath,
     buildSessionSnapshot({ latestCompletedTaskId: currentTaskId }),
   )
 
@@ -25,15 +29,14 @@ test('报告页回访加载成功', async ({ page }) => {
   await expect(page.getByText('当前报告已分析')).toBeVisible()
   await expect(page.getByRole('button', { name: /segment-02 6\.32s - 8\.12s 当前分析/ })).toBeVisible()
   await expect(page.getByRole('heading', { name: '动作阶段拆解' })).toBeVisible()
-  const phaseCard = page.locator('.phase-breakdown-card')
-  await expect(phaseCard.getByText(/^准备$/)).toBeVisible()
-  await expect(phaseCard.getByText(/^引拍$/)).toBeVisible()
+  await expect(page.getByText('准备', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('引拍', { exact: true }).first()).toBeVisible()
   await expect(page.getByRole('heading', { name: '骨架识别图' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '动作问题拆解' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '分维度评分' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '当前视角动作参考对照' })).toBeVisible()
-  await expect(page.getByRole('link', { name: '再次测试' })).toHaveAttribute('href', '/upload')
-  await expect(page.getByRole('link', { name: '查看历史' })).toHaveAttribute('href', '/history')
+  await expect(page.getByRole('link', { name: '再次测试' })).toHaveAttribute('href', uploadPath)
+  await expect(page.getByRole('link', { name: '查看完整复测对比' })).toHaveAttribute('href', `/analyses/${currentTaskId}/comparison`)
 })
 
 test('杀球报告页回访时使用当前动作上下文', async ({ page }) => {
@@ -42,24 +45,23 @@ test('杀球报告页回访时使用当前动作上下文', async ({ page }) => 
 
   await gotoWithSession(
     page,
-    '/report',
+    reportPath,
     buildSessionSnapshot({
       actionType: 'smash',
       latestCompletedTaskId: currentTaskId,
     }),
   )
 
-  await expect(page.locator('.badge.badge-inverse').getByText('杀球', { exact: true })).toBeVisible()
+  await expect(page.getByText('杀球报告')).toBeVisible()
   await expect(page.getByRole('heading', { name: /杀球样本已经完成正式分析/ })).toBeVisible()
 })
 
-test('报告页无会话保护', async ({ page }) => {
+test('报告页深链可直接打开', async ({ page }) => {
   await mockApi(page)
 
-  await page.goto('/report')
+  await page.goto(reportPath)
 
-  await expect(page).toHaveURL(/\/upload$/)
-  await expect(page.getByRole('heading', { name: '上传视频' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /本次基于 9\/9 帧稳定识别结果生成/ })).toBeVisible()
 })
 
 test('再次测试回到上传页时清空上一次成功任务草稿', async ({ page }) => {
@@ -67,7 +69,7 @@ test('再次测试回到上传页时清空上一次成功任务草稿', async ({
 
   await gotoWithSession(
     page,
-    '/upload',
+    uploadPath,
     buildSessionSnapshot({
       taskId: currentTaskId,
       latestCompletedTaskId: currentTaskId,
@@ -98,17 +100,18 @@ test('历史页详情与基线切换', async ({ page }) => {
   )
 
   await expect(page.getByRole('heading', { name: '历史列表' })).toBeVisible()
-  await page.getByRole('button', { name: /正手高远球 · 88 分/ }).first().click()
+  await page.getByRole('button', { name: /正手高远球 · 83 分/ }).first().click()
 
-  await expect(page.getByText('历史样本详情')).toBeVisible()
-  await expect(page.getByText('那次最核心的问题')).toBeVisible()
-  await page.getByRole('button', { name: '设为当前基线并查看对比' }).click()
+  const sheet = page.getByRole('dialog', { name: '历史样本详情' })
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByText('那次最核心的问题')).toBeVisible()
+  await sheet.getByRole('button', { name: '设为当前基线并查看对比' }).click()
 
-  await expect(page).toHaveURL(/\/compare$/)
-  await expect(page.getByText('当前基线')).toBeVisible()
-  await expect(page.getByText('2026/3/13 00:22:29')).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`/analyses/${currentTaskId}/comparison$`))
+  await expect(page.getByText('当前基线').first()).toBeVisible()
+  await expect(page.getByText('2026/3/12 22:14:51')).toBeVisible()
   await expect(page.getByText(comparisonResponse.comparison.summaryText)).toBeVisible()
-  await expect(page.getByRole('link', { name: '返回本次报告' })).toHaveAttribute('href', '/report')
+  await expect(page.getByRole('link', { name: '返回本次报告' })).toHaveAttribute('href', reportPath)
 })
 
 test('历史页切到杀球时只展示杀球动作语境', async ({ page }) => {
@@ -125,18 +128,23 @@ test('历史页切到杀球时只展示杀球动作语境', async ({ page }) => 
   )
 
   await expect(page.getByRole('heading', { name: '杀球历史样本' })).toBeVisible()
-  await expect(page.getByText(/当前只展示.*杀球.*历史样本和同动作复测基线/)).toBeVisible()
+  await expect(page.getByText('当前只展示 杀球 的历史样本和同动作复测基线。').first()).toBeVisible()
   await expect(page.getByRole('button', { name: /杀球 ·/ }).first()).toBeVisible()
 })
 
 test('对比页空状态可恢复', async ({ page }) => {
-  await mockApi(page)
+  await mockApi(page, {
+    comparison: {
+      ...comparisonResponse,
+      comparison: null,
+    },
+  })
 
-  await gotoWithSession(page, '/compare', buildSessionSnapshot())
+  await gotoWithSession(page, comparePath, buildSessionSnapshot())
 
   await expect(page.getByText('暂无对比')).toBeVisible()
   await expect(page.getByRole('link', { name: '去历史记录' })).toHaveAttribute('href', '/history')
-  await expect(page.getByRole('link', { name: '继续上传' })).toHaveAttribute('href', '/upload')
+  await expect(page.getByRole('link', { name: '继续上传' })).toHaveAttribute('href', uploadPath)
 })
 
 test('对比页有结果时展示复测结论', async ({ page }) => {
@@ -144,7 +152,7 @@ test('对比页有结果时展示复测结论', async ({ page }) => {
 
   await gotoWithSession(
     page,
-    '/compare',
+    comparePath,
     buildSessionSnapshot({
       taskId: currentTaskId,
       latestCompletedTaskId: currentTaskId,
@@ -155,9 +163,9 @@ test('对比页有结果时展示复测结论', async ({ page }) => {
   await expect(page.getByText('复测结论')).toBeVisible()
   await expect(page.getByRole('heading', { name: '这次先把关键动作收住' })).toBeVisible()
   await expect(page.getByText('参考分数变化')).toBeVisible()
-  await expect(page.getByText('-1')).toBeVisible()
+  await expect(page.getByText('-1', { exact: true })).toBeVisible()
   await expect(page.getByText('引拍阶段比基线更需要回看。')).toBeVisible()
-  await expect(page.getByRole('link', { name: '继续复测上传' })).toHaveAttribute('href', '/upload')
+  await expect(page.getByRole('link', { name: '继续复测上传' })).toHaveAttribute('href', uploadPath)
   await expect(page.getByRole('link', { name: '更换对比基线' })).toHaveAttribute('href', '/history')
 })
 
@@ -172,7 +180,7 @@ test('对比页在模型升级时展示不可比提示', async ({ page }) => {
 
   await gotoWithSession(
     page,
-    '/compare',
+    comparePath,
     buildSessionSnapshot({
       taskId: currentTaskId,
       latestCompletedTaskId: currentTaskId,

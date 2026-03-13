@@ -1,0 +1,36 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.neutral {
+  background: rgba(20, 33, 61, 0.06);
+  color: var(--color-text-secondary);
+}
+
+.brand {
+  background: var(--color-brand-primary-soft);
+  color: var(--color-brand-primary);
+}
+
+.progress {
+  background: rgba(91, 182, 255, 0.14);
+  color: #2477b7;
+}
+
+.success {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.danger {
+  background: var(--color-error-soft);
+  color: var(--color-error);
+}

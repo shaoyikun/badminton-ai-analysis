@@ -25,9 +25,11 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
 
 当前前端不是空壳，已经具备真实产品骨架：
 
-- 路由为 `/`、`/guide`、`/upload`、`/processing`、`/report`、`/history`、`/compare`、`/error`
+- 路由为 `/`、`/guide`、`/analyses/new`、`/analyses/:taskId/processing`、`/analyses/:taskId/report`、`/history`、`/analyses/:taskId/comparison`、`/error`
 - 上传页已经是“两步式”：上传并粗扫片段 -> 选择片段 -> 开始分析
 - Playwright 默认按移动端 viewport 跑主流程
+- 页面与组件默认使用 `*.module.scss`，共享 token 在 `frontend/src/styles/`
+- `antd-mobile` 只允许选择性承接移动端交互原件，不接管页面视觉和品牌叙事
 
 ## 工作顺序/决策顺序
 
@@ -61,17 +63,19 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
    - `EmptyState`
    - `StatusPill`
    - `StepProgress`
-7. 文案要反映当前真实能力边界：
+7. 新增样式默认写到 `*.module.scss`，只把 token、reset 和极少量基础布局留在 `globals.scss`。
+8. 选择性使用 `antd-mobile` 时，只用它解决移动端交互原件，例如 `Selector`、`Popup`、`Dialog`、`Toast`；Hero 卡、报告卡、历史卡和训练建议卡继续自研。
+9. 文案要反映当前真实能力边界：
    - 支持 `clear | smash`
    - 候选片段粗扫是已有能力
    - 报告是“问题解释 + 复测建议”，不是实时教练系统
-8. 复用优先：先复用现有 UI 组件、feature helper、adapter 和布局模式，再考虑新增组件。
-9. 模块拆分优先：复杂页面应拆成 section component、文案映射 helper、卡片组件和 adapter，不要让单个页面文件同时承担所有逻辑。
-10. 文件体量控制：
+10. 复用优先：先复用现有 UI 组件、feature helper、adapter 和布局模式，再考虑新增组件。
+11. 模块拆分优先：复杂页面应拆成 section component、文案映射 helper、卡片组件和 adapter，不要让单个页面文件同时承担所有逻辑。
+12. 文件体量控制：
    - frontend page/provider/component 通常接近 250 行就要考虑拆分
    - shared adapter/formatter/helper 超过约 200 行应按职责拆分
-11. `UploadPage` 这类大文件是待拆债务，不是模板。新增 UI 逻辑优先向子组件、helper 或 adapter 外抽。
-12. 不要为了美化页面绕过当前数据流；需要新视图模型时，先配合 `shared-contracts-and-adapters` 处理映射。
+13. `UploadPage` 这类大文件是待拆债务，不是模板。新增 UI 逻辑优先向子组件、helper 或 adapter 外抽。
+14. 不要为了美化页面绕过当前数据流；需要新视图模型时，先配合 `shared-contracts-and-adapters` 处理映射。
 
 ## 何时联动其他 skills
 

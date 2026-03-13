@@ -1,0 +1,37 @@
+.heroGrid,
+.phaseGrid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.scoreWrap {
+  margin-top: 8px;
+}
+
+.phaseCard {
+  display: grid;
+  gap: var(--space-2);
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: rgba(20, 33, 61, 0.05);
+
+  p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+  }
+}
+
+.phaseHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.backLink {
+  display: inline-flex;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}

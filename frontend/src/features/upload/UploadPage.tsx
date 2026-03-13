@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { SegmentSelectionWindow, SwingSegmentCandidate } from '../../../../shared/contracts'
-import { formatFileSize } from '../../components/result-views/utils'
-import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { BottomCTA } from '../../components/ui/BottomCTA'
 import { Notice } from '../../components/ui/Notice'
+import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
+import { buildProcessingRoute, ROUTES } from '../../app/routes'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
+import pageStyles from '../../styles/PageLayout.module.scss'
+import styles from './UploadPage.module.scss'
+import { SegmentSelectionCard } from './SegmentSelectionCard'
 import {
   ACTION_SPECIAL_REMINDER_COPY,
   buildLocalVideoSummary,
@@ -14,326 +16,14 @@ import {
   UPLOAD_CONSTRAINTS,
 } from './uploadFlow'
 
-const SEGMENT_ADJUST_STEP_MS = 120
-const MIN_SELECTED_SEGMENT_WINDOW_MS = 420
-const MAX_SELECTED_SEGMENT_WINDOW_MS = 3200
-
 function formatDuration(seconds?: number) {
   if (seconds === undefined) return '读取中'
   return `${Math.round(seconds)} 秒`
 }
 
-function formatSegmentTimestamp(timeMs: number) {
-  return `${(timeMs / 1000).toFixed(2)}s`
-}
-
-function formatSegmentDuration(durationMs: number) {
-  return `${(durationMs / 1000).toFixed(2)}s`
-}
-
-function formatQualityFlag(flag: string) {
-  switch (flag) {
-    case 'motion_too_weak':
-      return '运动偏弱'
-    case 'too_short':
-      return '时长偏短'
-    case 'too_long':
-      return '时长偏长'
-    case 'edge_clipped_start':
-      return '起始可能截断'
-    case 'edge_clipped_end':
-      return '结尾可能截断'
-    case 'preparation_maybe_clipped':
-      return '准备段可能被截掉'
-    case 'follow_through_maybe_clipped':
-      return '随挥可能被截掉'
-    case 'subject_maybe_small':
-      return '主体可能偏小'
-    case 'motion_maybe_occluded':
-      return '疑似遮挡'
-    default:
-      return flag
-  }
-}
-
-function normalizeWindow(window: SegmentSelectionWindow, videoDurationMs: number) {
-  const requestedStart = Math.max(0, Math.min(window.startTimeMs, Math.max(0, videoDurationMs - 1)))
-  const requestedEnd = Math.max(requestedStart + 1, Math.min(window.endTimeMs, videoDurationMs))
-  let startTimeMs = requestedStart
-  let endTimeMs = requestedEnd
-
-  if ((endTimeMs - startTimeMs) < MIN_SELECTED_SEGMENT_WINDOW_MS) {
-    const needed = MIN_SELECTED_SEGMENT_WINDOW_MS - (endTimeMs - startTimeMs)
-    const expandBefore = Math.min(startTimeMs, Math.ceil(needed / 2))
-    startTimeMs -= expandBefore
-    endTimeMs = Math.min(videoDurationMs, endTimeMs + (needed - expandBefore))
-    if ((endTimeMs - startTimeMs) < MIN_SELECTED_SEGMENT_WINDOW_MS) {
-      startTimeMs = Math.max(0, endTimeMs - MIN_SELECTED_SEGMENT_WINDOW_MS)
-    }
-  }
-
-  if ((endTimeMs - startTimeMs) > MAX_SELECTED_SEGMENT_WINDOW_MS) {
-    endTimeMs = startTimeMs + MAX_SELECTED_SEGMENT_WINDOW_MS
-  }
-
-  return {
-    ...window,
-    startTimeMs,
-    endTimeMs,
-  } satisfies SegmentSelectionWindow
-}
-
-function SegmentPreviewVideo({
-  src,
-  startTimeMs,
-  endTimeMs,
-  posterLabel,
-  emphasized = false,
-}: {
-  src: string
-  startTimeMs: number
-  endTimeMs: number
-  posterLabel: string
-  emphasized?: boolean
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const startSeconds = Math.max(0, startTimeMs / 1000)
-  const endSeconds = Math.max(startSeconds + 0.12, endTimeMs / 1000)
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !src) return
-
-    let cancelled = false
-
-    const seekToSegmentStart = () => {
-      if (!video || cancelled) return
-      try {
-        video.currentTime = startSeconds
-      } catch {
-        // Ignore early seek failures until metadata is ready.
-      }
-    }
-
-    const keepLoopingInsideSegment = () => {
-      if (video.currentTime >= endSeconds) {
-        video.currentTime = startSeconds
-      }
-    }
-
-    const tryPlay = async () => {
-      try {
-        await video.play()
-      } catch {
-        // Mobile browsers may block autoplay; controls are intentionally hidden.
-      }
-    }
-
-    video.pause()
-    seekToSegmentStart()
-
-    video.addEventListener('loadedmetadata', seekToSegmentStart)
-    video.addEventListener('timeupdate', keepLoopingInsideSegment)
-    video.addEventListener('canplay', tryPlay)
-
-    return () => {
-      cancelled = true
-      video.removeEventListener('loadedmetadata', seekToSegmentStart)
-      video.removeEventListener('timeupdate', keepLoopingInsideSegment)
-      video.removeEventListener('canplay', tryPlay)
-      video.pause()
-    }
-  }, [endSeconds, src, startSeconds])
-
-  return (
-    <div className={`segment-preview ${emphasized ? 'emphasized' : ''}`}>
-      <video
-        ref={videoRef}
-        autoPlay
-        disablePictureInPicture
-        muted
-        playsInline
-        preload="metadata"
-        src={src}
-      />
-      <span className="segment-preview-label">{posterLabel}</span>
-    </div>
-  )
-}
-
-function SegmentSelectionCard({
-  segments,
-  recommendedSegmentId,
-  selectedSegmentId,
-  selectedWindow,
-  onSelect,
-  onAdjustWindow,
-  onResetWindow,
-  previewUrl,
-  videoDurationMs,
-}: {
-  segments: SwingSegmentCandidate[]
-  recommendedSegmentId?: string
-  selectedSegmentId: string
-  selectedWindow: SegmentSelectionWindow | null
-  onSelect: (segmentId: string) => void
-  onAdjustWindow: (nextWindow: SegmentSelectionWindow) => void
-  onResetWindow: () => void
-  previewUrl: string
-  videoDurationMs: number
-}) {
-  const activeSegment =
-    segments.find((segment) => segment.segmentId === selectedSegmentId) ??
-    segments.find((segment) => segment.segmentId === recommendedSegmentId) ??
-    segments[0]
-  const baseWindow = activeSegment ? {
-    startTimeMs: activeSegment.startTimeMs,
-    endTimeMs: activeSegment.endTimeMs,
-    startFrame: activeSegment.startFrame,
-    endFrame: activeSegment.endFrame,
-  } satisfies SegmentSelectionWindow : null
-  const effectiveWindow = activeSegment ? normalizeWindow(selectedWindow ?? baseWindow ?? {
-    startTimeMs: activeSegment.startTimeMs,
-    endTimeMs: activeSegment.endTimeMs,
-  }, videoDurationMs) : null
-  const isWindowAdjusted = Boolean(
-    baseWindow
-    && effectiveWindow
-    && (
-      baseWindow.startTimeMs !== effectiveWindow.startTimeMs
-      || baseWindow.endTimeMs !== effectiveWindow.endTimeMs
-    )
-  )
-
-  function handleAdjust(boundary: 'start' | 'end', deltaMs: number) {
-    if (!activeSegment || !effectiveWindow) return
-    const nextWindow = normalizeWindow({
-      ...effectiveWindow,
-      startFrame: activeSegment.startFrame,
-      endFrame: activeSegment.endFrame,
-      ...(boundary === 'start'
-        ? { startTimeMs: effectiveWindow.startTimeMs + deltaMs }
-        : { endTimeMs: effectiveWindow.endTimeMs + deltaMs }),
-    }, videoDurationMs)
-    onAdjustWindow(nextWindow)
-  }
-
-  return (
-    <section className="surface-card swing-segments-card">
-      <div className="section-head">
-        <div>
-          <h2>选择要分析的挥拍片段</h2>
-          <p className="muted-copy">系统已经先对整段视频做了粗扫。现在请从候选片段里选出这次真正要进入精分析的一段。</p>
-        </div>
-      </div>
-
-      <div className="segment-summary-strip">
-        <div className="segment-summary-item">
-          <span>候选片段</span>
-          <strong>{segments.length}</strong>
-        </div>
-        <div className="segment-summary-item">
-          <span>推荐片段</span>
-          <strong>{recommendedSegmentId ?? '—'}</strong>
-        </div>
-        <div className="segment-summary-item">
-          <span>当前选择</span>
-          <strong>{activeSegment?.segmentId ?? '—'}</strong>
-        </div>
-      </div>
-
-      <div className="segment-chip-row">
-        {segments.map((segment) => {
-          const isActive = segment.segmentId === activeSegment?.segmentId
-          const chipWindow = isActive && effectiveWindow ? effectiveWindow : {
-            startTimeMs: segment.startTimeMs,
-            endTimeMs: segment.endTimeMs,
-          }
-          return (
-            <button
-              key={segment.segmentId}
-              className={`segment-chip ${isActive ? 'active' : ''}`}
-              onClick={() => onSelect(segment.segmentId)}
-              type="button"
-            >
-              {previewUrl ? (
-                <SegmentPreviewVideo
-                  src={previewUrl}
-                  startTimeMs={chipWindow.startTimeMs}
-                  endTimeMs={chipWindow.endTimeMs}
-                  posterLabel={`${formatSegmentTimestamp(chipWindow.startTimeMs)} - ${formatSegmentTimestamp(chipWindow.endTimeMs)}`}
-                />
-              ) : null}
-              <strong>{segment.segmentId}</strong>
-              <span>{formatSegmentTimestamp(chipWindow.startTimeMs)} - {formatSegmentTimestamp(chipWindow.endTimeMs)}</span>
-              {segment.segmentId === recommendedSegmentId ? <em>推荐</em> : null}
-              {segment.segmentId === selectedSegmentId ? <em>已选中</em> : null}
-            </button>
-          )
-        })}
-      </div>
-
-      {activeSegment ? (
-        <div className="segment-detail-card">
-          {previewUrl && effectiveWindow ? (
-            <SegmentPreviewVideo
-              src={previewUrl}
-              startTimeMs={effectiveWindow.startTimeMs}
-              endTimeMs={effectiveWindow.endTimeMs}
-              posterLabel={`当前选中片段预览 · ${formatSegmentTimestamp(effectiveWindow.startTimeMs)} - ${formatSegmentTimestamp(effectiveWindow.endTimeMs)}`}
-              emphasized
-            />
-          ) : null}
-          <div className="segment-detail-head">
-            <div>
-              <strong>{activeSegment.segmentId}</strong>
-              {effectiveWindow ? (
-                <p>{formatSegmentTimestamp(effectiveWindow.startTimeMs)} - {formatSegmentTimestamp(effectiveWindow.endTimeMs)}，时长 {formatSegmentDuration(effectiveWindow.endTimeMs - effectiveWindow.startTimeMs)}</p>
-              ) : null}
-            </div>
-            <div className="segment-badge-row">
-              {activeSegment.segmentId === recommendedSegmentId ? <span className="status-pill brand">系统推荐</span> : null}
-              {activeSegment.segmentId === selectedSegmentId ? <span className="status-pill success">待进入精分析</span> : null}
-              {isWindowAdjusted ? <span className="status-pill neutral">已微调</span> : null}
-            </div>
-          </div>
-
-          <div className="score-grid three-up">
-            <div className="score-tile"><span>运动强度</span><strong>{activeSegment.motionScore.toFixed(2)}</strong></div>
-            <div className="score-tile"><span>推荐置信度</span><strong>{Math.round(activeSegment.confidence * 100)}%</strong></div>
-            <div className="score-tile"><span>排序分</span><strong>{activeSegment.rankingScore.toFixed(2)}</strong></div>
-          </div>
-
-          <div className="segment-quality-flags">
-            {activeSegment.coarseQualityFlags.length > 0 ? (
-              activeSegment.coarseQualityFlags.map((flag) => (
-                <span key={flag} className="segment-flag">{formatQualityFlag(flag)}</span>
-              ))
-            ) : (
-              <span className="segment-flag positive">当前没有明显粗粒度风险标记</span>
-            )}
-          </div>
-
-          {effectiveWindow && baseWindow ? (
-            <div className="info-list compact">
-              <div className="list-row">当前会送去精分析的时间窗：{formatSegmentTimestamp(effectiveWindow.startTimeMs)} - {formatSegmentTimestamp(effectiveWindow.endTimeMs)}</div>
-              <div className="list-row">如果系统切得偏紧，可以只在这里轻微往前或往后补一点。</div>
-            </div>
-          ) : null}
-
-          {effectiveWindow ? (
-            <div className="segment-adjust-grid">
-              <button type="button" className="secondary-btn" onClick={() => handleAdjust('start', -SEGMENT_ADJUST_STEP_MS)}>起点提前</button>
-              <button type="button" className="secondary-btn" onClick={() => handleAdjust('start', SEGMENT_ADJUST_STEP_MS)}>起点后移</button>
-              <button type="button" className="secondary-btn" onClick={() => handleAdjust('end', -SEGMENT_ADJUST_STEP_MS)}>终点前移</button>
-              <button type="button" className="secondary-btn" onClick={() => handleAdjust('end', SEGMENT_ADJUST_STEP_MS)}>终点延后</button>
-              <button type="button" className="secondary-btn" onClick={onResetWindow}>恢复系统切段</button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  )
+function formatFileSize(size?: number) {
+  if (!size) return '—'
+  return `${(size / 1024 / 1024).toFixed(2)} MB`
 }
 
 export function UploadPage() {
@@ -341,7 +31,6 @@ export function UploadPage() {
   const {
     actionType,
     taskId,
-    latestCompletedTaskId,
     file,
     setFile,
     selectedVideoSummary,
@@ -354,8 +43,6 @@ export function UploadPage() {
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
     isBusy,
-    status,
-    report,
     errorState,
     clearErrorState,
     prepareFreshUpload,
@@ -384,13 +71,8 @@ export function UploadPage() {
   const scanDisabled = isBusy || blockingReasons.length > 0
   const hasSegmentChoices = Boolean(segmentScan?.swingSegments?.length)
   const startAnalysisDisabled = isBusy || !hasSegmentChoices || !selectedSegmentId
-
-  useEffect(() => {
-    const isCompletedCarryover = Boolean(taskId) && taskId === latestCompletedTaskId
-    if (!errorState && (status === 'completed' || report || isCompletedCarryover)) {
-      prepareFreshUpload()
-    }
-  }, [errorState, latestCompletedTaskId, prepareFreshUpload, report, status, taskId])
+  const previousAttemptSummary = !file && errorState && selectedVideoSummary ? selectedVideoSummary : null
+  const actionReminder = ACTION_SPECIAL_REMINDER_COPY[actionType]
 
   useEffect(() => {
     if (!previewUrl || !file) return
@@ -429,7 +111,7 @@ export function UploadPage() {
     }
 
     if (result.reason === 'server') {
-      navigate('/error')
+      navigate(ROUTES.error)
       return
     }
 
@@ -446,84 +128,60 @@ export function UploadPage() {
 
     const result = await startSelectedSegmentFlow()
     if (result.ok) {
-      navigate('/processing')
+      navigate(buildProcessingRoute(taskId))
       return
     }
 
     if (result.reason === 'server') {
-      navigate('/error')
+      navigate(ROUTES.error)
       return
     }
 
     setSubmissionError(result.message ?? '启动分析失败，请稍后再试。')
   }
 
-  const previousAttemptSummary = !file && errorState && selectedVideoSummary ? selectedVideoSummary : null
-  const actionReminder = ACTION_SPECIAL_REMINDER_COPY[actionType]
-
   return (
-    <div className="page-stack">
+    <div className={pageStyles.pageStack}>
+      <section className={pageStyles.heroCard}>
+        <span className={pageStyles.badge}>分析入口</span>
+        <h1>先上传完整视频，再确认真正要分析的挥拍片段</h1>
+        <p>
+          第一步先上传整段视频并做候选片段粗扫；第二步再由你确认要精分析的那一拍。
+          这样系统和你都能明确“这份报告到底分析了哪一段”。
+        </p>
+      </section>
+
       {errorState ? (
-        <Notice tone="warning" title={`上次失败原因: ${errorState.title}`}>
+        <Notice tone="warning" title={`上次失败原因：${errorState.title}`}>
           {errorState.uploadBanner}
         </Notice>
       ) : null}
 
-      <section className="surface-card">
-        <div className="section-head">
+      <section className={pageStyles.card}>
+        <div className={pageStyles.sectionHeader}>
           <h2>当前分析动作</h2>
+          <p className={pageStyles.muted}>当前上传、分析和报告都会按 {selectedActionLabel} 的正式口径执行。</p>
         </div>
         <ActionTypeSelector disabled={isBusy} />
-        <p className="muted-copy">当前上传、分析和报告都会按 {selectedActionLabel} 的正式口径执行。</p>
       </section>
 
-      {hasSegmentChoices ? (
-        <section ref={segmentSelectionRef}>
-          <Notice tone="info" title="粗扫完成">
-            系统已经从整段视频里筛出 {segmentScan?.swingSegments.length ?? 0} 个疑似挥拍片段。请先确认要分析的片段，再启动最终分析。
-          </Notice>
-          <SegmentSelectionCard
-            segments={segmentScan?.swingSegments ?? []}
-            recommendedSegmentId={segmentScan?.recommendedSegmentId}
-            selectedSegmentId={selectedSegmentId}
-            selectedWindow={selectedSegmentWindow}
-            onSelect={setSelectedSegmentId}
-            onAdjustWindow={setSelectedSegmentWindow}
-            onResetWindow={() => {
-              const activeSegment = (segmentScan?.swingSegments ?? []).find((segment) => segment.segmentId === selectedSegmentId)
-              if (!activeSegment) return
-              setSelectedSegmentWindow({
-                startTimeMs: activeSegment.startTimeMs,
-                endTimeMs: activeSegment.endTimeMs,
-                startFrame: activeSegment.startFrame,
-                endFrame: activeSegment.endFrame,
-              })
-            }}
-            previewUrl={previewUrl}
-            videoDurationMs={videoDurationMs}
-          />
-        </section>
-      ) : null}
+      <section className={pageStyles.card}>
+        <span className={pageStyles.eyebrow}>Step 1</span>
+        <div className={pageStyles.sectionHeader}>
+          <h2>先确认输入条件</h2>
+          <p className={pageStyles.muted}>先把动作、时长、机位和文件状态确认好，再让系统去粗扫候选片段。</p>
+        </div>
 
-      <section className="surface-card">
-        <div className="section-head">
-          <h2>上传约束提示</h2>
+        <div className={pageStyles.infoList}>
+          <div className={pageStyles.listRow}>当前正式支持：正手高远球、杀球；一段视频只分析一种动作</div>
+          <div className={pageStyles.listRow}>时长：{UPLOAD_CONSTRAINTS.minDurationSeconds}~{UPLOAD_CONSTRAINTS.maxDurationSeconds} 秒</div>
+          <div className={pageStyles.listRow}>机位：优先 {UPLOAD_CONSTRAINTS.recommendedAngles.join(' 或 ')}</div>
+          <div className={pageStyles.listRow}>画面：单人出镜、全身尽量完整入镜、避免逆光和遮挡</div>
+          <div className={pageStyles.listRow}>文件：{UPLOAD_CONSTRAINTS.supportedExtensions.join(' / ')}，建议小于 {Math.round(UPLOAD_CONSTRAINTS.defaultMaxFileSizeBytes / 1024 / 1024)}MB</div>
+          <div className={pageStyles.listRow}>{actionReminder.title}专项：{actionReminder.description}</div>
         </div>
-        <div className="info-list compact">
-          <div className="list-row">当前正式支持：正手高远球、杀球；一段视频只分析一种动作</div>
-          <div className="list-row">时长：{UPLOAD_CONSTRAINTS.minDurationSeconds}~{UPLOAD_CONSTRAINTS.maxDurationSeconds} 秒</div>
-          <div className="list-row">机位：优先 {UPLOAD_CONSTRAINTS.recommendedAngles.join(' 或 ')}</div>
-          <div className="list-row">画面：单人出镜、全身尽量完整入镜、避免逆光和遮挡</div>
-          <div className="list-row">文件：{UPLOAD_CONSTRAINTS.supportedExtensions.join(' / ')}，建议小于 {Math.round(UPLOAD_CONSTRAINTS.defaultMaxFileSizeBytes / 1024 / 1024)}MB</div>
-          <div className="list-row">{actionReminder.title}专项：{actionReminder.description}</div>
-        </div>
-      </section>
 
-      <section className="surface-card">
-        <div className="section-head">
-          <h2>上传视频</h2>
-        </div>
-        <label className="upload-field">
+        <label className={styles.uploadField}>
           <input
             type="file"
             accept="video/*,.mp4,.mov,.m4v,.webm"
@@ -538,46 +196,41 @@ export function UploadPage() {
             }}
             disabled={isBusy}
           />
-          <span className="upload-title">{file ? file.name : '点击选择视频文件'}</span>
-          <span className="upload-subtitle">建议先用真实训练视频验证主链路，确保准备、击球和收拍都完整拍到。</span>
+          <span className={styles.uploadTitle}>{file ? file.name : '点击选择视频文件'}</span>
+          <span className={styles.uploadSubtitle}>建议先用真实训练视频验证主链路，确保准备、击球和收拍都完整拍到。</span>
         </label>
 
         {previewUrl ? (
-          <div className="video-preview-card">
+          <div className={styles.videoPreviewCard}>
             <video controls playsInline src={previewUrl} />
           </div>
         ) : null}
 
         {currentVideoSummary ? (
-          <div className="info-list compact">
-            <div className="list-row">文件名：{currentVideoSummary.fileName}</div>
-            <div className="list-row">大小：{formatFileSize(currentVideoSummary.fileSizeBytes)}</div>
-            <div className="list-row">时长：{formatDuration(currentVideoSummary.durationSeconds)}</div>
-            <div className="list-row">格式：{currentVideoSummary.mimeType || currentVideoSummary.extension || '未知格式'}</div>
+          <div className={pageStyles.infoList}>
+            <div className={pageStyles.listRow}>文件名：{currentVideoSummary.fileName}</div>
+            <div className={pageStyles.listRow}>大小：{formatFileSize(currentVideoSummary.fileSizeBytes)}</div>
+            <div className={pageStyles.listRow}>时长：{formatDuration(currentVideoSummary.durationSeconds)}</div>
+            <div className={pageStyles.listRow}>格式：{currentVideoSummary.mimeType || currentVideoSummary.extension || '未知格式'}</div>
           </div>
         ) : null}
 
         {previousAttemptSummary ? (
-          <div className="surface-card inset upload-summary-inset">
-            <span className="badge neutral">上次尝试的视频</span>
-            <div className="info-list compact">
-              <div className="list-row">文件名：{previousAttemptSummary.fileName}</div>
-              <div className="list-row">大小：{formatFileSize(previousAttemptSummary.fileSizeBytes)}</div>
-              <div className="list-row">时长：{formatDuration(previousAttemptSummary.durationSeconds)}</div>
-              <div className="list-row">说明：这只是上次失败时保留的摘要，重新提交前仍需重新选择文件。</div>
+          <div className={styles.previousSummary}>
+            <span className={pageStyles.badge}>上次尝试的视频</span>
+            <div className={pageStyles.infoList}>
+              <div className={pageStyles.listRow}>文件名：{previousAttemptSummary.fileName}</div>
+              <div className={pageStyles.listRow}>大小：{formatFileSize(previousAttemptSummary.fileSizeBytes)}</div>
+              <div className={pageStyles.listRow}>时长：{formatDuration(previousAttemptSummary.durationSeconds)}</div>
+              <div className={pageStyles.listRow}>说明：这只是上次失败时保留的摘要，重新提交前仍需重新选择文件。</div>
             </div>
           </div>
         ) : null}
-      </section>
 
-      <section className="surface-card">
-        <div className="section-head">
-          <h2>当前就绪检查</h2>
-        </div>
-        <div className="checklist-stack">
+        <div className={styles.checklistStack}>
           {readinessItems.map((item) => (
-            <div key={item.id} className={`checklist-row ${item.status}`}>
-              <span className={`checklist-badge ${item.status}`}>
+            <div key={item.id} className={styles.checklistRow}>
+              <span className={styles.checklistBadge}>
                 {item.status === 'pass' ? '通过' : item.status === 'fail' ? '未通过' : '待确认'}
               </span>
               <div>
@@ -587,20 +240,14 @@ export function UploadPage() {
             </div>
           ))}
         </div>
-      </section>
 
-      <section className="surface-card">
-        <div className="section-head">
-          <h2>上传前确认</h2>
+        <div className={pageStyles.infoList}>
+          <div className={pageStyles.listRow}>第 1 步会先上传完整视频，并只做粗粒度挥拍片段扫描。</div>
+          <div className={pageStyles.listRow}>第 2 步由你从候选片段里确认真正要分析的那一段，再进入最终结果分析。</div>
+          <div className={pageStyles.listRow}>如果服务端判断视频不适合分析，会返回明确失败原因、重拍建议和重新上传入口。</div>
         </div>
-          <div className="info-list compact">
-            <div className="list-row">动作：{selectedActionLabel}</div>
-            <div className="list-row">第 1 步会先上传完整视频，并只做粗粒度挥拍片段扫描</div>
-            <div className="list-row">第 2 步由你从候选片段里确认真正要分析的那一段，再进入最终结果分析</div>
-            <div className="list-row">如果服务端判断视频不适合分析，会返回明确失败原因、重拍建议和重新上传入口</div>
-          </div>
 
-        <label className="confirm-check">
+        <label className={styles.confirmCheck}>
           <input
             checked={uploadChecklistConfirmed}
             onChange={(event) => {
@@ -611,16 +258,47 @@ export function UploadPage() {
           />
           <span>我已确认这段视频只包含当前动作，主体清晰、完整，且基本符合拍摄要求。</span>
         </label>
+
+        {blockingReasons.length > 0 ? (
+          <Notice tone="warning" title="当前还不能提交">
+            <ul className={styles.inlineErrorList}>
+              {blockingReasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </Notice>
+        ) : null}
       </section>
 
-      {blockingReasons.length > 0 ? (
-        <Notice tone="warning" title="当前还不能提交">
-          <ul className="inline-error-list">
-            {blockingReasons.map((reason) => (
-              <li key={reason}>{reason}</li>
-            ))}
-          </ul>
-        </Notice>
+      {hasSegmentChoices ? (
+        <section ref={segmentSelectionRef}>
+          <Notice tone="info" title="Step 2：确认真正要进入精分析的片段">
+            系统已经从整段视频里筛出 {segmentScan?.swingSegments.length ?? 0} 个疑似挥拍片段。
+            请先确认要分析的片段，再启动最终分析。
+          </Notice>
+
+          <SegmentSelectionCard
+            segments={segmentScan?.swingSegments ?? []}
+            recommendedSegmentId={segmentScan?.recommendedSegmentId}
+            selectedSegmentId={selectedSegmentId}
+            selectedWindow={selectedSegmentWindow}
+            onSelect={setSelectedSegmentId}
+            onAdjustWindow={setSelectedSegmentWindow}
+            onResetWindow={() => {
+              const activeSegment = (segmentScan?.swingSegments ?? []).find((segment) => segment.segmentId === selectedSegmentId)
+              if (!activeSegment) return
+
+              setSelectedSegmentWindow({
+                startTimeMs: activeSegment.startTimeMs,
+                endTimeMs: activeSegment.endTimeMs,
+                startFrame: activeSegment.startFrame,
+                endFrame: activeSegment.endFrame,
+              })
+            }}
+            previewUrl={previewUrl}
+            videoDurationMs={videoDurationMs}
+          />
+        </section>
       ) : null}
 
       {submissionError ? (
@@ -639,7 +317,7 @@ export function UploadPage() {
         }}
         secondary={hasSegmentChoices
           ? { label: '重新选择视频', onClick: prepareFreshUpload, tone: 'secondary' }
-          : { label: '查看拍摄规范', to: '/guide', tone: 'secondary' }}
+          : { label: '查看拍摄规范', to: ROUTES.guide, tone: 'secondary' }}
       />
     </div>
   )

@@ -26,14 +26,14 @@ description: Use when code changes risk drifting away from docs/, spec/, README,
 
 当前已知需要警惕的偏差包括：
 
-- spec 里的部分路由是目标态，不完全等于当前前端路由
 - 交互文档仍有旧的“一键开始分析”表述，未完整反映候选片段选择流
+- 技术栈事实一旦稳定，例如 `*.module.scss`、选择性 `antd-mobile`、`taskId` 语义化路由、route-level code splitting，就不能只停留在代码里，必须写回 spec/README/skill
 
 ## 工作顺序/决策顺序
 
 1. 先找本次变化对应的真源文档层级，再决定要改 README、docs 还是 spec。
 2. 先确认当前实现真相，再回头校正文档；不要拿旧文档当实现依据继续扩大偏差。
-3. 如果某段内容更像执行模式而非产品或工程真源，优先把它沉淀到 skill，而不是继续塞进 docs/spec。
+3. 如果某段内容更像执行模式而非产品或工程真源，优先把它沉淀到 skill；如果它已经是稳定技术栈约束，再同步写回 spec/README。
 4. 只更新真正失真的文档，不做无意义的大范围重写。
 5. 最终说明里明确哪些文档已同步、哪些仍是目标态、哪些故意没改。
 
@@ -48,8 +48,9 @@ description: Use when code changes risk drifting away from docs/, spec/, README,
    - 当前算法实现：`docs/algorithm-baseline.md`
 3. 不要把 target-state 文档误当 current-state；若保留目标态，必须标明。
 4. 不允许代码已变、文档仍保留明显失真的旧流程或旧字段。
-5. 如果一份内容更像执行方法，应考虑沉淀到 skill，而不是继续塞进 spec/docs。
-6. 若发现重复文档，优先给出合并或降级建议，不要继续复制维护。
+5. 若本次变更确定了稳定技术栈真相，例如样式方案、组件库边界、路由模型、验证命令，应同步检查 `README.md`、子系统 README、相关 spec 和对应 skill。
+6. 如果一份内容更像执行方法，应考虑沉淀到 skill，而不是继续塞进 spec/docs。
+7. 若发现重复文档，优先给出合并或降级建议，不要继续复制维护。
 
 ## 何时联动其他 skills
 

@@ -3,13 +3,15 @@ import { buildSessionSnapshot } from './support/data'
 import { gotoWithSession } from './support/helpers'
 import { mockApi } from './support/mockApi'
 
+const uploadPath = '/analyses/new'
+
 test('错误页无上下文时展示空状态', async ({ page }) => {
   await mockApi(page)
 
   await gotoWithSession(page, '/error', buildSessionSnapshot())
 
   await expect(page.getByText('无错误上下文')).toBeVisible()
-  await expect(page.getByRole('link', { name: '去上传' })).toHaveAttribute('href', '/upload')
+  await expect(page.getByRole('link', { name: '去上传' })).toHaveAttribute('href', uploadPath)
   await expect(page.getByRole('link', { name: '返回首页' })).toHaveAttribute('href', '/')
 })
 
@@ -41,5 +43,5 @@ test('错误页带恢复建议时展示主次 CTA', async ({ page }) => {
   await expect(page.getByText('发生了什么')).toBeVisible()
   await expect(page.getByText('这次建议这样处理')).toBeVisible()
   await expect(page.getByRole('link', { name: '查看拍摄指引' })).toHaveAttribute('href', '/guide')
-  await expect(page.getByRole('link', { name: '重新上传' })).toHaveAttribute('href', '/upload')
+  await expect(page.getByRole('link', { name: '重新上传' })).toHaveAttribute('href', uploadPath)
 })

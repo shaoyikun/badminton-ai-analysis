@@ -1,0 +1,61 @@
+.progress {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: var(--space-3);
+}
+
+.rail {
+  display: grid;
+  justify-items: center;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.line {
+  width: 2px;
+  flex: 1 1 auto;
+  min-height: 44px;
+  margin-top: 4px;
+  background: rgba(20, 33, 61, 0.08);
+}
+
+.lineDone {
+  background: linear-gradient(180deg, var(--color-brand-primary), rgba(47, 107, 255, 0.24));
+}
+
+.copy {
+  strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 15px;
+  }
+
+  p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+}
+
+.active .dot {
+  border-color: var(--color-brand-primary);
+  background: var(--color-brand-primary);
+  box-shadow: 0 0 0 6px rgba(47, 107, 255, 0.12);
+}
+
+.done .dot {
+  border-color: var(--color-success);
+  background: var(--color-success);
+}

@@ -1,0 +1,26 @@
+.selectorShell {
+  :global(.adm-selector) {
+    --border-radius: 999px;
+    --color: transparent;
+    --checked-color: transparent;
+  }
+
+  :global(.adm-selector-item) {
+    min-height: 44px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border-default);
+    background: rgba(255, 255, 255, 0.8);
+    color: var(--color-text-secondary);
+    font-weight: 700;
+  }
+
+  :global(.adm-selector-item.adm-selector-item-active) {
+    border-color: rgba(47, 107, 255, 0.2);
+    background: linear-gradient(135deg, rgba(47, 107, 255, 0.14) 0%, rgba(91, 182, 255, 0.12) 100%);
+    color: var(--color-brand-primary);
+  }
+}
+
+.selector {
+  width: 100%;
+}

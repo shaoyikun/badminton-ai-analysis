@@ -12,6 +12,7 @@ import type {
 import { findLatestCompletedTask, getReportRow, getTask, listCompletedHistory } from './taskRepository';
 import { toTaskResource } from '../types/task';
 import { readPoseResult } from './poseService';
+import { readStoredReport } from './reportStore';
 
 const PHASE_STATUS_WEIGHTS = {
   ok: 0,
@@ -181,11 +182,6 @@ function buildRetestComparison(actionType: ActionType, previous: ReportResult, c
   };
 }
 
-function readReport(taskId: string) {
-  const row = getReportRow(taskId);
-  return row ? JSON.parse(row.report_json) as ReportResult : undefined;
-}
-
 export function listTaskHistory(query: HistoryListQuery): HistoryListResponse {
   const items = listCompletedHistory(query);
   const nextCursor = items.length > 0 ? items[items.length - 1]?.completedAt : undefined;
@@ -194,7 +190,7 @@ export function listTaskHistory(query: HistoryListQuery): HistoryListResponse {
 
 export function getHistoryDetail(taskId: string): HistoryDetailResponse | undefined {
   const task = getTask(taskId);
-  const report = readReport(taskId);
+  const report = readStoredReport(taskId);
   if (!task || !report || task.status !== 'completed') return undefined;
   return {
     task: toTaskResource(task),
@@ -204,7 +200,7 @@ export function getHistoryDetail(taskId: string): HistoryDetailResponse | undefi
 
 export function getRetestComparison(taskId: string, baselineTaskId?: string): ComparisonResponse | undefined | null {
   const currentTask = getTask(taskId);
-  const currentReport = readReport(taskId);
+  const currentReport = readStoredReport(taskId);
   if (!currentTask || !currentReport || currentTask.status !== 'completed') return undefined;
 
   const baseline = baselineTaskId
@@ -216,7 +212,7 @@ export function getRetestComparison(taskId: string, baselineTaskId?: string): Co
   if (!baseline || baseline.status !== 'completed') return undefined;
   if (baseline.actionType !== currentTask.actionType) return null;
 
-  const baselineReport = readReport(baseline.taskId);
+  const baselineReport = readStoredReport(baseline.taskId);
   if (!baselineReport) return undefined;
   const baselineModelVersion = baselineReport.scoringEvidence?.scoringModelVersion;
   const currentModelVersion = currentReport.scoringEvidence?.scoringModelVersion;

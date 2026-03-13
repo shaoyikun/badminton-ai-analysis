@@ -41,6 +41,8 @@ description: Use when the task is about maintaining this repository as a Codex-f
 4. 现有大文件或大脚本不是模板；如果必须继续改它们，优先把新增职责外抽成小函数、小脚本或更清楚的章节。
 5. 不要让 `AGENTS.md`、`README.md`、`DELIVERY-BASELINE` 互相复制整段规则；每份文件都应保留清晰职责边界。
 6. 命令、环境变量或交付语义变化时，必须检查相关说明是否同步，而不是只改一个入口。
+7. 仓库已经选定的技术栈约束，例如 `sass`、`*.module.scss`、选择性 `antd-mobile`、语义化 `taskId` 路由，不要只留在实现里；要同步到 README、前端 README、spec 和必要的 repo-local skills。
+8. 新增依赖或脚手架能力时，优先补充现有说明与 skill，而不是默认让后来的人从 lockfile 猜技术决策。
 
 ## 何时联动其他 skills
 

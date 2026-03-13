@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import styles from './EmptyState.module.scss'
 
 export function EmptyState({
   badge,
@@ -14,17 +15,17 @@ export function EmptyState({
   secondary?: { label: string; to: string }
 }) {
   return (
-    <section className="surface-card empty-card">
-      <div className="empty-state-illustration" aria-hidden="true">
-        <span className="empty-state-orbit" />
-        <span className="empty-state-racket" />
+    <section className={styles.card}>
+      <div className={styles.illustration} aria-hidden="true">
+        <span className={styles.orbit} />
+        <span className={styles.racket} />
       </div>
-      {badge ? <span className="badge neutral">{badge}</span> : null}
+      {badge ? <span className={styles.badge}>{badge}</span> : null}
       <h2>{title}</h2>
       <p>{description}</p>
-      <div className="action-stack">
-        <Link className="primary-action" to={primary.to}>{primary.label}</Link>
-        {secondary ? <Link className="secondary-action" to={secondary.to}>{secondary.label}</Link> : null}
+      <div className={styles.actions}>
+        <Link className={styles.primary} to={primary.to}>{primary.label}</Link>
+        {secondary ? <Link className={styles.secondary} to={secondary.to}>{secondary.label}</Link> : null}
       </div>
     </section>
   )

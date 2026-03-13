@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import type { PoseResult, TaskHistoryItem, RetestComparison, ReportResult } from '../../hooks/useAnalysisTask'
+import { ROUTES } from '../../app/routes'
 import { ScoreBadge } from '../ui/ScoreBadge'
 import {
   getActionTypeLabel,
@@ -654,7 +655,7 @@ export function ComparisonHighlightCard({
       </div>
 
       <div className="action-stack">
-        <Link className="secondary-action" to="/compare">查看完整复测对比</Link>
+        <Link className="secondary-action" to={ROUTES.history}>去历史里查看复测对比</Link>
       </div>
     </section>
   )
@@ -800,8 +801,8 @@ export function ReportHistoryBridgeCard({
       </div>
 
       <div className="action-stack">
-        <Link className="primary-action" to="/history">查看历史并切换基线</Link>
-        {comparison ? <Link className="secondary-action" to="/compare">查看完整复测对比</Link> : null}
+        <Link className="primary-action" to={ROUTES.history}>查看历史并切换基线</Link>
+        {comparison ? <Link className="secondary-action" to={ROUTES.history}>去历史里查看复测对比</Link> : null}
       </div>
     </section>
   )

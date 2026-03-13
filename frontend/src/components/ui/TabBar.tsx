@@ -1,24 +1,26 @@
 import { NavLink } from 'react-router-dom'
+import { cn } from '../../lib/cn'
+import styles from './TabBar.module.scss'
 
 type TabItem = {
-  to: string
+  to?: string
   label: string
   disabled?: boolean
 }
 
 export function TabBar({ items }: { items: TabItem[] }) {
   return (
-    <nav className="tab-bar">
+    <nav aria-label="主导航" className={styles.tabBar}>
       {items.map((item) => (
-        item.disabled ? (
-          <span key={item.to} className="tab-bar-link disabled">
+        item.disabled || !item.to ? (
+          <span key={item.label} className={cn(styles.link, styles.disabled)} aria-disabled="true">
             {item.label}
           </span>
         ) : (
           <NavLink
             key={item.to}
             to={item.to}
-            className={({ isActive }) => `tab-bar-link ${isActive ? 'active' : ''}`}
+            className={({ isActive }) => cn(styles.link, isActive && styles.active)}
           >
             {item.label}
           </NavLink>

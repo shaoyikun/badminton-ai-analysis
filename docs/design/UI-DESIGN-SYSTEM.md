@@ -131,7 +131,7 @@
 
 ## 6. 前端映射
 
-前端样式 token 通过 CSS 变量落在 `frontend/src/App.css`：
+前端样式 token 通过 CSS 变量落在 `frontend/src/styles/tokens.scss` 与 `frontend/src/styles/globals.scss`，页面与组件默认使用 `*.module.scss`：
 
 - `--color-brand-primary`
 - `--color-brand-primary-pressed`
@@ -146,6 +146,12 @@
 - `frontend/src/components/ui/Notice.tsx`
 - `frontend/src/components/ui/ScoreBadge.tsx`
 - `frontend/src/components/ui/StepProgress.tsx`
+
+组件库边界：
+
+- 允许选择性使用 `antd-mobile`
+- 当前主要用于移动端交互原件，例如 `Selector`、`Popup`
+- 不允许用组件库默认主题接管品牌色、Hero 结论卡、报告区块和训练建议卡
 
 设计系统预览页位于：
 

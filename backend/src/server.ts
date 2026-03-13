@@ -8,7 +8,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import type { CreateTaskRequest, HistoryListQuery, ReportResult, StartTaskRequest } from './types/task';
-import { getTask, getReportRow } from './services/taskRepository';
+import { getTask } from './services/taskRepository';
 import { getMaxFileSizeBytes } from './services/preprocessService';
 import {
   assertActionType,
@@ -26,7 +26,7 @@ import {
 import { buildErrorSnapshot, getErrorStatusCode, isErrorSnapshot } from './services/errorCatalog';
 import { getArtifactsDir } from './services/database';
 import { toTaskResource } from './types/task';
-
+import { readStoredReport } from './services/reportStore';
 function sendError(reply: { status: (code: number) => { send: (payload: unknown) => unknown } }, code: Parameters<typeof buildErrorSnapshot>[0], message?: string) {
   const error = buildErrorSnapshot(code, message);
   return reply.status(getErrorStatusCode(code)).send({ error });
@@ -47,11 +47,6 @@ function sendThrownError(
     fallbackCode,
     error instanceof Error ? error.message : fallbackMessage,
   );
-}
-
-function readReport(taskId: string) {
-  const row = getReportRow(taskId);
-  return row ? JSON.parse(row.report_json) as ReportResult : undefined;
 }
 
 export async function buildServer() {
@@ -193,7 +188,7 @@ export async function buildServer() {
     if (!task) {
       return sendError(reply, 'task_not_found');
     }
-    const report = readReport(params.taskId);
+    const report = readStoredReport(params.taskId);
     if (!report) {
       return sendError(reply, 'result_not_ready');
     }

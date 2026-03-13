@@ -54,6 +54,7 @@ description: Use when writing or updating mobile-first Playwright coverage for t
    - 用户确认候选片段
    - 处理中步骤反馈
    - 报告页/历史/对比页渲染
+   - `taskId` 深链进入 `/analyses/:taskId/processing`、`/analyses/:taskId/report`、`/analyses/:taskId/comparison`
 5. 当共享契约变化时，要同步更新：
    - `frontend/e2e/support/mockApi.ts`
    - fixtures

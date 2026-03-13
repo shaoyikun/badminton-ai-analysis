@@ -22,7 +22,7 @@
 # Key implementation notes
 
 - 不要用单个 `isScanning`、`isReady`、`hasSegments` 三四个 boolean 拼状态
-- `selectedSegmentId` 为空时，CTA 不应该直接进入 `/processing`
+- `selectedSegmentId` 为空时，CTA 不应该直接进入 `/analyses/:taskId/processing`
 - mock 场景也要返回真实 `SegmentScanSummary`
 - 如果后端没有候选片段，也要明确 fallback 行为，而不是让页面 silent fail
 

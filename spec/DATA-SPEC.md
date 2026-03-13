@@ -117,6 +117,7 @@
 
 说明：
 - MVP 目标协议以 `status + stage + error snapshot` 表达任务状态；`preprocessStatus`、`poseStatus` 仍可在内部或调试接口保留，但不再作为前端主状态机
+- `uploaded + stage=uploaded + segmentScan` 是显式“等待确认片段”状态，前端上传页要在这一态展示候选片段选择，不进入处理中页
 - 错误信息不再使用零散字段自由组合，统一走稳定 `errorCode`
 - 常见失败态错误码包括 `upload_failed`、`invalid_duration`、`multi_person_detected`、`body_not_detected`、`poor_lighting_or_occlusion`、`insufficient_pose_coverage`、`preprocess_failed`、`pose_failed`
 - `invalid_camera_angle` 与边界型 `insufficient_pose_coverage` 在当前基线下优先下沉到 `completed + low_confidence`，不再默认进入失败态

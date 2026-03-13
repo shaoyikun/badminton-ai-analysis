@@ -1,7 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type {
   FlowErrorCode,
   PreprocessArtifacts,
@@ -15,12 +13,12 @@ import type {
 import { uploadConstraints } from './uploadFlowConfig';
 import { getPreprocessDir } from './artifactStore';
 import { detectSwingSegmentsForVideo, type SwingSegmentDetectionResult } from './analysisService';
+import { runCommand, runJsonCommand } from './commandRunner';
 
 const DEFAULT_FRAME_RATE = 25;
 const FULL_VIDEO_FALLBACK_SEGMENT_VERSION = 'coarse_motion_scan_v2';
 const MIN_SELECTED_SEGMENT_WINDOW_MS = 420;
 const MAX_SELECTED_SEGMENT_WINDOW_MS = 3200;
-const execFileAsync = promisify(execFile);
 type SwingSegmentDetector = (sourcePath: string) => Promise<SwingSegmentDetectionResult>;
 let swingSegmentDetector: SwingSegmentDetector = detectSwingSegmentsForVideo;
 
@@ -243,30 +241,11 @@ function getTargetFrameCount(durationSeconds: number) {
   return Math.min(12, Math.max(6, Math.round(durationSeconds / 0.18)));
 }
 
-async function runCommand(command: string, args: string[]) {
-  const { stdout } = await execFileAsync(command, args, {
-    encoding: 'utf8',
-  });
-  return stdout.trim();
-}
-
 export async function probeVideo(sourcePath: string, metadata: Pick<VideoMetadata, 'fileName' | 'mimeType'>): Promise<VideoMetadata> {
   const stat = fs.statSync(sourcePath);
   const extension = path.extname(metadata.fileName).toLowerCase();
 
-  const probeOutput = await runCommand('ffprobe', [
-    '-v',
-    'error',
-    '-select_streams',
-    'v:0',
-    '-show_entries',
-    'stream=width,height,r_frame_rate,avg_frame_rate,duration,nb_frames:format=duration',
-    '-of',
-    'json',
-    sourcePath,
-  ]);
-
-  const parsed = JSON.parse(probeOutput) as {
+  const parsed = await runJsonCommand<{
     streams?: Array<{
       width?: number;
       height?: number;
@@ -278,7 +257,20 @@ export async function probeVideo(sourcePath: string, metadata: Pick<VideoMetadat
     format?: {
       duration?: string;
     };
-  };
+  }>('ffprobe', [
+    '-v',
+    'error',
+    '-select_streams',
+    'v:0',
+    '-show_entries',
+    'stream=width,height,r_frame_rate,avg_frame_rate,duration,nb_frames:format=duration',
+    '-of',
+    'json',
+    sourcePath,
+  ], {
+    stage: 'ffprobe metadata extraction',
+    timeoutMs: 20_000,
+  });
 
   const stream = parsed.streams?.[0] ?? {};
   const durationSeconds = Number.parseFloat(stream.duration ?? parsed.format?.duration ?? '0');
@@ -383,7 +375,10 @@ export async function extractFrames(
       '-q:v',
       '2',
       fullPath,
-    ]);
+    ], {
+      stage: 'ffmpeg frame extraction',
+      timeoutMs: 30_000,
+    });
 
     sampledFrames.push({
       index: index + 1,

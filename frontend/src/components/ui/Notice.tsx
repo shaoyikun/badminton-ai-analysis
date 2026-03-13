@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { cn } from '../../lib/cn'
+import styles from './Notice.module.scss'
 
 export function Notice({
   tone = 'info',
@@ -12,9 +14,9 @@ export function Notice({
   compact?: boolean
 }) {
   return (
-    <div className={`notice-card ${tone} ${compact ? 'compact' : ''}`}>
+    <div className={cn(styles.card, styles[tone], compact && styles.compact)}>
       {title ? <strong>{title}</strong> : null}
-      <div className="notice-copy">{children}</div>
+      <div className={styles.copy}>{children}</div>
     </div>
   )
 }

@@ -73,8 +73,8 @@ Mobile H5 Frontend
 | 路由 | 页面 | 目标 | 主要数据 |
 | --- | --- | --- | --- |
 | `/` | 首页 | 建立认知，进入主流程，给出历史入口 | 历史概览可选 |
-| `/capture-guide` | 拍摄规范页 | 降低无效上传 | 静态内容 |
-| `/analyses/new` | 上传页 | 选择动作、选择视频、发起分析 | 动作枚举、前端页内校验 |
+| `/guide` | 拍摄规范页 | 降低无效上传 | 静态内容 |
+| `/analyses/new` | 上传页 | 选择动作、选择视频、完成粗扫与片段确认 | 动作枚举、前端页内校验、`SegmentScanSummary` |
 | `/analyses/:taskId/processing` | 分析中页 | 展示任务阶段与失败跳转 | `TaskStatusResponse` |
 | `/analyses/:taskId/report` | 报告页 | 展示本次结果 | `ReportResult` |
 | `/history` | 历史记录页 | 查看同动作历史样本 | `HistoryListResponse` |
@@ -83,24 +83,35 @@ Mobile H5 Frontend
 
 说明：
 - MVP 前端不再把“创建任务”作为独立用户页面。
-- 上传页点击 `开始分析` 后，由前端顺序触发：创建任务 -> 上传文件 -> 启动任务，然后跳到分析中页。
+- 上传页点击主流程后，由前端顺序触发：创建任务 -> 上传文件 -> 粗扫候选片段 -> 用户确认片段 -> `POST /start` -> 跳到分析中页。
 - 历史详情不必单独做成独立路由，可以先作为历史页内抽屉/卡片详情。
 
 ### 4.2 前端模块边界
-- `pages/`: 路由级页面容器，只负责拼页面
-- `features/analysis-upload/`: 上传、动作选择、前端页内校验
-- `features/task-progress/`: 轮询、阶段映射、失败跳转
+- `app/`: 路由、壳层、轻量 session、跨页导航约束
+- `features/upload/`: 上传、动作选择、前端页内校验、候选片段确认
+- `features/processing/`: 轮询、阶段映射、失败跳转
 - `features/report/`: 报告摘要、问题列表、标准动作对比
 - `features/history/`: 历史列表、基线选择、历史详情
-- `features/comparison/`: 复测对比与教练式总结
-- `shared/api/`: 所有 HTTP 请求与响应类型映射
-- `shared/contracts/`: 前后端共享类型源
-- `shared/error-map/`: 错误码到用户文案映射
+- `features/compare/`: 复测对比与教练式总结
+- `components/ui/`: 自研移动端 UI 组件
+- `styles/`: 全局 token / reset 与页面级共享布局
+- `app/analysis-session/`: API adapter、flow helper、轻量持久化
+- `shared/contracts.d.ts`: 前后端共享类型源
 
 前端不应再承担：
-- 联调日志面板
 - 预处理阶段调试数据直接展示
 - Python 结果结构的二次拼接
+
+说明：
+- `AnalysisSessionProvider` 只保留动作类型、上传草稿、候选片段选择、轻量错误状态和 debug 偏好等轻量 session。
+- 报告页、分析中页、复测对比页的主数据都必须通过 `taskId` 从 API 冷启动 hydration。
+
+### 4.3 前端实现约束
+- 样式默认使用 `*.module.scss` + CSS Modules。
+- `frontend/src/styles/tokens.scss` 与 `frontend/src/styles/globals.scss` 是 token 和极薄全局样式真源；复杂页面样式不得继续堆回单一全局 CSS。
+- 允许选择性使用 `antd-mobile` 作为移动端交互原件，例如 `Selector`、`Popup`、`Dialog`、`Toast`。
+- `antd-mobile` 不得接管品牌主题、Hero 结论卡、报告主叙事区块和训练建议卡。
+- 路由级页面默认使用 `React.lazy` 做 code splitting；首页首包不应强绑报告、历史、对比、design-system 或 debug 代码。
 
 ---
 
@@ -121,7 +132,6 @@ MVP 前端只依赖下面这些接口：
 | `GET` | `/api/tasks/:taskId/comparison?baselineTaskId=...` | 获取复测对比 |
 
 说明：
-- 现有 `/api/tasks/:taskId/analyze` 在 MVP 目标协议中重命名为 `/start`。
 - 现有 `/preprocess`、`/pose` 系列接口降级为内部调试接口，不进入 MVP 主协议。
 - 当前公开动作范围为 `clear + smash`；其他未知动作值继续返回 `invalid_action_type`。
 
@@ -149,6 +159,7 @@ interface TaskStatusResponse {
   errorCode?: string
   errorMessage?: string
   retryable: boolean
+  segmentScan?: SegmentScanSummary
   previousCompletedTaskId?: string
   createdAt: string
   updatedAt: string
@@ -159,6 +170,7 @@ interface TaskStatusResponse {
 - `status` 用于流程级判断
 - `stage` 用于分析中页和排障
 - `progressPercent` 只做阶段性进度提示，不做精确耗时承诺
+- `uploaded + stage=uploaded + segmentScan` 表示“粗扫完成，等待用户确认候选片段”，不是处理中页状态
 - `failed` 为终态；用户重新上传时创建新任务，不复用失败任务
 - `smash` 已进入正式开放范围，但继续使用独立评分版本与标准对照
 

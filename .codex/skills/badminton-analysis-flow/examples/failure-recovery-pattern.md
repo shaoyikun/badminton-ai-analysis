@@ -14,14 +14,14 @@
 
 # Recommended structure
 
-- 页内可恢复错误留在 `/upload`
+- 页内可恢复错误留在 `/analyses/new`
 - 明确服务端错误码时跳 `/error`
 - 失败任务进入终态，不再在原任务上重启分析
 - 返回上传页后保留动作与失败摘要，但不保留真实文件
 
 # Key implementation notes
 
-- 不要让失败状态仍停留在 `/processing`
+- 不要让失败状态仍停留在 `/analyses/:taskId/processing`
 - `retryable` 应和错误页 CTA 保持一致
 - 候选片段粗扫失败与精分析失败要区分恢复策略
 - 如果服务重启导致处理中任务无法恢复，要映射到 `task_recovery_failed`

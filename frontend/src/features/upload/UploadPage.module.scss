@@ -1,0 +1,106 @@
+.uploadField {
+  display: grid;
+  gap: var(--space-2);
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed rgba(47, 107, 255, 0.24);
+  background: linear-gradient(135deg, rgba(47, 107, 255, 0.06) 0%, rgba(91, 182, 255, 0.08) 100%);
+  cursor: pointer;
+
+  input {
+    position: absolute;
+    inset: auto;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.uploadTitle {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.uploadSubtitle {
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.videoPreviewCard {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+
+  video {
+    width: 100%;
+    border-radius: var(--radius-lg);
+    background: rgba(20, 33, 61, 0.08);
+  }
+}
+
+.previousSummary {
+  display: grid;
+  gap: var(--space-3);
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: rgba(20, 33, 61, 0.05);
+}
+
+.checklistStack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.checklistRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(20, 33, 61, 0.05);
+
+  strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+  }
+}
+
+.checklistBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(20, 33, 61, 0.08);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.confirmCheck {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+
+  input {
+    margin-top: 4px;
+  }
+
+  span {
+    line-height: 1.6;
+  }
+}
+
+.inlineErrorList {
+  margin: 0;
+  padding-left: 18px;
+}

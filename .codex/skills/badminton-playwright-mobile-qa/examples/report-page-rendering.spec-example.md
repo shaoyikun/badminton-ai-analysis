@@ -4,8 +4,8 @@
 
 # Before
 
-- 报告页路由是 `/report`
-- provider 会在没有本地 report 时尝试 `ensureLatestReportLoaded()`
+- 报告页路由是 `/analyses/:taskId/report`
+- 页面会按 `taskId` 从 API 冷启动 hydration
 - mock API 已能返回 `reportResponse` 和 comparison 数据
 
 # Goal
@@ -15,7 +15,7 @@
 # Recommended structure
 
 - mock 任务状态与报告结果
-- 直接进入 `/report` 或从 `/processing` 跳转到 `/report`
+- 直接进入 `/analyses/:taskId/report` 或从 `/analyses/:taskId/processing` 跳转到 `/analyses/:taskId/report`
 - 断言 hero、核心问题、复测摘要或底部 CTA
 
 # Key implementation notes
@@ -29,7 +29,7 @@
 
 ```ts
 await mockApi(page)
-await page.goto('/report')
+await page.goto('/analyses/task_demo/report')
 await expect(page.getByRole('button', { name: '再次测试' })).toBeVisible()
 await expect(page.getByRole('link', { name: '查看历史' })).toBeVisible()
 ```

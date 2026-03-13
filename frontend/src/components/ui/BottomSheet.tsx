@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { Popup } from 'antd-mobile'
+import styles from './BottomSheet.module.scss'
 
 export function BottomSheet({
   open,
@@ -11,18 +13,31 @@ export function BottomSheet({
   onClose: () => void
   children: ReactNode
 }) {
-  if (!open) return null
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    closeButtonRef.current?.focus()
+  }, [open])
 
   return (
-    <div className="sheet-backdrop" onClick={onClose} role="presentation">
-      <div className="sheet-panel" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="sheet-handle" />
-        <div className="sheet-header">
+    <Popup
+      bodyClassName={styles.popupBody}
+      destroyOnClose
+      visible={open}
+      onClose={onClose}
+      position="bottom"
+    >
+      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label={title}>
+        <div className={styles.handle} aria-hidden="true" />
+        <div className={styles.header}>
           <strong>{title}</strong>
-          <button className="icon-button" onClick={onClose} type="button">关闭</button>
+          <button ref={closeButtonRef} className={styles.close} onClick={onClose} type="button">
+            关闭
+          </button>
         </div>
-        <div className="sheet-body">{children}</div>
+        <div className={styles.body}>{children}</div>
       </div>
-    </div>
+    </Popup>
   )
 }

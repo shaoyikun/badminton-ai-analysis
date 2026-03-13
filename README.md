@@ -21,6 +21,24 @@
 - 最终抽帧和报告回显都以用户确认后的 `selectedSegmentWindow` 为准
 - 这一步仍然只分析一个候选片段，不会并行精分析全部候选
 
+## 当前前端真相
+
+截至 2026-03-13，移动端 H5 已切到以下产品实现约束：
+
+- 语义化路由：
+  - `/`
+  - `/guide`
+  - `/analyses/new`
+  - `/analyses/:taskId/processing`
+  - `/analyses/:taskId/report`
+  - `/history`
+  - `/analyses/:taskId/comparison`
+  - `/error`
+- 报告页、分析中页、复测对比页都支持直接用 `taskId` 深链访问，不再依赖“最近一次任务”的隐式会话恢复
+- `sessionStorage` 只保留动作类型、上传草稿、候选片段选择和 debug 开关，不再保存报告/对比主真相
+- 前端样式默认采用 `*.module.scss` + CSS Modules，公共 token 收口在 `frontend/src/styles/tokens.scss` / `frontend/src/styles/globals.scss`
+- `antd-mobile` 仅选择性承接移动端交互原件，例如 `Selector`、`Popup`；页面视觉和叙事仍由仓库自研组件负责
+
 ## 稳定交付方式
 
 仓库的标准协作入口固定为：

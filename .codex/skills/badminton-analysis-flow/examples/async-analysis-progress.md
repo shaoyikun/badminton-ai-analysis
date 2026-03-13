@@ -16,7 +16,7 @@
 
 - provider 负责轮询与状态归一
 - 页面只消费步骤列表和当前摘要
-- `completed` 自动跳 `/report`
+- `completed` 自动跳 `/analyses/:taskId/report`
 - `failed` 或 error 自动跳 `/error`
 
 # Key implementation notes
@@ -29,6 +29,6 @@
 # Optional code sketch
 
 ```ts
-if (status === 'completed') navigate('/report', { replace: true })
+if (status === 'completed') navigate(`/analyses/${taskId}/report`, { replace: true })
 if (status === 'failed' || errorState) navigate('/error', { replace: true })
 ```

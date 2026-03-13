@@ -7,6 +7,7 @@ import type {
   UploadConstraints,
   UploadFlowConfig,
 } from '../../../../shared/contracts'
+import { ROUTES } from '../../app/routes'
 
 export type UploadReadinessStatus = 'pass' | 'fail' | 'pending'
 
@@ -62,8 +63,8 @@ export const ACTION_SPECIAL_REMINDER_COPY: Record<ActionType, { title: string; d
 }
 
 const ACTION_TARGET_COPY: Record<FlowActionTarget, { label: string; to: string }> = {
-  upload: { label: '重新上传', to: '/upload' },
-  guide: { label: '查看拍摄指引', to: '/guide' },
+  upload: { label: '重新上传', to: ROUTES.upload },
+  guide: { label: '查看拍摄指引', to: ROUTES.guide },
 }
 
 export function getActionLabel(actionType: ActionType) {

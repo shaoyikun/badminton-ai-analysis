@@ -72,6 +72,41 @@ function buildHistoryDetail(taskId: string, data: MockApiOptions) {
   } satisfies HistoryDetailResponse
 }
 
+function buildComparisonResponse(
+  baselineTaskId: string | null,
+  data: MockApiOptions,
+) {
+  if (!baselineTaskId) {
+    return data.comparison ?? comparisonResponse
+  }
+
+  const source =
+    data.history?.items.find((item) => item.taskId === baselineTaskId) ??
+    historyResponse.items.find((item) => item.taskId === baselineTaskId)
+
+  if (!source) {
+    return data.comparison ?? comparisonResponse
+  }
+
+  return {
+    ...(data.comparison ?? comparisonResponse),
+    baselineTask: {
+      ...(data.comparison?.baselineTask ?? comparisonResponse.baselineTask),
+      taskId: baselineTaskId,
+      actionType: source.actionType,
+      createdAt: source.createdAt ?? comparisonResponse.baselineTask.createdAt,
+      completedAt: source.completedAt,
+    },
+    comparison: (data.comparison ?? comparisonResponse).comparison
+      ? {
+          ...(data.comparison ?? comparisonResponse).comparison!,
+          previousTaskId: baselineTaskId,
+          previousCreatedAt: source.completedAt ?? comparisonResponse.comparison?.previousCreatedAt,
+        }
+      : null,
+  } satisfies ComparisonResponse
+}
+
 export async function mockApi(page: Page, options: MockApiOptions = {}) {
   let statusIndex = 0
 
@@ -122,7 +157,8 @@ export async function mockApi(page: Page, options: MockApiOptions = {}) {
     }
 
     if (method === 'GET' && pathname.endsWith('/comparison')) {
-      return json(route, options.comparison ?? comparisonResponse)
+      const baselineTaskId = url.searchParams.get('baselineTaskId')
+      return json(route, buildComparisonResponse(baselineTaskId, options))
     }
 
     if (method === 'GET' && pathname.startsWith('/api/debug/tasks/')) {

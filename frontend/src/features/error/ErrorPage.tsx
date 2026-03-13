@@ -1,7 +1,11 @@
 import { BottomCTA } from '../../components/ui/BottomCTA'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Notice } from '../../components/ui/Notice'
-import { getErrorRouteActions, useAnalysisTask } from '../../hooks/useAnalysisTask'
+import { ROUTES } from '../../app/routes'
+import { useAnalysisTask } from '../../hooks/useAnalysisTask'
+import { getErrorRouteAction } from '../upload/uploadFlow'
+import pageStyles from '../../styles/PageLayout.module.scss'
+import styles from './ErrorPage.module.scss'
 
 export function ErrorPage() {
   const { errorState } = useAnalysisTask()
@@ -12,36 +16,39 @@ export function ErrorPage() {
         badge="无错误上下文"
         title="当前没有需要处理的异常"
         description="你可以直接回到上传页重新开始一次分析。"
-        primary={{ label: '去上传', to: '/upload' }}
-        secondary={{ label: '返回首页', to: '/' }}
+        primary={{ label: '去上传', to: ROUTES.upload }}
+        secondary={{ label: '返回首页', to: ROUTES.home }}
       />
     )
   }
 
-  const actions = getErrorRouteActions(errorState)
+  const actions = {
+    primary: getErrorRouteAction(errorState.primaryAction),
+    secondary: getErrorRouteAction(errorState.secondaryAction),
+  }
 
   return (
-    <div className="page-stack">
-      <section className="surface-card error-card">
-        <span className="badge warning">处理失败</span>
+    <div className={pageStyles.pageStack}>
+      <section className={pageStyles.heroCard}>
+        <span className={pageStyles.badgeWarning}>处理失败</span>
         <h2>{errorState.title}</h2>
         <p>{errorState.summary}</p>
       </section>
 
-      <section className="surface-card">
-        <div className="section-head">
+      <section className={pageStyles.card}>
+        <div className={pageStyles.sectionHeader}>
           <h2>发生了什么</h2>
         </div>
         <p>{errorState.explanation}</p>
       </section>
 
-      <section className="surface-card">
-        <div className="section-head">
+      <section className={pageStyles.card}>
+        <div className={pageStyles.sectionHeader}>
           <h2>这次建议这样处理</h2>
         </div>
-        <div className="info-list compact">
+        <div className={pageStyles.infoList}>
           {errorState.suggestions.map((suggestion) => (
-            <div key={suggestion} className="list-row">{suggestion}</div>
+            <div key={suggestion} className={pageStyles.listRow}>{suggestion}</div>
           ))}
         </div>
       </section>
@@ -49,6 +56,16 @@ export function ErrorPage() {
       <Notice tone="error" title="为什么要先处理这个问题">
         这不是模型坏掉，而是当前视频条件已经影响到动作判断可信度。先把拍摄条件拉回到可分析范围，后面的结论才更可靠。
       </Notice>
+
+      <section className={pageStyles.card}>
+        <div className={pageStyles.sectionHeader}>
+          <h2>恢复路径</h2>
+        </div>
+        <div className={styles.actionHint}>
+          <strong>主操作只保留一个：</strong>
+          <p>{actions.primary.label}</p>
+        </div>
+      </section>
 
       <BottomCTA
         primary={{ label: actions.primary.label, to: actions.primary.to }}

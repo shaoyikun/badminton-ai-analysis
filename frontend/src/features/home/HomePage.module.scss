@@ -1,0 +1,27 @@
+.heroMeta,
+.stepGrid,
+.secondaryMeta {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.primaryAction,
+.secondaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+}
+
+.primaryAction {
+  background: linear-gradient(135deg, var(--color-brand-primary) 0%, #5f8cff 100%);
+  color: var(--color-text-inverse);
+  box-shadow: 0 18px 40px rgba(47, 107, 255, 0.24);
+}
+
+.secondaryAction {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid var(--color-border-default);
+}

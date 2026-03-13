@@ -18,7 +18,7 @@
 - `page.goto('/')`
 - 断言首页标题与主 CTA
 - 点击 `开始分析当前动作`
-- 断言进入 `/guide`，再进入 `/upload`
+- 断言进入 `/guide`，再进入 `/analyses/new`
 
 # Key implementation notes
 

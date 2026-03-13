@@ -1,10 +1,6 @@
 export {
   API_BASE,
   AnalysisSessionProvider,
-  getErrorRouteActions,
-  POSE_LABELS,
-  PREPROCESS_LABELS,
-  STATUS_LABELS,
   useAnalysisTask,
   type ActionType,
   type ErrorState,

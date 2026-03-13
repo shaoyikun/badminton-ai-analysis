@@ -63,6 +63,40 @@ npm run test:e2e:install
 - 历史样本查看与设为对比基线
 - 隐藏式联调抽屉，支持 `?debug=1` 开启
 
+## 路由与深链
+
+当前前端公开路由固定为：
+
+- `/`
+- `/guide`
+- `/analyses/new`
+- `/analyses/:taskId/processing`
+- `/analyses/:taskId/report`
+- `/history`
+- `/analyses/:taskId/comparison`
+- `/error`
+
+说明：
+
+- 旧 `/upload`、`/processing`、`/report`、`/compare` 已不再作为兼容入口保留
+- 报告页、分析中页、对比页默认按 `taskId` 从 API 冷启动 hydration
+- `sessionStorage` 只保留上传草稿、候选片段选择、动作类型和 debug 开关，不再保存报告/对比主数据
+
+## 样式与组件约束
+
+当前移动端 H5 样式固定采用：
+
+- `*.module.scss` 作为页面与组件默认样式方案
+- `frontend/src/styles/tokens.scss` 维护设计 token
+- `frontend/src/styles/globals.scss` 只保留 reset、root token 和极少量全局基础样式
+- `frontend/src/styles/PageLayout.module.scss` 作为页面级公共布局壳层
+
+组件库策略固定为：
+
+- 允许选择性使用 `antd-mobile`
+- 当前已用于移动端交互原件，例如 `Selector`、`Popup`
+- 不允许让组件库接管品牌视觉、报告叙事、Hero 卡片或训练建议卡片
+
 ## Docker 路径说明
 
 Compose 路径下，frontend 会：
