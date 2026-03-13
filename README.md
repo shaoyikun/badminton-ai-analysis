@@ -205,7 +205,22 @@ curl http://127.0.0.1:5173/health
 make evaluate
 ```
 
-它会读取 `evaluation/fixtures/index.json`，回放 video / preprocess / pose fixtures，并与 `evaluation/baseline.json` 对比。如何新增样本、刷新 baseline 和解读指标见 [evaluation/README.md](evaluation/README.md)。
+它会读取 `evaluation/fixtures/index.json`，回放 video / preprocess / pose fixtures，并与 `evaluation/baseline.json` 对比。
+
+当前约定：
+
+- `make evaluate` 默认会在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTags` 时返回非零
+- `successRate` 的定义是“非 `rejected` / 全部”；`low_confidence` 仍计入成功完成率
+- 只有明确接受新行为时，才允许执行 `./scripts/evaluate.sh --update-baseline`
+
+以下改动默认需要补跑离线评测：
+
+- 评分、阈值、fallback 逻辑
+- pose summary / rejection reason / `debugCounts` 契约
+- fixture / baseline / evaluation summary 逻辑
+- 任何会影响 `analysisDisposition`、`issues`、`rejectionReasons`、`lowConfidenceReasons` 的改动
+
+如何新增样本、刷新 baseline、解读 `primaryErrorCode` / disposition 一致性等指标见 [evaluation/README.md](evaluation/README.md)。
 
 ## 验收清单与回归路径
 
@@ -214,6 +229,7 @@ make evaluate
 - 已执行 `make setup`
 - `make test` 通过
 - `make build` 通过
+- 若改动触及评分、阈值、pose summary 契约、fixtures 或 baseline，`make evaluate` 通过
 - 有 Docker daemon 的环境里 `make verify` 通过
 - README、`.env.example`、`Makefile`、脚本、子系统 README 对同一命令语义保持一致
 

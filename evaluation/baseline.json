@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-03-13T04:03:10.216Z",
+  "generatedAt": "2026-03-13T06:30:02.516Z",
   "fixtures": {
     "clear-normal": {
       "analysisDisposition": "analyzable",
@@ -9,40 +9,48 @@
       "topIssueLabels": [
         "repeatability_gap"
       ],
-      "totalScore": 80,
-      "confidenceScore": 87,
+      "totalScore": 78,
+      "confidenceScore": 76,
       "scoreVariance": 0.007,
       "temporalConsistency": 0.825,
       "motionContinuity": 0.93,
-      "fallbacksUsed": []
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
     },
     "clear-under-rotation": {
       "analysisDisposition": "analyzable",
       "rejectionReasons": [],
       "lowConfidenceReasons": [],
       "topIssueLabels": [
-        "body_preparation_gap"
+        "body_preparation_gap",
+        "repeatability_gap"
       ],
-      "totalScore": 67,
-      "confidenceScore": 86,
+      "totalScore": 66,
+      "confidenceScore": 75,
       "scoreVariance": 0.008,
       "temporalConsistency": 0.8,
       "motionContinuity": 0.91,
-      "fallbacksUsed": []
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
     },
     "clear-racket-arm-prep-gap": {
       "analysisDisposition": "analyzable",
       "rejectionReasons": [],
       "lowConfidenceReasons": [],
       "topIssueLabels": [
-        "racket_arm_preparation_gap"
+        "racket_arm_preparation_gap",
+        "repeatability_gap"
       ],
-      "totalScore": 66,
-      "confidenceScore": 86,
+      "totalScore": 65,
+      "confidenceScore": 75,
       "scoreVariance": 0.009,
       "temporalConsistency": 0.775,
       "motionContinuity": 0.89,
-      "fallbacksUsed": []
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
     },
     "clear-bad-camera": {
       "analysisDisposition": "low_confidence",
@@ -58,12 +66,46 @@
         "body_preparation_gap",
         "racket_arm_preparation_gap"
       ],
-      "totalScore": 63,
-      "confidenceScore": 69,
+      "totalScore": 56,
+      "confidenceScore": 58,
       "scoreVariance": 0.035,
       "temporalConsistency": 0.125,
       "motionContinuity": 0.42,
-      "fallbacksUsed": []
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
+    },
+    "clear-subject-too-small": {
+      "analysisDisposition": "rejected",
+      "rejectionReasons": [
+        "subject_too_small_or_cropped"
+      ],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [],
+      "totalScore": null,
+      "confidenceScore": null,
+      "scoreVariance": 0.018,
+      "temporalConsistency": 0.68,
+      "motionContinuity": 0.74,
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
+    },
+    "clear-poor-lighting-or-occlusion": {
+      "analysisDisposition": "rejected",
+      "rejectionReasons": [
+        "poor_lighting_or_occlusion"
+      ],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [],
+      "totalScore": null,
+      "confidenceScore": null,
+      "scoreVariance": 0.028,
+      "temporalConsistency": 0.34,
+      "motionContinuity": 0.41,
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
     },
     "clear-boundary-analyzable": {
       "analysisDisposition": "analyzable",
@@ -74,12 +116,14 @@
         "racket_arm_preparation_gap",
         "repeatability_gap"
       ],
-      "totalScore": 66,
-      "confidenceScore": 81,
+      "totalScore": 64,
+      "confidenceScore": 71,
       "scoreVariance": 0.018,
       "temporalConsistency": 0.55,
       "motionContinuity": 0.62,
-      "fallbacksUsed": []
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
     },
     "clear-boundary-rejected": {
       "analysisDisposition": "rejected",
@@ -93,7 +137,9 @@
       "scoreVariance": 0.022,
       "temporalConsistency": 0.45,
       "motionContinuity": 0.5,
-      "fallbacksUsed": []
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
     }
   }
 }

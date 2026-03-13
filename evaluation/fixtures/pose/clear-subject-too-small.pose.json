@@ -1,0 +1,43 @@
+{
+  "engine": "mediapipe-pose",
+  "frameCount": 12,
+  "detectedFrameCount": 9,
+  "summary": {
+    "bestFrameIndex": 5,
+    "bestPreparationFrameIndex": 5,
+    "usableFrameCount": 8,
+    "coverageRatio": 0.6667,
+    "medianStabilityScore": 0.77,
+    "medianBodyTurnScore": 0.58,
+    "medianRacketArmLiftScore": 0.56,
+    "scoreVariance": 0.018,
+    "temporalConsistency": 0.68,
+    "motionContinuity": 0.74,
+    "rejectionReasons": ["subject_too_small_or_cropped"],
+    "rejectionReasonDetails": [],
+    "humanSummary": "主体过小或局部被裁切，无法稳定生成有效动作报告。",
+    "viewProfile": "rear_left_oblique",
+    "viewConfidence": 0.82,
+    "viewStability": 0.79,
+    "dominantRacketSide": "right",
+    "racketSideConfidence": 0.66,
+    "specializedFeatureSummary": {
+      "sideOnReadinessScore": { "median": 0.58, "peak": 0.69, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "shoulderHipRotationScore": { "median": 0.56, "peak": 0.68, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "trunkCoilScore": { "median": 0.54, "peak": 0.67, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "hittingArmPreparationScore": { "median": 0.6, "peak": 0.72, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "wristAboveShoulderConfidence": { "median": 0.57, "peak": 0.7, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "racketSideElbowHeightScore": { "median": 0.55, "peak": 0.69, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "elbowExtensionScore": { "median": 0.53, "peak": 0.66, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "contactPreparationScore": { "median": 0.59, "peak": 0.71, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 }
+    },
+    "debugCounts": {
+      "tooSmallCount": 5,
+      "lowStabilityCount": 0,
+      "unknownViewCount": 0,
+      "usableFrameCount": 8,
+      "detectedFrameCount": 9
+    }
+  },
+  "frames": []
+}

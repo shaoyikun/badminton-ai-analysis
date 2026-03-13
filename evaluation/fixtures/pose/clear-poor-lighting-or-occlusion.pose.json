@@ -1,0 +1,43 @@
+{
+  "engine": "mediapipe-pose",
+  "frameCount": 12,
+  "detectedFrameCount": 8,
+  "summary": {
+    "bestFrameIndex": 4,
+    "bestPreparationFrameIndex": 4,
+    "usableFrameCount": 8,
+    "coverageRatio": 0.6667,
+    "medianStabilityScore": 0.58,
+    "medianBodyTurnScore": 0.5,
+    "medianRacketArmLiftScore": 0.47,
+    "scoreVariance": 0.028,
+    "temporalConsistency": 0.34,
+    "motionContinuity": 0.41,
+    "rejectionReasons": ["poor_lighting_or_occlusion"],
+    "rejectionReasonDetails": [],
+    "humanSummary": "遮挡和光线波动较重，稳定帧不足，当前样本不适合继续分析动作质量。",
+    "viewProfile": "rear_left_oblique",
+    "viewConfidence": 0.76,
+    "viewStability": 0.71,
+    "dominantRacketSide": "right",
+    "racketSideConfidence": 0.61,
+    "specializedFeatureSummary": {
+      "sideOnReadinessScore": { "median": 0.46, "peak": 0.58, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "shoulderHipRotationScore": { "median": 0.43, "peak": 0.55, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "trunkCoilScore": { "median": 0.41, "peak": 0.53, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "hittingArmPreparationScore": { "median": 0.45, "peak": 0.57, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "wristAboveShoulderConfidence": { "median": 0.44, "peak": 0.55, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "racketSideElbowHeightScore": { "median": 0.42, "peak": 0.54, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "elbowExtensionScore": { "median": 0.4, "peak": 0.51, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "contactPreparationScore": { "median": 0.43, "peak": 0.54, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 4 }
+    },
+    "debugCounts": {
+      "tooSmallCount": 0,
+      "lowStabilityCount": 5,
+      "unknownViewCount": 0,
+      "usableFrameCount": 8,
+      "detectedFrameCount": 8
+    }
+  },
+  "frames": []
+}

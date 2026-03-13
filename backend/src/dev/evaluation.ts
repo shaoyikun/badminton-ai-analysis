@@ -12,6 +12,20 @@ import { buildDebugTaskRecord, loadDebugArtifactsContext } from './debugAlgorith
 
 export type EvaluationCameraQuality = 'good' | 'limited' | 'poor';
 export type EvaluationDisposition = 'rejected' | 'low_confidence' | 'analyzable';
+export type EvaluationCoverageTag =
+  | 'bad_camera'
+  | 'subject_too_small'
+  | 'poor_lighting_or_occlusion'
+  | 'weak_preparation'
+  | 'stable_preparation';
+
+export const DEFAULT_REQUIRED_COVERAGE_TAGS: EvaluationCoverageTag[] = [
+  'bad_camera',
+  'subject_too_small',
+  'poor_lighting_or_occlusion',
+  'weak_preparation',
+  'stable_preparation',
+];
 
 export interface EvaluationFixtureInput {
   videoPath?: string;
@@ -30,11 +44,13 @@ export interface EvaluationFixtureCase {
   actionType: ActionType;
   input: EvaluationFixtureInput;
   expected: EvaluationFixtureExpected;
+  coverageTags: EvaluationCoverageTag[];
   notes?: string;
   reviewerNotes?: string;
 }
 
 export interface EvaluationFixtureIndex {
+  requiredCoverageTags?: EvaluationCoverageTag[];
   fixtures: EvaluationFixtureCase[];
 }
 
@@ -61,10 +77,12 @@ export interface EvaluationCaseResult {
   id: string;
   actionType: ActionType;
   inputMode: 'video' | 'preprocess' | 'pose';
+  coverageTags: EvaluationCoverageTag[];
   expected: EvaluationFixtureExpected;
   actual: {
     analysisDisposition: EvaluationDisposition;
     cameraQuality: EvaluationCameraQuality;
+    primaryErrorCode: string;
     rejectionReasons: string[];
     lowConfidenceReasons: string[];
     topIssueLabels: string[];
@@ -97,8 +115,20 @@ export interface EvaluationAggregateReport {
     successCount: number;
     successRate: number;
     dispositionDistribution: Record<string, number>;
+    primaryErrorCodeDistribution: Record<string, number>;
     rejectionReasonDistribution: Record<string, number>;
     lowConfidenceDistribution: Record<string, number>;
+    expectationConsistency: {
+      dispositionMatchCount: number;
+      dispositionMatchRate: number;
+      cameraQualityMatchCount: number;
+      cameraQualityMatchRate: number;
+    };
+    coverageStatus: {
+      required: EvaluationCoverageTag[];
+      present: EvaluationCoverageTag[];
+      missing: EvaluationCoverageTag[];
+    };
     issueHit: {
       expectedLabelCount: number;
       matchedLabelCount: number;
@@ -142,6 +172,10 @@ type EvaluateSuiteOptions = EvaluateFixtureOptions & {
   indexPath?: string;
 };
 
+type LoadFixtureIndexOptions = {
+  requireDeclaredCoverageTags: boolean;
+};
+
 type FixtureExecution = {
   task: AnalysisTaskRecord;
   poseResult: PoseAnalysisResult;
@@ -166,6 +200,10 @@ function sanitizeFixtureId(value: string) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function getDefaultIndexPath() {
+  return path.join(getEvaluationRoot(), 'fixtures', 'index.json');
 }
 
 function buildTaskRecord(
@@ -243,6 +281,20 @@ function classifyCameraQuality(report: ReportResult) {
 
 function uniqueStrings(values: Array<string | undefined>) {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+function getPrimaryErrorCode(
+  analysisDisposition: EvaluationDisposition,
+  qualityFailureCode: string | null,
+  lowConfidenceReasons: string[],
+) {
+  if (analysisDisposition === 'rejected') {
+    return qualityFailureCode ?? 'unknown_rejection_reason';
+  }
+  if (analysisDisposition === 'low_confidence') {
+    return lowConfidenceReasons[0] ?? 'unknown_low_confidence_reason';
+  }
+  return 'none';
 }
 
 function getActualIssueLabels(report: ReportResult, disposition: EvaluationDisposition) {
@@ -336,10 +388,15 @@ function loadBaselineFile(baselinePath: string) {
   return readJsonFile<EvaluationBaselineFile>(baselinePath);
 }
 
-function loadFixtureIndex(indexPath: string) {
+function loadFixtureIndex(indexPath: string, options: LoadFixtureIndexOptions) {
   const index = readJsonFile<EvaluationFixtureIndex>(indexPath);
   if (!Array.isArray(index.fixtures) || index.fixtures.length === 0) {
     throw new Error(`fixture index is empty: ${indexPath}`);
+  }
+
+  const requiredCoverageTags = index.requiredCoverageTags ?? [];
+  if (options.requireDeclaredCoverageTags && requiredCoverageTags.length === 0) {
+    throw new Error(`fixture index must declare requiredCoverageTags: ${indexPath}`);
   }
 
   for (const fixture of index.fixtures) {
@@ -355,6 +412,17 @@ function loadFixtureIndex(indexPath: string) {
       && !fixture.input?.poseResultPath
     ) {
       throw new Error(`fixture "${fixture.id}" must provide videoPath, preprocessDir, or poseResultPath`);
+    }
+    if (!Array.isArray(fixture.coverageTags) || fixture.coverageTags.length === 0) {
+      throw new Error(`fixture "${fixture.id}" must provide at least one coverageTag`);
+    }
+  }
+
+  if (requiredCoverageTags.length > 0) {
+    const presentCoverageTags = new Set(index.fixtures.flatMap((fixture) => fixture.coverageTags));
+    const missingCoverageTags = requiredCoverageTags.filter((tag) => !presentCoverageTags.has(tag));
+    if (missingCoverageTags.length > 0) {
+      throw new Error(`fixture index is missing requiredCoverageTags: ${missingCoverageTags.join(', ')}`);
     }
   }
 
@@ -466,9 +534,11 @@ export async function evaluateFixtureCase(
     const topIssueLabels = getActualIssueLabels(report, analysisDisposition);
     const lowConfidenceReasons = report.scoringEvidence?.rejectionDecision?.lowConfidenceReasons ?? [];
     const rejectionReasons = [...(execution.poseResult.summary.rejectionReasons ?? [])];
+    const qualityFailureCode = getPoseQualityFailure(execution.poseResult)?.code ?? null;
     const actual: EvaluationCaseResult['actual'] = {
       analysisDisposition,
       cameraQuality: classifyCameraQuality(report),
+      primaryErrorCode: getPrimaryErrorCode(analysisDisposition, qualityFailureCode, lowConfidenceReasons),
       rejectionReasons,
       lowConfidenceReasons,
       topIssueLabels,
@@ -478,7 +548,7 @@ export async function evaluateFixtureCase(
       temporalConsistency: execution.poseResult.summary.temporalConsistency ?? null,
       motionContinuity: execution.poseResult.summary.motionContinuity ?? null,
       fallbacksUsed: report.scoringEvidence?.fallbacksUsed ?? [],
-      qualityFailureCode: getPoseQualityFailure(execution.poseResult)?.code ?? null,
+      qualityFailureCode,
     };
 
     const matchedIssueLabels = fixture.expected.majorIssueLabels.filter((label) => topIssueLabels.includes(label));
@@ -487,6 +557,7 @@ export async function evaluateFixtureCase(
       id: fixture.id,
       actionType: fixture.actionType,
       inputMode: execution.inputMode,
+      coverageTags: fixture.coverageTags,
       expected: fixture.expected,
       actual,
       expectationCheck: {
@@ -510,6 +581,7 @@ export async function evaluateFixtureCase(
       id: fixture.id,
       actionType: fixture.actionType,
       inputMode: execution.inputMode,
+      coverageTags: fixture.coverageTags,
       expected: fixture.expected,
       actual,
       expectationCheck: {
@@ -539,10 +611,13 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
 }> {
   const indexPath = options.indexPath
     ? path.resolve(options.indexPath)
-    : path.join(getEvaluationRoot(), 'fixtures', 'index.json');
+    : getDefaultIndexPath();
   const baselinePath = path.join(getEvaluationRoot(), 'baseline.json');
   const baseline = options.baseline ?? loadBaselineFile(baselinePath);
-  const index = loadFixtureIndex(indexPath);
+  const isDefaultIndex = path.resolve(indexPath) === path.resolve(getDefaultIndexPath());
+  const index = loadFixtureIndex(indexPath, {
+    requireDeclaredCoverageTags: isDefaultIndex,
+  });
   const indexDir = path.dirname(indexPath);
 
   const results: EvaluationCaseResult[] = [];
@@ -562,13 +637,21 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
 
   const successCount = results.filter((result) => result.actual.analysisDisposition !== 'rejected').length;
   const dispositionDistribution: Record<string, number> = {};
+  const primaryErrorCodeDistribution: Record<string, number> = {};
   const rejectionReasonDistribution: Record<string, number> = {};
   const lowConfidenceDistribution: Record<string, number> = {};
   for (const result of results) {
     dispositionDistribution[result.actual.analysisDisposition] = (dispositionDistribution[result.actual.analysisDisposition] ?? 0) + 1;
+    primaryErrorCodeDistribution[result.actual.primaryErrorCode] = (primaryErrorCodeDistribution[result.actual.primaryErrorCode] ?? 0) + 1;
     incrementCounter(rejectionReasonDistribution, result.actual.rejectionReasons);
     incrementCounter(lowConfidenceDistribution, result.actual.lowConfidenceReasons);
   }
+
+  const dispositionMatchCount = results.filter((result) => result.expectationCheck.analysisDispositionMatched).length;
+  const cameraQualityMatchCount = results.filter((result) => result.expectationCheck.cameraQualityMatched).length;
+  const requiredCoverageTags = index.requiredCoverageTags ?? [];
+  const presentCoverageTags = [...new Set(results.flatMap((result) => result.coverageTags))].sort();
+  const missingCoverageTags = requiredCoverageTags.filter((tag) => !presentCoverageTags.includes(tag));
 
   const missedCases = results
     .filter((result) => result.expectationCheck.missedIssueLabels.length > 0)
@@ -593,8 +676,20 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
         successCount,
         successRate: Number((successCount / Math.max(1, results.length)).toFixed(4)),
         dispositionDistribution,
+        primaryErrorCodeDistribution,
         rejectionReasonDistribution,
         lowConfidenceDistribution,
+        expectationConsistency: {
+          dispositionMatchCount,
+          dispositionMatchRate: Number((dispositionMatchCount / Math.max(1, results.length)).toFixed(4)),
+          cameraQualityMatchCount,
+          cameraQualityMatchRate: Number((cameraQualityMatchCount / Math.max(1, results.length)).toFixed(4)),
+        },
+        coverageStatus: {
+          required: [...requiredCoverageTags],
+          present: presentCoverageTags,
+          missing: missingCoverageTags,
+        },
         issueHit: {
           expectedLabelCount,
           matchedLabelCount,
@@ -625,8 +720,12 @@ export function renderEvaluationSummary(report: EvaluationAggregateReport) {
     `- fixtures: ${report.summary.totalFixtures}`,
     `- successRate: ${report.summary.successCount}/${report.summary.totalFixtures} (${report.summary.successRate})`,
     `- dispositionDistribution: ${Object.entries(report.summary.dispositionDistribution).map(([key, value]) => `${key}=${value}`).join(', ') || 'none'}`,
+    `- primaryErrorCodes: ${Object.entries(report.summary.primaryErrorCodeDistribution).map(([key, value]) => `${key}=${value}`).join(', ') || 'none'}`,
     `- rejectionReasons: ${Object.entries(report.summary.rejectionReasonDistribution).map(([key, value]) => `${key}=${value}`).join(', ') || 'none'}`,
     `- lowConfidenceReasons: ${Object.entries(report.summary.lowConfidenceDistribution).map(([key, value]) => `${key}=${value}`).join(', ') || 'none'}`,
+    `- dispositionMatchRate: ${report.summary.expectationConsistency.dispositionMatchCount}/${report.summary.totalFixtures} (${report.summary.expectationConsistency.dispositionMatchRate})`,
+    `- cameraQualityMatchRate: ${report.summary.expectationConsistency.cameraQualityMatchCount}/${report.summary.totalFixtures} (${report.summary.expectationConsistency.cameraQualityMatchRate})`,
+    `- coverageTags: required=${report.summary.coverageStatus.required.join(', ') || 'none'}; present=${report.summary.coverageStatus.present.join(', ') || 'none'}; missing=${report.summary.coverageStatus.missing.join(', ') || 'none'}`,
     `- issueHitRate: ${report.summary.issueHit.matchedLabelCount}/${report.summary.issueHit.expectedLabelCount} (${report.summary.issueHit.hitRate})`,
     `- scoreVariance: mean=${report.summary.scoreVariance.mean ?? 'null'}, p50=${report.summary.scoreVariance.p50 ?? 'null'}, min=${report.summary.scoreVariance.min ?? 'null'}, max=${report.summary.scoreVariance.max ?? 'null'}`,
     `- temporalConsistency: mean=${report.summary.temporalConsistency.mean ?? 'null'}, p50=${report.summary.temporalConsistency.p50 ?? 'null'}, min=${report.summary.temporalConsistency.min ?? 'null'}, max=${report.summary.temporalConsistency.max ?? 'null'}`,
@@ -648,7 +747,31 @@ export function renderEvaluationSummary(report: EvaluationAggregateReport) {
     }
   }
 
+  const gateFailures = getEvaluationGateFailures(report);
+  if (gateFailures.length > 0) {
+    lines.push('', '## Gate Failures', '');
+    for (const failure of gateFailures) {
+      lines.push(`- ${failure}`);
+    }
+  }
+
   return lines.join('\n');
+}
+
+export function getEvaluationGateFailures(report: EvaluationAggregateReport) {
+  const failures: string[] = [];
+
+  if (report.summary.coverageStatus.missing.length > 0) {
+    failures.push(`missing required coverage tags: ${report.summary.coverageStatus.missing.join(', ')}`);
+  }
+  if (report.summary.baselineComparison.missingBaselineCount > 0) {
+    failures.push(`missing baseline cases: ${report.summary.baselineComparison.missingBaselineCount}`);
+  }
+  if (report.summary.baselineComparison.changedCaseCount > 0) {
+    failures.push(`baseline drift detected in ${report.summary.baselineComparison.changedCaseCount} case(s)`);
+  }
+
+  return failures;
 }
 
 export function writeBaselineFile(baselinePath: string, baseline: EvaluationBaselineFile) {

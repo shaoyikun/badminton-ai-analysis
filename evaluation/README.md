@@ -22,6 +22,8 @@ evaluation/
       clear-under-rotation.pose.json
       clear-racket-arm-prep-gap.pose.json
       clear-bad-camera.pose.json
+      clear-subject-too-small.pose.json
+      clear-poor-lighting-or-occlusion.pose.json
       clear-boundary-analyzable.pose.json
       clear-boundary-rejected.pose.json
 ```
@@ -32,18 +34,30 @@ evaluation/
 
 ```json
 {
-  "id": "clear-under-rotation",
-  "actionType": "clear",
-  "input": {
-    "poseResultPath": "./pose/clear-under-rotation.pose.json"
-  },
-  "expected": {
-    "cameraQuality": "good",
-    "majorIssueLabels": ["body_preparation_gap"],
-    "analysisDisposition": "analyzable"
-  },
-  "notes": "专项 body-preparation 回归样例",
-  "reviewerNotes": "当前主要观察转体不足是否仍能稳定命中"
+  "requiredCoverageTags": [
+    "bad_camera",
+    "subject_too_small",
+    "poor_lighting_or_occlusion",
+    "weak_preparation",
+    "stable_preparation"
+  ],
+  "fixtures": [
+    {
+      "id": "clear-under-rotation",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-under-rotation.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["body_preparation_gap"],
+        "analysisDisposition": "analyzable"
+      },
+      "coverageTags": ["weak_preparation"],
+      "notes": "专项 body-preparation 回归样例",
+      "reviewerNotes": "当前主要观察转体不足是否仍能稳定命中"
+    }
+  ]
 }
 ```
 
@@ -59,6 +73,17 @@ evaluation/
 约定：
 
 - `actionType` 当前只允许 `clear`
+- `requiredCoverageTags`
+  - checked-in baseline suite 必须声明并覆盖：
+    - `bad_camera`
+    - `subject_too_small`
+    - `poor_lighting_or_occlusion`
+    - `weak_preparation`
+    - `stable_preparation`
+  - 自定义 ad hoc suite 可以不声明；一旦声明，就会强制校验覆盖完整性
+- `coverageTags`
+  - 每个 fixture 都必须至少标记一个 tag
+  - 用来说明这个样本守护的是哪一类最小回归场景
 - `expected.cameraQuality` 取值：
   - `good`
   - `limited`
@@ -102,15 +127,54 @@ make evaluate
 ./scripts/evaluate.sh --update-baseline
 ```
 
+默认行为：
+
+- `make evaluate` / `./scripts/evaluate.sh`
+  - 评测通过时返回 `0`
+  - 遇到以下任一情况返回非零：
+    - fixture index 缺少 `requiredCoverageTags`
+    - checked-in baseline 缺 case
+    - current 与 baseline 有 drift
+- `--update-baseline`
+  - 只有在明确接受新行为时才使用
+  - 会刷新 `evaluation/baseline.json`
+  - 刷新后退出成功
+
 默认输出包括：
 
 - 分析成功率
+- disposition 一致性命中率
+- camera quality 一致性命中率
+- `primaryErrorCode` 分布
 - `analysisDisposition` 分布
 - `rejectionReasons` 分布
 - `lowConfidenceReasons` 分布
 - `majorIssueLabels` 命中率与 miss case
+- `requiredCoverageTags` 的 required / present / missing 状态
 - `scoreVariance` / `temporalConsistency` / `motionContinuity` 聚合统计
 - baseline vs current 差异摘要
+
+口径说明：
+
+- `successRate`
+  - 定义为“非 `rejected` case / 全部 case”
+  - `low_confidence` 仍视为任务成功完成，但会被单独计入 disposition 分布
+- `primaryErrorCode`
+  - `rejected`：首个 hard reject reason
+  - `low_confidence`：首个 low-confidence reason
+  - `analyzable`：`none`
+
+## 什么算回归
+
+默认把以下情况视为需要解释或处理的回归：
+
+- baseline drift
+- disposition match rate 下降
+- top issue hit rate 下降
+- `requiredCoverageTags` 缺失
+- `primaryErrorCode` 分布出现未解释变化
+
+如果只是预期内行为变化，也不要直接忽略；应先确认变化原因，再决定是否执行 `--update-baseline`。
 
 ## 新增样本
 
@@ -130,6 +194,17 @@ make evaluate
 ```
 
 6. 提交时附带说明这个 case 主要守护什么回归
+
+## 什么时候必须补跑评测
+
+以下改动默认都要补跑 `make evaluate`：
+
+- `backend/src/services/reportScoringService.ts` 中的评分、阈值、fallback 逻辑
+- pose summary / rejection reason / `debugCounts` 契约变动
+- fixture / baseline / evaluation summary 逻辑变动
+- 任何会影响 `analysisDisposition`、`issues`、`rejectionReasons`、`lowConfidenceReasons` 的改动
+
+仅当你明确接受新的评测输出，才允许刷新 checked-in baseline。
 
 ## 当前局限
 

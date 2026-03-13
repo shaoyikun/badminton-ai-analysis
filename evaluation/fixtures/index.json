@@ -1,4 +1,11 @@
 {
+  "requiredCoverageTags": [
+    "bad_camera",
+    "subject_too_small",
+    "poor_lighting_or_occlusion",
+    "weak_preparation",
+    "stable_preparation"
+  ],
   "fixtures": [
     {
       "id": "clear-normal",
@@ -11,6 +18,7 @@
         "majorIssueLabels": [],
         "analysisDisposition": "analyzable"
       },
+      "coverageTags": ["stable_preparation"],
       "notes": "高质量 clear 正常样例",
       "reviewerNotes": "默认回归集保持 artifact-only，可在本地另行追加 video smoke case"
     },
@@ -25,6 +33,7 @@
         "majorIssueLabels": ["body_preparation_gap"],
         "analysisDisposition": "analyzable"
       },
+      "coverageTags": ["weak_preparation"],
       "notes": "clear 转体不足",
       "reviewerNotes": "主要观察 body_preparation_gap 是否仍命中"
     },
@@ -39,6 +48,7 @@
         "majorIssueLabels": ["racket_arm_preparation_gap"],
         "analysisDisposition": "analyzable"
       },
+      "coverageTags": ["weak_preparation"],
       "notes": "挥拍臂准备不足",
       "reviewerNotes": "主要观察 arm preparation 问题是否仍排在前列"
     },
@@ -53,8 +63,39 @@
         "majorIssueLabels": ["evidence_quality_gap"],
         "analysisDisposition": "low_confidence"
       },
+      "coverageTags": ["bad_camera"],
       "notes": "机位不佳/前斜视角",
       "reviewerNotes": "主要观察 invalid_camera_angle 与 low_confidence 是否稳定出现"
+    },
+    {
+      "id": "clear-subject-too-small",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-subject-too-small.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": [],
+        "analysisDisposition": "rejected"
+      },
+      "coverageTags": ["subject_too_small"],
+      "notes": "主体过小/裁切导致的硬拒绝样例",
+      "reviewerNotes": "主要观察 subject_too_small_or_cropped 是否仍为首个硬拒绝原因"
+    },
+    {
+      "id": "clear-poor-lighting-or-occlusion",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-poor-lighting-or-occlusion.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": [],
+        "analysisDisposition": "rejected"
+      },
+      "coverageTags": ["poor_lighting_or_occlusion"],
+      "notes": "遮挡/光线差导致的硬拒绝样例",
+      "reviewerNotes": "主要观察 poor_lighting_or_occlusion 是否仍为首个硬拒绝原因"
     },
     {
       "id": "clear-boundary-analyzable",
@@ -67,6 +108,7 @@
         "majorIssueLabels": ["repeatability_gap"],
         "analysisDisposition": "analyzable"
       },
+      "coverageTags": ["weak_preparation"],
       "notes": "接近阈值但仍可出报告",
       "reviewerNotes": "主要观察边界样例是否仍保持 analyzable"
     },
@@ -81,6 +123,7 @@
         "majorIssueLabels": [],
         "analysisDisposition": "rejected"
       },
+      "coverageTags": ["stable_preparation"],
       "notes": "coverage 边界拒绝样例",
       "reviewerNotes": "主要观察 insufficient_pose_coverage 是否仍为硬拒绝"
     }

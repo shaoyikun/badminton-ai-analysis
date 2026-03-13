@@ -12,6 +12,7 @@ make run
 make test
 make build
 make verify
+make evaluate
 ```
 
 补充命令：
@@ -30,6 +31,7 @@ make down
 - `make dev`：强制本地开发路径
 - `make verify`：严格交付门禁，默认包含 Docker Compose 构建校验
 - `make verify-local`：本地快速校验，只用于无 Docker daemon 的临时验证
+- `make evaluate`：clear-only 离线评测入口，默认对比 checked-in baseline 并在 drift 时返回非零
 
 ## 最小部署步骤
 
@@ -105,6 +107,7 @@ make down
 - `make test` 通过
   - 包括 backend 自动化测试、frontend Playwright H5 UI 自动化测试、analysis-service 轻量测试
 - `make build` 通过
+- 若改动触及评分、阈值、pose summary 契约、fixtures 或 baseline，`make evaluate` 通过
 - `make verify` 在有 Docker daemon 的环境中通过
 - 根 README、`.env.example`、`Makefile`、脚本、子系统 README 的命令和环境变量说明一致
 - 如有跳过项、残留风险或临时开关，已在交付说明中明确
@@ -155,6 +158,22 @@ curl -X POST http://127.0.0.1:8787/api/tasks/<taskId>/start
 curl http://127.0.0.1:8787/api/tasks/<taskId>
 curl http://127.0.0.1:8787/api/tasks/<taskId>/result
 ```
+
+## 离线评测回归
+
+以下改动默认必须补跑 `make evaluate`：
+
+- `backend/src/services/reportScoringService.ts` 中的评分、阈值、fallback 逻辑
+- pose summary / rejection reason / `debugCounts` 契约变动
+- fixture / baseline / evaluation summary 逻辑变动
+- 任何会影响 `analysisDisposition`、`issues`、`rejectionReasons`、`lowConfidenceReasons` 的改动
+
+回归判定约定：
+
+- `make evaluate` 默认在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTags` 时返回非零
+- `successRate` 定义为“非 `rejected` case / 全部 case”；`low_confidence` 仍视为任务完成
+- disposition match rate、top issue hit rate、`primaryErrorCode` 分布和 coverage tags 都应一起看
+- 只有在明确接受新行为时才允许执行 `./scripts/evaluate.sh --update-baseline`
 
 ## 环境变量口径
 

@@ -50,6 +50,8 @@ npm run dev
 - 这个脚本不会改动现有 API，只会直接读取 preprocess 目录、调用现有 Python pose CLI，并复用 backend 评分逻辑输出调试摘要
 - 适合在排查 `rejectionReasons`、逐帧 metrics 和 `scoringEvidence` 原始中间值时使用
 - `evaluate.sh` 会运行 `evaluation/fixtures/index.json` 中的离线评测集，并对比 checked-in baseline
+- 默认在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTags` 时返回非零
+- 只有明确接受新行为时，才应执行 `--update-baseline`
 
 ## 当前模块边界
 

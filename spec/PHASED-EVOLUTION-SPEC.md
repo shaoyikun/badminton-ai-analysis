@@ -6,9 +6,9 @@
 
 ### 当前结论
 
-- 当前项目状态：`phase_2_completed`
-- 当前已完成到：`Phase 2：分阶段报告`
-- 当前下一阶段：`Phase 3：离线评测基线`
+- 当前项目状态：`phase_3_completed`
+- 当前已完成到：`Phase 3：离线评测基线`
+- 当前下一阶段：`Phase 4：置信度与失败策略校准`
 - 当前下一阶段状态：`not_started`
 - 最后更新日期：`2026-03-13`
 
@@ -18,8 +18,8 @@
 | --- | --- | --- |
 | Phase 1 | `completed` | 动作阶段锚点、debug 可见性、测试与文档已完成 |
 | Phase 2 | `completed` | 分阶段报告、comparison 兼容策略、前端展示、测试与文档已完成 |
-| Phase 3 | `not_started` | 可开始建立 clear-only 的最小离线评测闭环 |
-| Phase 4 | `blocked` | 依赖 Phase 3 评测基线 |
+| Phase 3 | `completed` | clear-only 离线评测基线、fixture/baseline、文档与 gate 已完成 |
+| Phase 4 | `not_started` | 可开始基于离线基线校准拒绝/低置信阈值 |
 | Phase 5 | `blocked` | 依赖 clear 主链路评测稳定 |
 | Phase 6 | `blocked` | 依赖 smash 影子模式完成 |
 
@@ -60,12 +60,12 @@
 - `analysis-service` 已优先使用 Tasks `VIDEO` mode，并对关键点做时序平滑
 - 报告已拆分为“动作质量”和“证据置信度”两条线
 - backend report 已开始消费专项几何特征，不再只依赖旧版 `bodyTurnScore` / `racketArmLiftScore`
+- clear-only 离线评测基线、checked-in fixtures/baseline 与 `make evaluate` gate 已建立
 
 当前真正仍未完成、也是后续阶段要继续解决的问题：
 
 - 还没有稳定的动作阶段切分，`repeatability` 仍主要依赖全局聚合代理
 - 报告虽有专项特征，但还不能明确说明“哪一个动作阶段”出了问题
-- 还没有可复现的离线评测基线，无法稳定衡量拒绝率、低置信率和问题识别一致性
 - `smash` 仍处于关闭状态，不能在没有独立评测和独立规则的前提下重新开放
 
 相关现状主文档：

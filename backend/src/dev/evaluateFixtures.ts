@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { evaluateFixtureSuite, renderEvaluationSummary, writeBaselineFile } from './evaluation';
+import { evaluateFixtureSuite, getEvaluationGateFailures, renderEvaluationSummary, writeBaselineFile } from './evaluation';
 
-function parseArgs(argv: string[]) {
+export function parseArgs(argv: string[]) {
   let json = false;
   let updateBaseline = false;
   let indexPath: string | undefined;
@@ -27,34 +27,54 @@ function parseArgs(argv: string[]) {
   return { json, updateBaseline, indexPath };
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const { report, baseline, baselinePath, indexPath } = await evaluateFixtureSuite({
+type CliDependencies = {
+  evaluateFixtureSuiteImpl?: typeof evaluateFixtureSuite;
+  writeBaselineFileImpl?: typeof writeBaselineFile;
+  stdout?: (message: string) => void;
+};
+
+export async function runEvaluateFixturesCli(argv: string[], dependencies: CliDependencies = {}) {
+  const args = parseArgs(argv);
+  const evaluateFixtureSuiteImpl = dependencies.evaluateFixtureSuiteImpl ?? evaluateFixtureSuite;
+  const writeBaselineFileImpl = dependencies.writeBaselineFileImpl ?? writeBaselineFile;
+  const stdout = dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
+  const { report, baseline, baselinePath, indexPath } = await evaluateFixtureSuiteImpl({
     indexPath: args.indexPath ? path.resolve(args.indexPath) : undefined,
   });
 
   if (args.updateBaseline) {
-    writeBaselineFile(baselinePath, baseline);
+    writeBaselineFileImpl(baselinePath, baseline);
   }
 
   if (args.json) {
-    console.log(JSON.stringify({
+    stdout(JSON.stringify({
       indexPath,
       baselinePath,
       report,
       baselineUpdated: args.updateBaseline,
     }, null, 2));
-    return;
+  } else {
+    stdout(renderEvaluationSummary(report));
+    stdout('');
+    stdout(`- indexPath: ${indexPath}`);
+    stdout(`- baselinePath: ${baselinePath}`);
+    stdout(`- baselineUpdated: ${args.updateBaseline ? 'yes' : 'no'}`);
   }
 
-  console.log(renderEvaluationSummary(report));
-  console.log('');
-  console.log(`- indexPath: ${indexPath}`);
-  console.log(`- baselinePath: ${baselinePath}`);
-  console.log(`- baselineUpdated: ${args.updateBaseline ? 'yes' : 'no'}`);
+  if (args.updateBaseline) {
+    return 0;
+  }
+
+  return getEvaluationGateFailures(report).length > 0 ? 1 : 0;
 }
 
-void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+async function main() {
+  process.exitCode = await runEvaluateFixturesCli(process.argv.slice(2));
+}
+
+if (require.main === module) {
+  void main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}
