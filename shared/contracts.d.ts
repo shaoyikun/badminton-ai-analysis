@@ -1,4 +1,4 @@
-export type ActionType = 'clear' | 'smash';
+export type ActionType = 'clear';
 
 export type ErrorCategory =
   | 'request_validation'
@@ -299,6 +299,8 @@ export interface PoseOverallSummary {
   medianBodyTurnScore: number;
   medianRacketArmLiftScore: number;
   scoreVariance: number;
+  temporalConsistency?: number;
+  motionContinuity?: number;
   rejectionReasons: FlowErrorCode[];
   rejectionReasonDetails?: PoseRejectionReasonDetail[];
   humanSummary: string;
@@ -346,6 +348,8 @@ export interface PoseInfo {
     medianBodyTurnScore?: number;
     medianRacketArmLiftScore?: number;
     scoreVariance?: number;
+    temporalConsistency?: number;
+    motionContinuity?: number;
     rejectionReasons?: FlowErrorCode[];
     rejectionReasonDetails?: PoseRejectionReasonDetail[];
     humanSummary?: string;
@@ -486,6 +490,8 @@ export interface ReportResult {
     medianBodyTurnScore?: number;
     medianRacketArmLiftScore?: number;
     scoreVariance?: number;
+    temporalConsistency?: number;
+    motionContinuity?: number;
     bestFrameIndex?: number | null;
     rejectionReasons?: FlowErrorCode[];
     dimensionScoresByKey?: Record<string, number>;

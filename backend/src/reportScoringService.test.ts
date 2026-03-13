@@ -132,6 +132,8 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       medianBodyTurnScore: 0.52,
       medianRacketArmLiftScore: 0.48,
       scoreVariance: 0.011,
+      temporalConsistency: 0.725,
+      motionContinuity: 0.88,
       rejectionReasons: [],
       rejectionReasonDetails: [],
       humanSummary: '本次基于 8/12 帧稳定识别结果生成：已经能看到较稳定的侧身展开和挥拍臂上举。',
@@ -196,6 +198,8 @@ test('buildPoseSummary keeps specialized summary fields for downstream consumers
   const summary = buildPoseSummary(buildPoseResult());
 
   assert.equal(summary?.bestPreparationFrameIndex, 6);
+  assert.equal(summary?.temporalConsistency, 0.725);
+  assert.equal(summary?.motionContinuity, 0.88);
   assert.deepEqual(summary?.specializedFeatureSummary?.contactPreparationScore, {
     median: 0.63,
     peak: 0.81,
@@ -211,6 +215,8 @@ test('buildRuleBasedResult produces high-confidence report for a high-quality sa
   assert.equal(report.totalScore, 73);
   assert.equal(report.confidenceScore, 85);
   assert.equal(report.scoringEvidence?.analysisDisposition, 'analyzable');
+  assert.equal(report.scoringEvidence?.temporalConsistency, 0.725);
+  assert.equal(report.scoringEvidence?.motionContinuity, 0.88);
   assert.deepEqual(report.dimensionScores.map((item) => item.name), [
     '证据质量',
     '身体准备',

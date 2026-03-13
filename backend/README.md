@@ -46,8 +46,10 @@ npm run dev
 开发者调试脚本：
 
 - `./scripts/debug-algorithm-baseline.sh <preprocess-task-dir> [--format markdown|json]`
+- `./scripts/evaluate.sh [--json] [--update-baseline]`
 - 这个脚本不会改动现有 API，只会直接读取 preprocess 目录、调用现有 Python pose CLI，并复用 backend 评分逻辑输出调试摘要
 - 适合在排查 `rejectionReasons`、逐帧 metrics 和 `scoringEvidence` 原始中间值时使用
+- `evaluate.sh` 会运行 `evaluation/fixtures/index.json` 中的离线评测集，并对比 checked-in baseline
 
 ## 当前模块边界
 

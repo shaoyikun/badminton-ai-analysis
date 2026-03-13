@@ -1,0 +1,88 @@
+{
+  "fixtures": [
+    {
+      "id": "clear-normal",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-normal.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": [],
+        "analysisDisposition": "analyzable"
+      },
+      "notes": "高质量 clear 正常样例",
+      "reviewerNotes": "默认回归集保持 artifact-only，可在本地另行追加 video smoke case"
+    },
+    {
+      "id": "clear-under-rotation",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-under-rotation.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["body_preparation_gap"],
+        "analysisDisposition": "analyzable"
+      },
+      "notes": "clear 转体不足",
+      "reviewerNotes": "主要观察 body_preparation_gap 是否仍命中"
+    },
+    {
+      "id": "clear-racket-arm-prep-gap",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-racket-arm-prep-gap.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["racket_arm_preparation_gap"],
+        "analysisDisposition": "analyzable"
+      },
+      "notes": "挥拍臂准备不足",
+      "reviewerNotes": "主要观察 arm preparation 问题是否仍排在前列"
+    },
+    {
+      "id": "clear-bad-camera",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-bad-camera.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "poor",
+        "majorIssueLabels": ["evidence_quality_gap"],
+        "analysisDisposition": "low_confidence"
+      },
+      "notes": "机位不佳/前斜视角",
+      "reviewerNotes": "主要观察 invalid_camera_angle 与 low_confidence 是否稳定出现"
+    },
+    {
+      "id": "clear-boundary-analyzable",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-boundary-analyzable.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["repeatability_gap"],
+        "analysisDisposition": "analyzable"
+      },
+      "notes": "接近阈值但仍可出报告",
+      "reviewerNotes": "主要观察边界样例是否仍保持 analyzable"
+    },
+    {
+      "id": "clear-boundary-rejected",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-boundary-rejected.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": [],
+        "analysisDisposition": "rejected"
+      },
+      "notes": "coverage 边界拒绝样例",
+      "reviewerNotes": "主要观察 insufficient_pose_coverage 是否仍为硬拒绝"
+    }
+  ]
+}

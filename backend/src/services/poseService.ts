@@ -19,6 +19,8 @@ export function buildPoseSummary(result: PoseAnalysisResult): PoseInfo['summary'
     medianBodyTurnScore: result.summary?.medianBodyTurnScore,
     medianRacketArmLiftScore: result.summary?.medianRacketArmLiftScore,
     scoreVariance: result.summary?.scoreVariance,
+    temporalConsistency: result.summary?.temporalConsistency,
+    motionContinuity: result.summary?.motionContinuity,
     rejectionReasons: result.summary?.rejectionReasons,
     rejectionReasonDetails: result.summary?.rejectionReasonDetails,
     humanSummary: result.summary?.humanSummary,

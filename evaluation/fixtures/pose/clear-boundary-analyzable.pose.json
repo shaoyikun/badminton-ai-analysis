@@ -1,0 +1,43 @@
+{
+  "engine": "mediapipe-pose",
+  "frameCount": 10,
+  "detectedFrameCount": 8,
+  "summary": {
+    "bestFrameIndex": 4,
+    "bestPreparationFrameIndex": 4,
+    "usableFrameCount": 6,
+    "coverageRatio": 0.6,
+    "medianStabilityScore": 0.73,
+    "medianBodyTurnScore": 0.57,
+    "medianRacketArmLiftScore": 0.54,
+    "scoreVariance": 0.018,
+    "temporalConsistency": 0.55,
+    "motionContinuity": 0.62,
+    "rejectionReasons": [],
+    "rejectionReasonDetails": [],
+    "humanSummary": "边界但仍可分析样例。",
+    "viewProfile": "right_side",
+    "viewConfidence": 0.78,
+    "viewStability": 0.72,
+    "dominantRacketSide": "right",
+    "racketSideConfidence": 0.66,
+    "specializedFeatureSummary": {
+      "sideOnReadinessScore": { "median": 0.58, "peak": 0.7, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "shoulderHipRotationScore": { "median": 0.54, "peak": 0.66, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "trunkCoilScore": { "median": 0.56, "peak": 0.68, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "hittingArmPreparationScore": { "median": 0.55, "peak": 0.67, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "wristAboveShoulderConfidence": { "median": 0.53, "peak": 0.64, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "racketSideElbowHeightScore": { "median": 0.52, "peak": 0.62, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "elbowExtensionScore": { "median": 0.49, "peak": 0.59, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 },
+      "contactPreparationScore": { "median": 0.46, "peak": 0.58, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 4 }
+    },
+    "debugCounts": {
+      "tooSmallCount": 0,
+      "lowStabilityCount": 0,
+      "unknownViewCount": 0,
+      "usableFrameCount": 6,
+      "detectedFrameCount": 8
+    }
+  },
+  "frames": []
+}

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-03-13T04:03:10.216Z",
+  "fixtures": {
+    "clear-normal": {
+      "analysisDisposition": "analyzable",
+      "rejectionReasons": [],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [
+        "repeatability_gap"
+      ],
+      "totalScore": 80,
+      "confidenceScore": 87,
+      "scoreVariance": 0.007,
+      "temporalConsistency": 0.825,
+      "motionContinuity": 0.93,
+      "fallbacksUsed": []
+    },
+    "clear-under-rotation": {
+      "analysisDisposition": "analyzable",
+      "rejectionReasons": [],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [
+        "body_preparation_gap"
+      ],
+      "totalScore": 67,
+      "confidenceScore": 86,
+      "scoreVariance": 0.008,
+      "temporalConsistency": 0.8,
+      "motionContinuity": 0.91,
+      "fallbacksUsed": []
+    },
+    "clear-racket-arm-prep-gap": {
+      "analysisDisposition": "analyzable",
+      "rejectionReasons": [],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [
+        "racket_arm_preparation_gap"
+      ],
+      "totalScore": 66,
+      "confidenceScore": 86,
+      "scoreVariance": 0.009,
+      "temporalConsistency": 0.775,
+      "motionContinuity": 0.89,
+      "fallbacksUsed": []
+    },
+    "clear-bad-camera": {
+      "analysisDisposition": "low_confidence",
+      "rejectionReasons": [
+        "invalid_camera_angle"
+      ],
+      "lowConfidenceReasons": [
+        "insufficient_action_evidence",
+        "invalid_camera_angle"
+      ],
+      "topIssueLabels": [
+        "evidence_quality_gap",
+        "body_preparation_gap",
+        "racket_arm_preparation_gap"
+      ],
+      "totalScore": 63,
+      "confidenceScore": 69,
+      "scoreVariance": 0.035,
+      "temporalConsistency": 0.125,
+      "motionContinuity": 0.42,
+      "fallbacksUsed": []
+    },
+    "clear-boundary-analyzable": {
+      "analysisDisposition": "analyzable",
+      "rejectionReasons": [],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [
+        "body_preparation_gap",
+        "racket_arm_preparation_gap",
+        "repeatability_gap"
+      ],
+      "totalScore": 66,
+      "confidenceScore": 81,
+      "scoreVariance": 0.018,
+      "temporalConsistency": 0.55,
+      "motionContinuity": 0.62,
+      "fallbacksUsed": []
+    },
+    "clear-boundary-rejected": {
+      "analysisDisposition": "rejected",
+      "rejectionReasons": [
+        "insufficient_pose_coverage"
+      ],
+      "lowConfidenceReasons": [],
+      "topIssueLabels": [],
+      "totalScore": null,
+      "confidenceScore": null,
+      "scoreVariance": 0.022,
+      "temporalConsistency": 0.45,
+      "motionContinuity": 0.5,
+      "fallbacksUsed": []
+    }
+  }
+}

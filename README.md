@@ -18,6 +18,7 @@ make run
 make test
 make build
 make verify
+make evaluate
 ```
 
 - `make run`：稳定启动命令，优先走 Docker Compose，无法使用 Docker 时回退到本地开发模式
@@ -79,6 +80,7 @@ make setup
 | `make build` | 运行生产构建 | backend + frontend + Python 编译校验 |
 | `make verify` | 严格交付门禁 | 需要可用 Docker daemon |
 | `make verify-local` | 本地快速校验 | 跳过 Docker Compose 构建检查 |
+| `make evaluate` | 运行离线评测 fixtures | 对比 checked-in baseline，适合算法回归 |
 | `make logs` | 查看 Docker Compose 日志 | 仅 Docker 路径可用 |
 | `make down` | 停止 Docker Compose 服务 | 仅 Docker 路径可用 |
 
@@ -194,6 +196,16 @@ curl http://127.0.0.1:5173/health
 - 需要排障时可使用 `make logs`
 
 更完整的交付检查、回归路径和故障排查见 [docs/engineering/DELIVERY-BASELINE.md](docs/engineering/DELIVERY-BASELINE.md)。
+
+## 离线评测
+
+仓库提供最小离线评测框架，用于量化算法和规则改动：
+
+```bash
+make evaluate
+```
+
+它会读取 `evaluation/fixtures/index.json`，回放 video / preprocess / pose fixtures，并与 `evaluation/baseline.json` 对比。如何新增样本、刷新 baseline 和解读指标见 [evaluation/README.md](evaluation/README.md)。
 
 ## 验收清单与回归路径
 

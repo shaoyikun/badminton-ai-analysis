@@ -9,8 +9,7 @@
     "supportedExtensions": [".mp4", ".mov", ".m4v", ".webm"],
     "recommendedAngles": ["侧后方", "正后方"],
     "supportedActionLabels": {
-      "clear": "正手高远球",
-      "smash": "杀球"
+      "clear": "正手高远球"
     },
     "captureChecklist": [
       "当前正式分析仅支持正手高远球",
@@ -24,8 +23,8 @@
   "errorCatalog": {
     "unsupported_action_scope": {
       "title": "当前动作暂不支持正式分析",
-      "summary": "这版 MVP 目前只支持正手高远球的正式分析。",
-      "explanation": "为了保证结果可信度，当前系统先把能力范围收窄到正手高远球，其他动作暂不进入正式分析链路。",
+      "summary": "这版 MVP 当前只开放正手高远球的正式分析。",
+      "explanation": "为了保证结果可信度，当前系统正式收敛为正手高远球单动作分析；其他动作先保留为未来扩展，不进入正式报告链路。",
       "suggestions": [
         "切换为正手高远球再继续上传",
         "如果你要验证链路，优先准备一段侧后方拍摄的高远球视频",

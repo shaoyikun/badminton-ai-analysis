@@ -1,0 +1,43 @@
+{
+  "engine": "mediapipe-pose",
+  "frameCount": 12,
+  "detectedFrameCount": 9,
+  "summary": {
+    "bestFrameIndex": 5,
+    "bestPreparationFrameIndex": 5,
+    "usableFrameCount": 8,
+    "coverageRatio": 0.6667,
+    "medianStabilityScore": 0.64,
+    "medianBodyTurnScore": 0.55,
+    "medianRacketArmLiftScore": 0.5,
+    "scoreVariance": 0.035,
+    "temporalConsistency": 0.125,
+    "motionContinuity": 0.42,
+    "rejectionReasons": ["invalid_camera_angle"],
+    "rejectionReasonDetails": [],
+    "humanSummary": "机位较差样例。",
+    "viewProfile": "front_right_oblique",
+    "viewConfidence": 0.2,
+    "viewStability": 0.22,
+    "dominantRacketSide": "right",
+    "racketSideConfidence": 0.58,
+    "specializedFeatureSummary": {
+      "sideOnReadinessScore": { "median": 0.51, "peak": 0.61, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "shoulderHipRotationScore": { "median": 0.47, "peak": 0.58, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "trunkCoilScore": { "median": 0.45, "peak": 0.56, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "hittingArmPreparationScore": { "median": 0.54, "peak": 0.65, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "wristAboveShoulderConfidence": { "median": 0.52, "peak": 0.63, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "racketSideElbowHeightScore": { "median": 0.48, "peak": 0.6, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "elbowExtensionScore": { "median": 0.46, "peak": 0.58, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 },
+      "contactPreparationScore": { "median": 0.52, "peak": 0.67, "observableFrameCount": 8, "observableCoverage": 1, "peakFrameIndex": 5 }
+    },
+    "debugCounts": {
+      "tooSmallCount": 0,
+      "lowStabilityCount": 0,
+      "unknownViewCount": 7,
+      "usableFrameCount": 8,
+      "detectedFrameCount": 9
+    }
+  },
+  "frames": []
+}

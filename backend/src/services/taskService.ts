@@ -24,6 +24,8 @@ import { buildErrorSnapshot } from './errorCatalog';
 import { createTask as createTaskEntry, findLatestCompletedTask, getReportRow, getTask, listCompletedHistory, listProcessingTasks, saveReport, saveTask } from './taskRepository';
 import { toTaskResource } from '../types/task';
 
+type RecognizedActionType = ActionType | 'smash';
+
 function clampDelta(value: number) {
   return Math.round(value);
 }
@@ -49,7 +51,7 @@ function getUploadBaseName(fileName: string) {
 }
 
 function getActionLabel(actionType: ActionType) {
-  return actionType === 'smash' ? '杀球' : '正手高远球';
+  return '正手高远球';
 }
 
 function uniqueNames(names: Array<string | undefined>) {
@@ -210,17 +212,17 @@ function readReport(taskId: string) {
   return row ? JSON.parse(row.report_json) as ReportResult : undefined;
 }
 
-function validateActionType(actionType: string): actionType is ActionType {
+function validateActionType(actionType: string): actionType is RecognizedActionType {
   return actionType === 'clear' || actionType === 'smash';
 }
 
-export function assertActionType(actionType: string): asserts actionType is ActionType {
+export function assertActionType(actionType: string): asserts actionType is RecognizedActionType {
   if (!validateActionType(actionType)) {
     throw Object.assign(new Error('invalid action type'), { code: 'invalid_action_type' as const });
   }
 }
 
-export function assertSupportedActionType(actionType: ActionType) {
+export function assertSupportedActionType(actionType: RecognizedActionType): asserts actionType is ActionType {
   if (actionType !== 'clear') {
     throw Object.assign(new Error('only clear is supported in the current MVP'), { code: 'unsupported_action_scope' as const });
   }

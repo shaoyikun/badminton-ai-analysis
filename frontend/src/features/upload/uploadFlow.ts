@@ -40,14 +40,6 @@ export const ACTION_GUIDE_COPY: Record<ActionType, { title: string; checklist: s
       '击球点前后不要被裁切，整套动作保持连贯',
     ],
   },
-  smash: {
-    title: '杀球拍摄重点',
-    checklist: [
-      '尽量保留高点准备、起跳或伸展、击球、收拍全过程',
-      '画面里要能看清身体联动和击球后的平衡',
-      '优先保证最高点击球附近的动作细节清晰可见',
-    ],
-  },
 }
 
 const ACTION_TARGET_COPY: Record<FlowActionTarget, { label: string; to: string }> = {

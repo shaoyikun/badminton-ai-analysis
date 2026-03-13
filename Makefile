@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help setup run dev up up-build down logs compose-up compose-logs compose-logs-backend compose-logs-frontend compose-down compose-ps test build verify verify-local lint
+.PHONY: help setup run dev up up-build down logs compose-up compose-logs compose-logs-backend compose-logs-frontend compose-down compose-ps test build verify verify-local lint evaluate
 
 help:
 	@printf "Repository commands for badminton-ai-analysis\n\n"
@@ -12,6 +12,7 @@ help:
 	@printf "  make build         Build backend/frontend and compile Python sources.\n"
 	@printf "  make verify        Run the strict handoff gate, including Docker Compose builds.\n"
 	@printf "  make verify-local  Run the local-only gate and skip Docker Compose build verification.\n"
+	@printf "  make evaluate      Run the offline evaluation fixtures and compare against the checked-in baseline.\n"
 	@printf "  make logs          Stream Docker Compose logs.\n"
 	@printf "  make down          Stop Docker Compose services.\n"
 
@@ -65,6 +66,9 @@ verify:
 
 verify-local:
 	SKIP_DOCKER_VERIFY=1 ./scripts/verify.sh
+
+evaluate:
+	./scripts/evaluate.sh
 
 lint:
 	cd frontend && npm run lint

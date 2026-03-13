@@ -1,7 +1,8 @@
 import type { ActionType, ReportResult, RetestComparison, TaskHistoryItem } from '../../hooks/useAnalysisTask'
 
 export function getActionTypeLabel(actionType: ActionType) {
-  return actionType === 'smash' ? '杀球' : '正手高远球'
+  void actionType
+  return '正手高远球'
 }
 
 export function getValidBaselineItem(history: TaskHistoryItem[], selectedCompareTaskId: string) {

@@ -119,6 +119,26 @@ test('create task rejects unsupported action scope', async (t) => {
   });
 });
 
+test('create task rejects unknown action type as invalid', async (t) => {
+  await withTempWorkspace(async () => {
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'drop' },
+    });
+
+    assert.equal(response.statusCode, 400);
+    const payload = response.json() as { error?: { code?: string; category?: string } };
+    assert.equal(payload.error?.code, 'invalid_action_type');
+    assert.equal(payload.error?.category, 'request_validation');
+  });
+});
+
 test('start endpoint triggers worker and task status exposes unified error object', async (t) => {
   await withTempWorkspace(async () => {
     const app = await buildServer();

@@ -1390,7 +1390,7 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
     visualEvidence,
     standardComparison: buildStandardComparison(rankedIssues, poseResult.summary),
     scoringEvidence: {
-      scoringModelVersion: SCORING_MODEL_VERSION,
+    scoringModelVersion: SCORING_MODEL_VERSION,
       analysisDisposition,
       frameCount: poseResult.frameCount,
       detectedFrameCount: poseResult.detectedFrameCount,
@@ -1400,6 +1400,8 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
       medianBodyTurnScore: poseResult.summary.medianBodyTurnScore,
       medianRacketArmLiftScore: poseResult.summary.medianRacketArmLiftScore,
       scoreVariance: poseResult.summary.scoreVariance,
+      temporalConsistency: poseResult.summary.temporalConsistency,
+      motionContinuity: poseResult.summary.motionContinuity,
       bestFrameIndex: poseResult.summary.bestFrameIndex,
       rejectionReasons: poseResult.summary.rejectionReasons,
       dimensionScoresByKey: publicScores,
