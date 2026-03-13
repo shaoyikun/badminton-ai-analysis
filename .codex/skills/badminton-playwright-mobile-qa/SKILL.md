@@ -68,6 +68,7 @@ description: Use when writing or updating mobile-first Playwright coverage for t
 
 ## 何时联动其他 skills
 
+- `mobile-ui-interaction-design`：需要把 Playwright 验证进一步用于截图 review、视觉层级复核和 UI polish 时
 - `badminton-h5-product-ui`：页面产品化后需要补测试
 - `badminton-analysis-flow`：上传、选片、处理状态变化
 - `shared-contracts-and-adapters`：mock 数据需要跟共享契约同步

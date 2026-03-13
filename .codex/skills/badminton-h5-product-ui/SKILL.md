@@ -79,6 +79,7 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
 
 ## 何时联动其他 skills
 
+- `mobile-ui-interaction-design`：需要主动做交互体检、组件选型校正、截图 review 或结构化自评时
 - `badminton-analysis-flow`：页面改动涉及上传粗扫、片段选择、处理中状态流转
 - `shared-contracts-and-adapters`：报告、历史、进度需要前端 view model
 - `badminton-playwright-mobile-qa`：产品化改动需要补移动端 E2E

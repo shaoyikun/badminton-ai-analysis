@@ -49,16 +49,24 @@ Use the repo-local skills under `.codex/skills/` when their scope matches the ta
 
 Common umbrella skills to start with:
 
+- `change-startup-context-review`: default pre-change startup review; inspect existing repo truth and establish a startup conclusion before most development changes
 - `repo-maintainer`: repo automation, scripts, docs, AGENTS, onboarding, build/test/verify workflow changes
 - `analysis-pipeline`: upload, preprocess, pose, scoring, report, and frontend result flow changes
 
 Additional specialized skills also live alongside them under `.codex/skills/` for API contracts, analysis-flow state transitions, Python integration, H5 product UI, Playwright QA, docs/spec sync, evaluation/regression, delivery baseline, shared contracts/adapters, and skill evolution from new learnings or pitfalls.
+
+Frontend-facing specialized skills to prefer when UI work is involved:
+
+- `badminton-h5-product-ui`: page/productization baseline for the mobile H5 flow
+- `mobile-ui-interaction-design`: proactive UI interaction review, component selection, screenshot-driven polish, and structured UI self-review
+- `badminton-playwright-mobile-qa`: Playwright validation, mobile screenshots, and end-to-end UI verification
 
 Each skill folder uses `SKILL.md` as the source of truth and may include `examples/` for narrow implementation patterns.
 
 ## Working Agreements
 
 - Start by reading the relevant README, AGENTS instructions, and the touched subsystem before editing.
+- For most development changes, start with `change-startup-context-review` to inspect existing truth sources and form a brief startup conclusion before choosing a more specific skill.
 - Prefer updating existing scripts and docs over adding parallel alternatives.
 - When commands or env vars change, keep `README.md`, `.env.example`, `Makefile`, and relevant scripts in sync.
 - Keep `docs/engineering/DELIVERY-BASELINE.md` aligned with the actual run/test/build/verify workflow.
