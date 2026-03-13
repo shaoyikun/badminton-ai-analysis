@@ -48,16 +48,96 @@ function formatQualityFlag(flag: string) {
   }
 }
 
+function SegmentPreviewVideo({
+  src,
+  startTimeMs,
+  endTimeMs,
+  posterLabel,
+  emphasized = false,
+}: {
+  src: string
+  startTimeMs: number
+  endTimeMs: number
+  posterLabel: string
+  emphasized?: boolean
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const startSeconds = Math.max(0, startTimeMs / 1000)
+  const endSeconds = Math.max(startSeconds + 0.12, endTimeMs / 1000)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !src) return
+
+    let cancelled = false
+
+    const seekToSegmentStart = () => {
+      if (!video || cancelled) return
+      try {
+        video.currentTime = startSeconds
+      } catch {
+        // Ignore early seek failures until metadata is ready.
+      }
+    }
+
+    const keepLoopingInsideSegment = () => {
+      if (video.currentTime >= endSeconds) {
+        video.currentTime = startSeconds
+      }
+    }
+
+    const tryPlay = async () => {
+      try {
+        await video.play()
+      } catch {
+        // Mobile browsers may block autoplay; controls are intentionally hidden.
+      }
+    }
+
+    video.pause()
+    seekToSegmentStart()
+
+    video.addEventListener('loadedmetadata', seekToSegmentStart)
+    video.addEventListener('timeupdate', keepLoopingInsideSegment)
+    video.addEventListener('canplay', tryPlay)
+
+    return () => {
+      cancelled = true
+      video.removeEventListener('loadedmetadata', seekToSegmentStart)
+      video.removeEventListener('timeupdate', keepLoopingInsideSegment)
+      video.removeEventListener('canplay', tryPlay)
+      video.pause()
+    }
+  }, [endSeconds, src, startSeconds])
+
+  return (
+    <div className={`segment-preview ${emphasized ? 'emphasized' : ''}`}>
+      <video
+        ref={videoRef}
+        autoPlay
+        disablePictureInPicture
+        muted
+        playsInline
+        preload="metadata"
+        src={src}
+      />
+      <span className="segment-preview-label">{posterLabel}</span>
+    </div>
+  )
+}
+
 function SegmentSelectionCard({
   segments,
   recommendedSegmentId,
   selectedSegmentId,
   onSelect,
+  previewUrl,
 }: {
   segments: SwingSegmentCandidate[]
   recommendedSegmentId?: string
   selectedSegmentId: string
   onSelect: (segmentId: string) => void
+  previewUrl: string
 }) {
   const activeSegment =
     segments.find((segment) => segment.segmentId === selectedSegmentId) ??
@@ -98,6 +178,14 @@ function SegmentSelectionCard({
               onClick={() => onSelect(segment.segmentId)}
               type="button"
             >
+              {previewUrl ? (
+                <SegmentPreviewVideo
+                  src={previewUrl}
+                  startTimeMs={segment.startTimeMs}
+                  endTimeMs={segment.endTimeMs}
+                  posterLabel={`${formatSegmentTimestamp(segment.startTimeMs)} - ${formatSegmentTimestamp(segment.endTimeMs)}`}
+                />
+              ) : null}
               <strong>{segment.segmentId}</strong>
               <span>{formatSegmentTimestamp(segment.startTimeMs)} - {formatSegmentTimestamp(segment.endTimeMs)}</span>
               {segment.segmentId === recommendedSegmentId ? <em>推荐</em> : null}
@@ -109,6 +197,15 @@ function SegmentSelectionCard({
 
       {activeSegment ? (
         <div className="segment-detail-card">
+          {previewUrl ? (
+            <SegmentPreviewVideo
+              src={previewUrl}
+              startTimeMs={activeSegment.startTimeMs}
+              endTimeMs={activeSegment.endTimeMs}
+              posterLabel={`当前选中片段预览 · ${formatSegmentTimestamp(activeSegment.startTimeMs)} - ${formatSegmentTimestamp(activeSegment.endTimeMs)}`}
+              emphasized
+            />
+          ) : null}
           <div className="segment-detail-head">
             <div>
               <strong>{activeSegment.segmentId}</strong>
@@ -285,6 +382,7 @@ export function UploadPage() {
             recommendedSegmentId={segmentScan?.recommendedSegmentId}
             selectedSegmentId={selectedSegmentId}
             onSelect={setSelectedSegmentId}
+            previewUrl={previewUrl}
           />
         </section>
       ) : null}
