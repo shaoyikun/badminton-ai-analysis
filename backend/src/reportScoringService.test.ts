@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { AnalysisTaskRecord, PoseAnalysisResult } from './types/task';
 import { buildRuleBasedResult, getPoseQualityFailure } from './services/reportScoringService';
+import { buildPoseSummary } from './services/poseService';
 
 function buildTask(): AnalysisTaskRecord {
   const now = new Date().toISOString();
@@ -68,6 +69,16 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       viewStability: 0.75,
       dominantRacketSide: 'right',
       racketSideConfidence: 0.71,
+      bestPreparationFrameIndex: 6,
+      specializedFeatureSummary: {
+        contactPreparationScore: {
+          median: 0.63,
+          peak: 0.81,
+          observableFrameCount: 8,
+          observableCoverage: 1,
+          peakFrameIndex: 6,
+        },
+      },
       bestFrameOverlayRelativePath: 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg',
       overlayFrameCount: 1,
       debugCounts: {
@@ -115,6 +126,19 @@ test('getPoseQualityFailure returns the first rejection reason', () => {
   assert.deepEqual(failure, {
     code: 'insufficient_pose_coverage',
     message: 'stable pose coverage is below the minimum report threshold',
+  });
+});
+
+test('buildPoseSummary keeps specialized summary fields for downstream consumers', () => {
+  const summary = buildPoseSummary(buildPoseResult());
+
+  assert.equal(summary?.bestPreparationFrameIndex, 6);
+  assert.deepEqual(summary?.specializedFeatureSummary?.contactPreparationScore, {
+    median: 0.63,
+    peak: 0.81,
+    observableFrameCount: 8,
+    observableCoverage: 1,
+    peakFrameIndex: 6,
   });
 });
 

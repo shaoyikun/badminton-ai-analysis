@@ -172,14 +172,25 @@ function formatDebugValue(value: unknown) {
   return JSON.stringify(value);
 }
 
+function formatObservableFeatureCount(metrics: PoseAnalysisResult['frames'][number]['metrics']) {
+  const observability = metrics?.debug?.specialized?.observability;
+  if (!observability) return '—';
+  const entries = Object.values(observability);
+  if (!entries.length) return '0';
+  return `${entries.filter((entry) => entry?.observable).length}/${entries.length}`;
+}
+
 export function renderAlgorithmBaselineMarkdown(snapshot: AlgorithmBaselineDebugSnapshot) {
   const summary = snapshot.poseResult.summary;
   const frameLines = snapshot.poseResult.frames.map((frame) => {
     const metrics = frame.metrics;
-    return `| ${frame.frameIndex} | ${frame.status} | ${frame.viewProfile ?? 'unknown'} | ${frame.dominantRacketSide ?? 'unknown'} | ${formatDebugValue(metrics?.stabilityScore)} | ${formatDebugValue(metrics?.bodyTurnScore)} | ${formatDebugValue(metrics?.racketArmLiftScore)} | ${formatDebugValue(metrics?.subjectScale)} | ${formatDebugValue(metrics?.compositeScore)} | ${formatDebugValue(metrics?.debug?.statusReasons?.join(', '))} |`;
+    return `| ${frame.frameIndex} | ${frame.status} | ${frame.viewProfile ?? 'unknown'} | ${frame.dominantRacketSide ?? 'unknown'} | ${formatDebugValue(metrics?.stabilityScore)} | ${formatDebugValue(metrics?.bodyTurnScore)} | ${formatDebugValue(metrics?.racketArmLiftScore)} | ${formatDebugValue(metrics?.specialized?.trunkCoilScore)} | ${formatDebugValue(metrics?.specialized?.hittingArmPreparationScore)} | ${formatDebugValue(metrics?.specialized?.headStabilityScore)} | ${formatDebugValue(metrics?.specialized?.contactPreparationScore)} | ${formatObservableFeatureCount(metrics)} | ${formatDebugValue(metrics?.compositeScore)} | ${formatDebugValue(metrics?.debug?.statusReasons?.join(', '))} |`;
   });
   const rejectionLines = (summary.rejectionReasonDetails ?? []).map((detail) => (
     `| ${detail.code} | ${detail.triggered ? 'yes' : 'no'} | ${formatDebugValue(detail.observed)} | ${formatDebugValue(detail.threshold)} | ${detail.comparator} | ${detail.explanation} |`
+  ));
+  const specializedSummaryLines = Object.entries(summary.specializedFeatureSummary ?? {}).map(([featureName, featureSummary]) => (
+    `| ${featureName} | ${formatDebugValue(featureSummary.median)} | ${formatDebugValue(featureSummary.peak)} | ${formatDebugValue(featureSummary.observableFrameCount)} | ${formatDebugValue(featureSummary.observableCoverage)} | ${formatDebugValue(featureSummary.peakFrameIndex)} |`
   ));
 
   return [
@@ -198,6 +209,7 @@ export function renderAlgorithmBaselineMarkdown(snapshot: AlgorithmBaselineDebug
     `- medianStabilityScore: ${formatDebugValue(summary.medianStabilityScore)}`,
     `- medianBodyTurnScore: ${formatDebugValue(summary.medianBodyTurnScore)}`,
     `- medianRacketArmLiftScore: ${formatDebugValue(summary.medianRacketArmLiftScore)}`,
+    `- bestPreparationFrameIndex: ${formatDebugValue(summary.bestPreparationFrameIndex)}`,
     `- scoreVariance: ${formatDebugValue(summary.scoreVariance)}`,
     `- bestFrameIndex: ${formatDebugValue(summary.bestFrameIndex)}`,
     `- rejectionReasons: ${summary.rejectionReasons.length > 0 ? summary.rejectionReasons.join(', ') : 'none'}`,
@@ -208,11 +220,17 @@ export function renderAlgorithmBaselineMarkdown(snapshot: AlgorithmBaselineDebug
     '| --- | --- | --- | --- | --- | --- |',
     ...(rejectionLines.length > 0 ? rejectionLines : ['| none | no | — | — | — | No rejection rules were evaluated. |']),
     '',
+    '## Specialized Feature Summary',
+    '',
+    '| feature | median | peak | observableFrames | observableCoverage | peakFrameIndex |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...(specializedSummaryLines.length > 0 ? specializedSummaryLines : ['| none | — | — | — | — | — |']),
+    '',
     '## Per-frame Metrics',
     '',
-    '| frame | status | view | racketSide | stability | turn | lift | subjectScale | composite | statusReasons |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    ...(frameLines.length > 0 ? frameLines : ['| — | — | — | — | — | — | — | — | — | — |']),
+    '| frame | status | view | racketSide | stability | turn | lift | trunkCoil | armPrep | head | contactPrep | observable | composite | statusReasons |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...(frameLines.length > 0 ? frameLines : ['| — | — | — | — | — | — | — | — | — | — | — | — | — | — |']),
     '',
     '## Report Summary',
     '',

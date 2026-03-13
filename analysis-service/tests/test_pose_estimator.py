@@ -7,6 +7,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from typing import Optional
 from unittest import mock
 
 try:
@@ -39,7 +40,15 @@ def make_point(name: str, x: float, y: float, z: float = 0.0, visibility: float 
     }
 
 
-def make_keypoints(view: str = "rear_left_oblique", racket_side: str = "right", wrist_jitter: float = 0.0):
+def make_keypoints(
+    view: str = "rear_left_oblique",
+    racket_side: str = "right",
+    wrist_jitter: float = 0.0,
+    arm_extension: float = 0.0,
+    elbow_raise: float = 0.0,
+    wrist_raise: float = 0.0,
+    hide_non_racket_arm: bool = False,
+):
     if view == "front":
         left_shoulder = make_point("left_shoulder", 0.34, 0.32, 0.02)
         right_shoulder = make_point("right_shoulder", 0.66, 0.32, -0.02)
@@ -63,6 +72,19 @@ def make_keypoints(view: str = "rear_left_oblique", racket_side: str = "right", 
     right_elbow = make_point("right_elbow", 0.69, 0.30 if racket_side == "right" else 0.42, -0.08)
     left_wrist = make_point("left_wrist", 0.26, 0.47 if racket_side == "right" else 0.16, 0.08)
     right_wrist = make_point("right_wrist", 0.74, (0.16 if racket_side == "right" else 0.47) + wrist_jitter, -0.12)
+
+    if racket_side == "right":
+        right_elbow = make_point("right_elbow", 0.69 + arm_extension, max(0.12, right_elbow["y"] - elbow_raise), -0.08)
+        right_wrist = make_point("right_wrist", 0.74 + arm_extension, max(0.06, right_wrist["y"] - wrist_raise) + wrist_jitter, -0.12)
+        if hide_non_racket_arm:
+            left_elbow = make_point("left_elbow", left_elbow["x"], left_elbow["y"], left_elbow["z"], visibility=0.1)
+            left_wrist = make_point("left_wrist", left_wrist["x"], left_wrist["y"], left_wrist["z"], visibility=0.1)
+    else:
+        left_elbow = make_point("left_elbow", 0.31 - arm_extension, max(0.12, left_elbow["y"] - elbow_raise), 0.06)
+        left_wrist = make_point("left_wrist", 0.26 - arm_extension, max(0.06, left_wrist["y"] - wrist_raise), 0.08)
+        if hide_non_racket_arm:
+            right_elbow = make_point("right_elbow", right_elbow["x"], right_elbow["y"], right_elbow["z"], visibility=0.1)
+            right_wrist = make_point("right_wrist", right_wrist["x"], right_wrist["y"], right_wrist["z"], visibility=0.1)
 
     return [
         make_point("nose", 0.5, 0.18, 0.0, face_visibility),
@@ -117,17 +139,50 @@ def make_summary_frame(
     composite_score: float = 0.67,
     view_profile: str = "rear_left_oblique",
     view_confidence: float = 0.88,
+    specialized_overrides: Optional[dict] = None,
 ):
+    specialized = {
+        "shoulderHipRotationScore": 0.52,
+        "trunkCoilScore": 0.58,
+        "sideOnReadinessScore": 0.54,
+        "chestOpeningScore": 0.56,
+        "elbowExtensionScore": 0.61,
+        "hittingArmPreparationScore": 0.59,
+        "racketSideElbowHeightScore": 0.57,
+        "wristAboveShoulderConfidence": 0.55,
+        "headStabilityScore": 0.74,
+        "contactPreparationScore": 0.63,
+        "nonRacketArmBalanceScore": 0.46,
+    }
+    if specialized_overrides:
+        specialized.update(specialized_overrides)
     final_metrics = {
         "stabilityScore": stability_score,
         "shoulderSpan": 0.18,
         "hipSpan": 0.14,
         "bodyTurnScore": body_turn_score,
         "racketArmLiftScore": racket_arm_lift_score,
+        "specialized": specialized,
         "subjectScale": subject_scale,
         "compositeScore": composite_score,
         "summaryText": "debug",
         "debug": {
+            "specialized": {
+                "selectedRacketSide": "right",
+                "selectedRacketSideSource": "frame_inference",
+                "observability": {
+                    name: {
+                        "observable": value is not None,
+                        "reasons": [] if value is not None else ["synthetic-missing"],
+                    }
+                    for name, value in specialized.items()
+                },
+                "components": {
+                    "contactPreparationScore": {
+                        "normalized": specialized["contactPreparationScore"],
+                    },
+                },
+            },
             "statusReasons": ["synthetic-test-frame"],
         },
     }
@@ -218,6 +273,10 @@ class PoseEstimatorTests(unittest.TestCase):
         self.assertIn("finalAdjustments", payload["finalMetrics"]["debug"])
         self.assertIn("frameInference", payload["finalMetrics"]["debug"])
         self.assertIn("rawFrameInference", payload["finalMetrics"]["debug"])
+        self.assertIn("specialized", payload["finalMetrics"])
+        self.assertIn("specialized", payload["finalMetrics"]["debug"])
+        self.assertIn("contactPreparationScore", payload["finalMetrics"]["specialized"])
+        self.assertIn("observability", payload["finalMetrics"]["debug"]["specialized"])
 
     def test_summary_exposes_rejection_reason_details_and_debug_counts(self) -> None:
         frames = [
@@ -258,6 +317,54 @@ class PoseEstimatorTests(unittest.TestCase):
         self.assertEqual(summary["debugCounts"]["unknownViewCount"], 6)
         self.assertTrue(detail_map["invalid_camera_angle"]["triggered"])
         self.assertEqual(detail_map["invalid_camera_angle"]["threshold"], 5)
+
+    def test_specialized_torso_scores_rank_side_view_above_front_view(self) -> None:
+        front_metrics = _compute_frame_metrics(make_keypoints(view="front"))
+        side_metrics = _compute_frame_metrics(make_keypoints(view="right_side"))
+        rear_oblique_metrics = _compute_frame_metrics(make_keypoints(view="rear_left_oblique"))
+
+        self.assertLess(front_metrics["specialized"]["sideOnReadinessScore"] or 0.0, rear_oblique_metrics["specialized"]["sideOnReadinessScore"] or 0.0)
+        self.assertLess(rear_oblique_metrics["specialized"]["sideOnReadinessScore"] or 0.0, side_metrics["specialized"]["sideOnReadinessScore"] or 0.0)
+        self.assertLess(front_metrics["specialized"]["trunkCoilScore"] or 0.0, side_metrics["specialized"]["trunkCoilScore"] or 0.0)
+
+    def test_specialized_arm_scores_increase_with_preparation_geometry(self) -> None:
+        baseline_metrics = _compute_frame_metrics(make_keypoints(racket_side="right"))
+        loaded_metrics = _compute_frame_metrics(make_keypoints(
+            racket_side="right",
+            arm_extension=0.08,
+            elbow_raise=0.08,
+            wrist_raise=0.12,
+        ))
+
+        self.assertLess(baseline_metrics["specialized"]["elbowExtensionScore"] or 0.0, loaded_metrics["specialized"]["elbowExtensionScore"] or 0.0)
+        self.assertLess(baseline_metrics["specialized"]["racketSideElbowHeightScore"] or 0.0, loaded_metrics["specialized"]["racketSideElbowHeightScore"] or 0.0)
+        self.assertLess(baseline_metrics["specialized"]["wristAboveShoulderConfidence"] or 0.0, loaded_metrics["specialized"]["wristAboveShoulderConfidence"] or 0.0)
+        self.assertLess(baseline_metrics["specialized"]["hittingArmPreparationScore"] or 0.0, loaded_metrics["specialized"]["hittingArmPreparationScore"] or 0.0)
+
+    def test_specialized_metrics_expose_observability_reasons_when_arm_is_missing(self) -> None:
+        metrics = _compute_frame_metrics(make_keypoints(racket_side="right", hide_non_racket_arm=True))
+
+        self.assertIsNone(metrics["specialized"]["nonRacketArmBalanceScore"])
+        self.assertFalse(metrics["debug"]["specialized"]["observability"]["nonRacketArmBalanceScore"]["observable"])
+        self.assertIn("low_visibility_elbow", metrics["debug"]["specialized"]["observability"]["nonRacketArmBalanceScore"]["reasons"])
+
+    def test_specialized_summary_tracks_peak_frame_and_observable_coverage(self) -> None:
+        frames = [
+            make_summary_frame(1, specialized_overrides={"contactPreparationScore": 0.41, "nonRacketArmBalanceScore": None}),
+            make_summary_frame(2, specialized_overrides={"contactPreparationScore": 0.86}),
+            make_summary_frame(3, specialized_overrides={"contactPreparationScore": 0.62}),
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=3)
+        contact_summary = summary["specializedFeatureSummary"]["contactPreparationScore"]
+        non_racket_summary = summary["specializedFeatureSummary"]["nonRacketArmBalanceScore"]
+
+        self.assertEqual(summary["bestPreparationFrameIndex"], 2)
+        self.assertEqual(contact_summary["peakFrameIndex"], 2)
+        self.assertEqual(contact_summary["peak"], 0.86)
+        self.assertEqual(contact_summary["observableFrameCount"], 3)
+        self.assertEqual(non_racket_summary["observableFrameCount"], 2)
+        self.assertEqual(non_racket_summary["observableCoverage"], 0.6667)
 
     def test_ema_smoothing_reduces_composite_score_variance(self) -> None:
         raw_sequence = [make_keypoints(wrist_jitter=jitter) for jitter in [0.0, 0.08, -0.07, 0.09, -0.06, 0.07]]

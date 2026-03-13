@@ -40,6 +40,23 @@ function buildPoseResult(): PoseAnalysisResult {
       viewStability: 1,
       dominantRacketSide: 'right',
       racketSideConfidence: 0.73,
+      bestPreparationFrameIndex: 1,
+      specializedFeatureSummary: {
+        contactPreparationScore: {
+          median: 0.68,
+          peak: 0.72,
+          observableFrameCount: 2,
+          observableCoverage: 1,
+          peakFrameIndex: 1,
+        },
+        trunkCoilScore: {
+          median: 0.61,
+          peak: 0.64,
+          observableFrameCount: 2,
+          observableCoverage: 1,
+          peakFrameIndex: 1,
+        },
+      },
       bestFrameOverlayRelativePath: 'artifacts/tasks/task_debug/pose/overlays/frame-01-overlay.jpg',
       overlayFrameCount: 2,
       debugCounts: {
@@ -62,9 +79,36 @@ function buildPoseResult(): PoseAnalysisResult {
           hipSpan: 0.14,
           bodyTurnScore: 0.58,
           racketArmLiftScore: 0.52,
+          specialized: {
+            shoulderHipRotationScore: 0.48,
+            trunkCoilScore: 0.64,
+            sideOnReadinessScore: 0.58,
+            chestOpeningScore: 0.55,
+            elbowExtensionScore: 0.63,
+            hittingArmPreparationScore: 0.66,
+            racketSideElbowHeightScore: 0.61,
+            wristAboveShoulderConfidence: 0.6,
+            headStabilityScore: 0.76,
+            contactPreparationScore: 0.72,
+            nonRacketArmBalanceScore: 0.46,
+          },
           subjectScale: 0.24,
           compositeScore: 0.67,
           debug: {
+            specialized: {
+              selectedRacketSide: 'right',
+              selectedRacketSideSource: 'frame_inference',
+              observability: {
+                contactPreparationScore: {
+                  observable: true,
+                  reasons: [],
+                },
+                trunkCoilScore: {
+                  observable: true,
+                  reasons: [],
+                },
+              },
+            },
             statusReasons: ['all_thresholds_passed'],
           },
           summaryText: 'usable',
@@ -86,9 +130,36 @@ function buildPoseResult(): PoseAnalysisResult {
           hipSpan: 0.15,
           bodyTurnScore: 0.56,
           racketArmLiftScore: 0.5,
+          specialized: {
+            shoulderHipRotationScore: 0.45,
+            trunkCoilScore: 0.58,
+            sideOnReadinessScore: 0.54,
+            chestOpeningScore: 0.52,
+            elbowExtensionScore: 0.6,
+            hittingArmPreparationScore: 0.62,
+            racketSideElbowHeightScore: 0.58,
+            wristAboveShoulderConfidence: 0.56,
+            headStabilityScore: 0.72,
+            contactPreparationScore: 0.64,
+            nonRacketArmBalanceScore: 0.43,
+          },
           subjectScale: 0.25,
           compositeScore: 0.65,
           debug: {
+            specialized: {
+              selectedRacketSide: 'right',
+              selectedRacketSideSource: 'frame_inference',
+              observability: {
+                contactPreparationScore: {
+                  observable: true,
+                  reasons: [],
+                },
+                trunkCoilScore: {
+                  observable: true,
+                  reasons: [],
+                },
+              },
+            },
             statusReasons: ['all_thresholds_passed'],
           },
           summaryText: 'usable',
@@ -142,6 +213,7 @@ test('loadDebugArtifactsContext uses manifest when it exists', () => {
     assert.equal(context.artifacts.framePlan.strategy, 'uniform-sampling-ffmpeg-v1');
     assert.equal(snapshot.report.visualEvidence?.overlayFrames.length, 2);
     assert.match(markdown, /## Pose Summary/);
+    assert.match(markdown, /## Specialized Feature Summary/);
     assert.match(markdown, /## Scoring Evidence/);
   });
 });
@@ -163,5 +235,6 @@ test('loadDebugArtifactsContext reconstructs sampled frames when manifest is mis
     assert.match(context.assumptions.join(' '), /manifest\.json is missing/);
     assert.equal(snapshot.report.visualEvidence?.overlayFrames[0]?.index, 1);
     assert.match(markdown, /\| 1 \| usable \| rear_left_oblique \| right \|/);
+    assert.match(markdown, /contactPreparationScore/);
   });
 });

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+from math import acos, atan2, degrees, sqrt
 from pathlib import Path
 from statistics import mean, median, pvariance
 from typing import Any, Dict, List, Optional, Tuple
@@ -63,6 +64,34 @@ MOTION_CONTINUITY_REJECTION_THRESHOLD = 0.55
 LARGE_MOTION_JUMP_THRESHOLD = 0.18
 MIN_STABLE_VIEW_CONFIDENCE = 0.45
 MIN_VIEW_TRANSITIONS_FOR_UNKNOWN = 2
+SPECIALIZED_VISIBILITY_THRESHOLD = 0.45
+SPECIALIZED_MIN_TORSO_SCALE = 0.08
+SPECIALIZED_MIN_DEPTH_EVIDENCE = 0.035
+TORSO_YAW_TARGET_DEGREES = 55.0
+ROTATION_DIFFERENCE_TARGET_DEGREES = 30.0
+CHEST_OPENING_TARGET = 1.1
+ELBOW_EXTENSION_MIN_DEGREES = 100.0
+ELBOW_EXTENSION_MAX_DEGREES = 165.0
+ELBOW_HEIGHT_TARGET = 0.42
+WRIST_ABOVE_SHOULDER_TARGET = 0.65
+HEAD_CENTER_OFFSET_TARGET = 0.38
+HEAD_TILT_TARGET = 0.22
+NON_RACKET_ELBOW_HEIGHT_TARGET = 0.28
+NON_RACKET_ARM_SPREAD_TARGET = 0.75
+
+SPECIALIZED_FEATURE_NAMES = (
+    'shoulderHipRotationScore',
+    'trunkCoilScore',
+    'sideOnReadinessScore',
+    'chestOpeningScore',
+    'elbowExtensionScore',
+    'hittingArmPreparationScore',
+    'racketSideElbowHeightScore',
+    'wristAboveShoulderConfidence',
+    'headStabilityScore',
+    'contactPreparationScore',
+    'nonRacketArmBalanceScore',
+)
 
 VIEW_PROFILE_LABELS = {
     'rear': '后方',
@@ -158,6 +187,87 @@ def _mean_abs_delta(values: List[float]) -> float:
         return 0.0
     deltas = [abs(current - previous) for previous, current in zip(values, values[1:])]
     return _round(_safe_mean(deltas))
+
+
+def _round_nested(value: Any) -> Any:
+    if isinstance(value, float):
+        return _round(value)
+    if isinstance(value, dict):
+        return {key: _round_nested(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_round_nested(item) for item in value]
+    return value
+
+
+def _midpoint(first: Dict[str, Any], second: Dict[str, Any], *, name: str = 'midpoint') -> Dict[str, Any]:
+    return {
+        'name': name,
+        'x': (float(first['x']) + float(second['x'])) / 2,
+        'y': (float(first['y']) + float(second['y'])) / 2,
+        'z': (float(first['z']) + float(second['z'])) / 2,
+        'visibility': _safe_mean([
+            _point_visibility(first),
+            _point_visibility(second),
+        ]),
+    }
+
+
+def _distance_2d(first: Dict[str, Any], second: Dict[str, Any]) -> float:
+    return sqrt(((float(first['x']) - float(second['x'])) ** 2) + ((float(first['y']) - float(second['y'])) ** 2))
+
+
+def _angle_degrees(first: Dict[str, Any], vertex: Dict[str, Any], second: Dict[str, Any]) -> Optional[float]:
+    first_vector = (
+        float(first['x']) - float(vertex['x']),
+        float(first['y']) - float(vertex['y']),
+        float(first['z']) - float(vertex['z']),
+    )
+    second_vector = (
+        float(second['x']) - float(vertex['x']),
+        float(second['y']) - float(vertex['y']),
+        float(second['z']) - float(vertex['z']),
+    )
+    first_length = sqrt(sum(component * component for component in first_vector))
+    second_length = sqrt(sum(component * component for component in second_vector))
+    if first_length <= 0.0 or second_length <= 0.0:
+        return None
+
+    cosine = sum(left * right for left, right in zip(first_vector, second_vector)) / (first_length * second_length)
+    return degrees(acos(_clamp(cosine, -1.0, 1.0)))
+
+
+def _yaw_degrees(left_point: Dict[str, Any], right_point: Dict[str, Any]) -> float:
+    x_gap = abs(float(left_point['x']) - float(right_point['x']))
+    z_gap = abs(float(left_point['z']) - float(right_point['z']))
+    return degrees(atan2(z_gap, max(x_gap, 1e-6)))
+
+
+def _normalize_range(value: float, minimum: float, maximum: float) -> float:
+    if maximum <= minimum:
+        return 0.0
+    return _clamp((value - minimum) / (maximum - minimum))
+
+
+def _feature_values_with_defaults(feature_values: Optional[Dict[str, Optional[float]]] = None) -> Dict[str, Optional[float]]:
+    values = {name: None for name in SPECIALIZED_FEATURE_NAMES}
+    if feature_values:
+        values.update(feature_values)
+    return values
+
+
+def _empty_specialized_debug(selected_racket_side: str = 'unknown', selected_source: str = 'unavailable') -> Dict[str, Any]:
+    return {
+        'selectedRacketSide': selected_racket_side,
+        'selectedRacketSideSource': selected_source,
+        'observability': {
+            feature_name: {
+                'observable': False,
+                'reasons': ['insufficient_keypoints'],
+            }
+            for feature_name in SPECIALIZED_FEATURE_NAMES
+        },
+        'components': {},
+    }
 
 
 def _backend_root_from_task_dir(task_dir: Path) -> Path:
@@ -294,6 +404,450 @@ def _infer_frame_view_profile(
     return 'rear', _round(confidence)
 
 
+def _side_specific_points(points: Dict[str, Dict[str, Any]], side: str) -> Dict[str, Optional[Dict[str, Any]]]:
+    return {
+        'shoulder': _safe_get(points, f'{side}_shoulder'),
+        'elbow': _safe_get(points, f'{side}_elbow'),
+        'wrist': _safe_get(points, f'{side}_wrist'),
+        'oppositeShoulder': _safe_get(points, f'{"left" if side == "right" else "right"}_shoulder'),
+    }
+
+
+def _compute_side_arm_preparation(
+    points: Dict[str, Dict[str, Any]],
+    side: str,
+    shoulder_center: Dict[str, Any],
+    shoulder_span: float,
+    torso_height: float,
+) -> Dict[str, Any]:
+    side_points = _side_specific_points(points, side)
+    shoulder = side_points['shoulder']
+    elbow = side_points['elbow']
+    wrist = side_points['wrist']
+    opposite_shoulder = side_points['oppositeShoulder']
+    reasons: List[str] = []
+    components: Dict[str, Any] = {}
+    feature_values = {
+        'chestOpeningScore': None,
+        'elbowExtensionScore': None,
+        'racketSideElbowHeightScore': None,
+        'wristAboveShoulderConfidence': None,
+        'hittingArmPreparationScore': None,
+    }
+
+    required_points = {
+        'shoulder': shoulder,
+        'elbow': elbow,
+        'wrist': wrist,
+        'oppositeShoulder': opposite_shoulder,
+    }
+    for name, point in required_points.items():
+        if point is None:
+            reasons.append(f'missing_{name}')
+        elif _point_visibility(point) < SPECIALIZED_VISIBILITY_THRESHOLD:
+            reasons.append(f'low_visibility_{name}')
+
+    if shoulder_span < 0.02 or torso_height < 0.02:
+        reasons.append('torso_reference_too_small')
+
+    if reasons:
+        return {
+            'side': side,
+            'observable': False,
+            'reasons': sorted(set(reasons)),
+            'featureValues': feature_values,
+            'components': components,
+            'chainScore': 0.0,
+        }
+
+    elbow_angle = _angle_degrees(shoulder, elbow, wrist)
+    if elbow_angle is not None:
+        elbow_extension = _normalize_range(
+            elbow_angle,
+            ELBOW_EXTENSION_MIN_DEGREES,
+            ELBOW_EXTENSION_MAX_DEGREES,
+        ) * _safe_mean([_point_visibility(shoulder), _point_visibility(elbow), _point_visibility(wrist)])
+        feature_values['elbowExtensionScore'] = _round(elbow_extension)
+        components['elbowExtensionScore'] = {
+            'elbowAngleDegrees': elbow_angle,
+            'normalized': elbow_extension,
+        }
+
+    shoulder_line_y = (float(shoulder['y']) + float(opposite_shoulder['y'])) / 2
+    elbow_height_ratio = (shoulder_line_y - float(elbow['y'])) / max(torso_height, 1e-6)
+    elbow_height_score = _clamp(elbow_height_ratio / ELBOW_HEIGHT_TARGET) * _safe_mean([
+        _point_visibility(shoulder),
+        _point_visibility(elbow),
+    ])
+    feature_values['racketSideElbowHeightScore'] = _round(elbow_height_score)
+    components['racketSideElbowHeightScore'] = {
+        'shoulderLineY': shoulder_line_y,
+        'elbowHeightRatio': elbow_height_ratio,
+        'normalized': elbow_height_score,
+    }
+
+    wrist_height_ratio = (float(shoulder['y']) - float(wrist['y'])) / max(torso_height, 1e-6)
+    wrist_above_score = _clamp(wrist_height_ratio / WRIST_ABOVE_SHOULDER_TARGET) * _safe_mean([
+        _point_visibility(shoulder),
+        _point_visibility(wrist),
+    ])
+    feature_values['wristAboveShoulderConfidence'] = _round(wrist_above_score)
+    components['wristAboveShoulderConfidence'] = {
+        'wristHeightRatio': wrist_height_ratio,
+        'normalized': wrist_above_score,
+    }
+
+    direction = 1 if side == 'right' else -1
+    elbow_outward = max(0.0, direction * (float(elbow['x']) - float(shoulder_center['x']))) / max(shoulder_span, 1e-6)
+    wrist_outward = max(0.0, direction * (float(wrist['x']) - float(shoulder_center['x']))) / max(shoulder_span, 1e-6)
+    chest_opening = _clamp(((elbow_outward * 0.45) + (wrist_outward * 0.55)) / CHEST_OPENING_TARGET) * _safe_mean([
+        _point_visibility(shoulder),
+        _point_visibility(elbow),
+        _point_visibility(wrist),
+        _point_visibility(opposite_shoulder),
+    ])
+    feature_values['chestOpeningScore'] = _round(chest_opening)
+    components['chestOpeningScore'] = {
+        'elbowOutward': elbow_outward,
+        'wristOutward': wrist_outward,
+        'normalized': chest_opening,
+    }
+
+    weighted_inputs = {
+        'elbowExtensionScore': (feature_values['elbowExtensionScore'], 0.35),
+        'racketSideElbowHeightScore': (feature_values['racketSideElbowHeightScore'], 0.3),
+        'wristAboveShoulderConfidence': (feature_values['wristAboveShoulderConfidence'], 0.2),
+        'chestOpeningScore': (feature_values['chestOpeningScore'], 0.15),
+    }
+    total_weight = sum(weight for value, weight in weighted_inputs.values() if value is not None)
+    if total_weight > 0.0:
+        chain_score = sum(float(value) * weight for value, weight in weighted_inputs.values() if value is not None) / total_weight
+        feature_values['hittingArmPreparationScore'] = _round(chain_score)
+    else:
+        chain_score = 0.0
+
+    components['hittingArmPreparationScore'] = {
+        'weightsUsed': _round(total_weight),
+        'normalized': _round(chain_score),
+    }
+
+    return {
+        'side': side,
+        'observable': True,
+        'reasons': [],
+        'featureValues': feature_values,
+        'components': components,
+        'chainScore': _round(chain_score),
+    }
+
+
+def _compute_head_stability(
+    points: Dict[str, Dict[str, Any]],
+    shoulder_center: Dict[str, Any],
+    shoulder_span: float,
+) -> Tuple[Optional[float], Dict[str, Any], List[str]]:
+    nose = _safe_get(points, 'nose')
+    left_ear = _safe_get(points, 'left_ear')
+    right_ear = _safe_get(points, 'right_ear')
+    left_eye = _safe_get(points, 'left_eye')
+    right_eye = _safe_get(points, 'right_eye')
+
+    head_pair_left = left_ear or left_eye
+    head_pair_right = right_ear or right_eye
+    reasons: List[str] = []
+    if nose is None:
+        reasons.append('missing_nose')
+    if head_pair_left is None or head_pair_right is None:
+        reasons.append('missing_head_pair')
+    if nose is not None and _point_visibility(nose) < SPECIALIZED_VISIBILITY_THRESHOLD:
+        reasons.append('low_visibility_nose')
+    if head_pair_left is not None and _point_visibility(head_pair_left) < SPECIALIZED_VISIBILITY_THRESHOLD:
+        reasons.append('low_visibility_head_pair_left')
+    if head_pair_right is not None and _point_visibility(head_pair_right) < SPECIALIZED_VISIBILITY_THRESHOLD:
+        reasons.append('low_visibility_head_pair_right')
+    if shoulder_span < 0.02:
+        reasons.append('shoulder_span_too_small')
+
+    if reasons:
+        return None, {}, sorted(set(reasons))
+
+    head_center = _midpoint(head_pair_left, head_pair_right, name='head_center')
+    center_offset = abs(float(head_center['x']) - float(shoulder_center['x'])) / max(shoulder_span, 1e-6)
+    tilt_ratio = abs(float(head_pair_left['y']) - float(head_pair_right['y'])) / max(shoulder_span, 1e-6)
+    center_score = _clamp(1 - (center_offset / HEAD_CENTER_OFFSET_TARGET))
+    tilt_score = _clamp(1 - (tilt_ratio / HEAD_TILT_TARGET))
+    head_score = _safe_mean([
+        center_score,
+        tilt_score,
+        _safe_mean([
+            _point_visibility(nose),
+            _point_visibility(head_pair_left),
+            _point_visibility(head_pair_right),
+        ]),
+    ])
+    return _round(head_score), {
+        'centerOffsetRatio': center_offset,
+        'tiltRatio': tilt_ratio,
+        'normalized': head_score,
+    }, []
+
+
+def _compute_non_racket_arm_balance(
+    points: Dict[str, Dict[str, Any]],
+    non_racket_side: str,
+    shoulder_center: Dict[str, Any],
+    shoulder_span: float,
+    torso_height: float,
+) -> Tuple[Optional[float], Dict[str, Any], List[str]]:
+    side_points = _side_specific_points(points, non_racket_side)
+    shoulder = side_points['shoulder']
+    elbow = side_points['elbow']
+    wrist = side_points['wrist']
+    opposite_shoulder = side_points['oppositeShoulder']
+    reasons: List[str] = []
+
+    for name, point in {
+        'shoulder': shoulder,
+        'elbow': elbow,
+        'wrist': wrist,
+        'oppositeShoulder': opposite_shoulder,
+    }.items():
+        if point is None:
+            reasons.append(f'missing_{name}')
+        elif _point_visibility(point) < SPECIALIZED_VISIBILITY_THRESHOLD:
+            reasons.append(f'low_visibility_{name}')
+
+    if shoulder_span < 0.02 or torso_height < 0.02:
+        reasons.append('torso_reference_too_small')
+
+    if reasons:
+        return None, {}, sorted(set(reasons))
+
+    shoulder_line_y = (float(shoulder['y']) + float(opposite_shoulder['y'])) / 2
+    elbow_height_ratio = (shoulder_line_y - float(elbow['y'])) / max(torso_height, 1e-6)
+    elbow_height_score = _clamp(elbow_height_ratio / NON_RACKET_ELBOW_HEIGHT_TARGET)
+    wrist_spread_ratio = abs(float(wrist['x']) - float(shoulder_center['x'])) / max(shoulder_span, 1e-6)
+    wrist_spread_score = _clamp(wrist_spread_ratio / NON_RACKET_ARM_SPREAD_TARGET)
+    balance_score = _safe_mean([
+        elbow_height_score,
+        wrist_spread_score,
+        _safe_mean([
+            _point_visibility(shoulder),
+            _point_visibility(elbow),
+            _point_visibility(wrist),
+        ]),
+    ])
+    return _round(balance_score), {
+        'elbowHeightRatio': elbow_height_ratio,
+        'wristSpreadRatio': wrist_spread_ratio,
+        'normalized': balance_score,
+    }, []
+
+
+def _compute_specialized_metrics(
+    points: Dict[str, Dict[str, Any]],
+    subject_scale: float,
+    torso_height: float,
+    inferred_racket_side: str,
+) -> Tuple[Dict[str, Optional[float]], Dict[str, Any]]:
+    values = _feature_values_with_defaults()
+    debug_payload = _empty_specialized_debug()
+    components = debug_payload['components']
+    observability = debug_payload['observability']
+
+    left_shoulder = _safe_get(points, 'left_shoulder')
+    right_shoulder = _safe_get(points, 'right_shoulder')
+    left_hip = _safe_get(points, 'left_hip')
+    right_hip = _safe_get(points, 'right_hip')
+
+    torso_reasons: List[str] = []
+    for name, point in {
+        'left_shoulder': left_shoulder,
+        'right_shoulder': right_shoulder,
+        'left_hip': left_hip,
+        'right_hip': right_hip,
+    }.items():
+        if point is None:
+            torso_reasons.append(f'missing_{name}')
+        elif _point_visibility(point) < SPECIALIZED_VISIBILITY_THRESHOLD:
+            torso_reasons.append(f'low_visibility_{name}')
+    if subject_scale < SPECIALIZED_MIN_TORSO_SCALE:
+        torso_reasons.append('subject_scale_too_small')
+
+    shoulder_center = _midpoint(left_shoulder, right_shoulder, name='shoulder_center') if left_shoulder and right_shoulder else None
+    hip_center = _midpoint(left_hip, right_hip, name='hip_center') if left_hip and right_hip else None
+    shoulder_span = abs(float(left_shoulder['x']) - float(right_shoulder['x'])) if left_shoulder and right_shoulder else 0.0
+
+    if not torso_reasons and shoulder_center and hip_center:
+        shoulder_yaw = _yaw_degrees(left_shoulder, right_shoulder)
+        hip_yaw = _yaw_degrees(left_hip, right_hip)
+        depth_evidence = max(
+            abs(float(left_shoulder['z']) - float(right_shoulder['z'])),
+            abs(float(left_hip['z']) - float(right_hip['z'])),
+        )
+        alignment_penalty = _clamp(1 - (abs(float(shoulder_center['x']) - float(hip_center['x'])) / max(shoulder_span * 1.1, 1e-6)))
+        if depth_evidence < SPECIALIZED_MIN_DEPTH_EVIDENCE and max(shoulder_yaw, hip_yaw) < 8.0:
+            torso_reasons.append('weak_depth_evidence')
+        else:
+            shoulder_hip_rotation = _clamp(abs(shoulder_yaw - hip_yaw) / ROTATION_DIFFERENCE_TARGET_DEGREES)
+            side_on_readiness = _clamp((((shoulder_yaw + hip_yaw) / 2) / TORSO_YAW_TARGET_DEGREES) * alignment_penalty)
+            trunk_coil = _clamp((shoulder_hip_rotation * 0.6) + (side_on_readiness * 0.4))
+            values['shoulderHipRotationScore'] = _round(shoulder_hip_rotation)
+            values['sideOnReadinessScore'] = _round(side_on_readiness)
+            values['trunkCoilScore'] = _round(trunk_coil)
+            components['shoulderHipRotationScore'] = {
+                'shoulderYawDegrees': shoulder_yaw,
+                'hipYawDegrees': hip_yaw,
+                'depthEvidence': depth_evidence,
+                'normalized': shoulder_hip_rotation,
+            }
+            components['sideOnReadinessScore'] = {
+                'shoulderYawDegrees': shoulder_yaw,
+                'hipYawDegrees': hip_yaw,
+                'alignmentPenalty': alignment_penalty,
+                'normalized': side_on_readiness,
+            }
+            components['trunkCoilScore'] = {
+                'shoulderHipRotationScore': shoulder_hip_rotation,
+                'sideOnReadinessScore': side_on_readiness,
+                'normalized': trunk_coil,
+            }
+
+    for torso_feature in ('shoulderHipRotationScore', 'sideOnReadinessScore', 'trunkCoilScore'):
+        observability[torso_feature] = {
+            'observable': values[torso_feature] is not None,
+            'reasons': [] if values[torso_feature] is not None else sorted(set(torso_reasons or ['insufficient_torso_evidence'])),
+        }
+
+    if shoulder_center is None or shoulder_span <= 0.0 or torso_height <= 0.0:
+        arm_candidates = {
+            'left': {
+                'side': 'left',
+                'observable': False,
+                'reasons': ['insufficient_torso_reference'],
+                'featureValues': {},
+                'components': {},
+                'chainScore': 0.0,
+            },
+            'right': {
+                'side': 'right',
+                'observable': False,
+                'reasons': ['insufficient_torso_reference'],
+                'featureValues': {},
+                'components': {},
+                'chainScore': 0.0,
+            },
+        }
+    else:
+        arm_candidates = {
+            'left': _compute_side_arm_preparation(points, 'left', shoulder_center, shoulder_span, torso_height),
+            'right': _compute_side_arm_preparation(points, 'right', shoulder_center, shoulder_span, torso_height),
+        }
+
+    selected_side = inferred_racket_side if inferred_racket_side in {'left', 'right'} else 'unknown'
+    selected_source = 'frame_inference' if selected_side != 'unknown' else 'unavailable'
+    if selected_side == 'unknown':
+        best_candidate = max(arm_candidates.values(), key=lambda item: item['chainScore'])
+        if best_candidate['observable'] and best_candidate['chainScore'] > 0.0:
+            selected_side = str(best_candidate['side'])
+            selected_source = 'fallback_arm_chain'
+
+    debug_payload['selectedRacketSide'] = selected_side
+    debug_payload['selectedRacketSideSource'] = selected_source
+    components['armSideCandidates'] = {
+        side: {
+            'observable': candidate['observable'],
+            'reasons': candidate['reasons'],
+            'chainScore': candidate['chainScore'],
+        }
+        for side, candidate in arm_candidates.items()
+    }
+
+    selected_candidate = arm_candidates.get(selected_side) if selected_side in arm_candidates else None
+    for feature_name in (
+        'chestOpeningScore',
+        'elbowExtensionScore',
+        'racketSideElbowHeightScore',
+        'wristAboveShoulderConfidence',
+        'hittingArmPreparationScore',
+    ):
+        if selected_candidate and selected_candidate['featureValues'].get(feature_name) is not None:
+            values[feature_name] = selected_candidate['featureValues'][feature_name]
+            components[feature_name] = selected_candidate['components'].get(feature_name, {})
+            observability[feature_name] = {
+                'observable': True,
+                'reasons': [],
+            }
+        else:
+            fallback_reasons = selected_candidate['reasons'] if selected_candidate else ['racket_side_unknown']
+            observability[feature_name] = {
+                'observable': False,
+                'reasons': sorted(set(fallback_reasons or ['racket_side_unknown'])),
+            }
+
+    if shoulder_center is not None:
+        head_stability, head_components, head_reasons = _compute_head_stability(points, shoulder_center, shoulder_span)
+    else:
+        head_stability, head_components, head_reasons = None, {}, ['insufficient_torso_reference']
+    values['headStabilityScore'] = head_stability
+    components['headStabilityScore'] = head_components
+    observability['headStabilityScore'] = {
+        'observable': head_stability is not None,
+        'reasons': head_reasons,
+    }
+
+    if selected_side in {'left', 'right'} and shoulder_center is not None:
+        non_racket_side = 'left' if selected_side == 'right' else 'right'
+        non_racket_balance, balance_components, balance_reasons = _compute_non_racket_arm_balance(
+            points,
+            non_racket_side,
+            shoulder_center,
+            shoulder_span,
+            torso_height,
+        )
+    else:
+        non_racket_balance, balance_components, balance_reasons = None, {}, ['racket_side_unknown']
+    values['nonRacketArmBalanceScore'] = non_racket_balance
+    components['nonRacketArmBalanceScore'] = balance_components
+    observability['nonRacketArmBalanceScore'] = {
+        'observable': non_racket_balance is not None,
+        'reasons': balance_reasons,
+    }
+
+    preparation_inputs = [
+        values['trunkCoilScore'],
+        values['hittingArmPreparationScore'],
+        values['chestOpeningScore'],
+        values['headStabilityScore'],
+    ]
+    if values['nonRacketArmBalanceScore'] is not None:
+        preparation_inputs.append(values['nonRacketArmBalanceScore'])
+
+    if preparation_inputs and all(value is not None for value in preparation_inputs):
+        contact_preparation = _safe_mean([float(value) for value in preparation_inputs if value is not None])
+        values['contactPreparationScore'] = _round(contact_preparation)
+        components['contactPreparationScore'] = {
+            'inputsUsed': [value for value in preparation_inputs if value is not None],
+            'normalized': contact_preparation,
+        }
+        observability['contactPreparationScore'] = {
+            'observable': True,
+            'reasons': [],
+        }
+    else:
+        missing_preparation_reasons: List[str] = []
+        for feature_name in ('trunkCoilScore', 'hittingArmPreparationScore', 'chestOpeningScore', 'headStabilityScore'):
+            if values[feature_name] is None:
+                missing_preparation_reasons.extend(observability[feature_name]['reasons'])
+        observability['contactPreparationScore'] = {
+            'observable': False,
+            'reasons': sorted(set(missing_preparation_reasons or ['insufficient_preparation_evidence'])),
+        }
+
+    debug_payload['components'] = _round_nested(components)
+    return values, debug_payload
+
+
 def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
     points = _get_point_map(keypoints)
     left_shoulder = _safe_get(points, 'left_shoulder')
@@ -311,6 +865,7 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
             'hipSpan': None,
             'bodyTurnScore': None,
             'racketArmLiftScore': None,
+            'specialized': _feature_values_with_defaults(),
             'subjectScale': None,
             'compositeScore': 0.0,
             'debug': {
@@ -328,6 +883,7 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
                         'torsoHeight': None,
                     },
                 },
+                'specialized': _empty_specialized_debug(),
                 'statusReasons': ['incomplete_keypoints'],
             },
             'summaryText': '关键点不完整，暂时无法计算姿态摘要。',
@@ -342,6 +898,12 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
     body_turn_score = _round(max(0.0, min(1.0, 1 - shoulder_span)))
     frame_racket_side, _, left_lift_score, right_lift_score = _infer_frame_racket_side(points)
     racket_arm_lift_score = _round(max(left_lift_score, right_lift_score))
+    specialized_values, specialized_debug = _compute_specialized_metrics(
+        points,
+        subject_scale=subject_scale,
+        torso_height=torso_height,
+        inferred_racket_side=frame_racket_side,
+    )
 
     visibility_map = {
         'leftShoulder': _round(left_shoulder['visibility']),
@@ -374,6 +936,7 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
         'hipSpan': _round(hip_span),
         'bodyTurnScore': body_turn_score,
         'racketArmLiftScore': racket_arm_lift_score,
+        'specialized': specialized_values,
         'subjectScale': _round(subject_scale),
         'compositeScore': composite_score,
         'debug': {
@@ -387,6 +950,7 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
                 'dominantMetric': dominant_subject_scale_metric,
                 'values': subject_scale_candidates,
             },
+            'specialized': specialized_debug,
         },
         'summaryText': f'{body_text}，{arm_text}。',
     }
@@ -462,6 +1026,10 @@ def _build_final_metrics(metrics: Optional[Dict[str, Any]], keypoints: List[Dict
         'racketArmLiftGate': _round(lift_gate),
         'racketArmLiftFinal': final_lift,
     }
+    specialized_debug = debug_payload.setdefault('specialized', _empty_specialized_debug(racket_side, 'frame_inference'))
+    if specialized_debug.get('selectedRacketSide') in {None, 'unknown'} and racket_side in {'left', 'right'}:
+        specialized_debug['selectedRacketSide'] = racket_side
+        specialized_debug['selectedRacketSideSource'] = 'frame_inference'
     return final_metrics
 
 
@@ -676,6 +1244,41 @@ def _stable_view_profile_sequence(usable_frames: List[Dict[str, Any]]) -> Tuple[
     return stable_profiles, transition_count
 
 
+def _summarize_specialized_features(usable_frames: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    summary: Dict[str, Dict[str, Any]] = {}
+
+    for feature_name in SPECIALIZED_FEATURE_NAMES:
+        observed_entries = []
+        for frame in usable_frames:
+            feature_values = (frame.get('finalMetrics') or {}).get('specialized') or {}
+            feature_value = feature_values.get(feature_name)
+            if feature_value is None:
+                continue
+            observed_entries.append((frame['frameIndex'], float(feature_value)))
+
+        if not observed_entries:
+            summary[feature_name] = {
+                'median': None,
+                'peak': None,
+                'observableFrameCount': 0,
+                'observableCoverage': 0.0,
+                'peakFrameIndex': None,
+            }
+            continue
+
+        values = [value for _, value in observed_entries]
+        peak_frame_index, peak_value = max(observed_entries, key=lambda item: item[1])
+        summary[feature_name] = {
+            'median': _median(values),
+            'peak': _round(peak_value),
+            'observableFrameCount': len(observed_entries),
+            'observableCoverage': _round(len(observed_entries) / max(len(usable_frames), 1)),
+            'peakFrameIndex': peak_frame_index,
+        }
+
+    return summary
+
+
 def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) -> Dict[str, Any]:
     detected_frames = [frame for frame in frames if frame['status'] in {'detected', 'usable'} and frame.get('finalMetrics')]
     if not detected_frames:
@@ -694,6 +1297,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         )
         return {
             'bestFrameIndex': None,
+            'bestPreparationFrameIndex': None,
             'usableFrameCount': 0,
             'coverageRatio': 0.0,
             'medianStabilityScore': 0.0,
@@ -712,6 +1316,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
             'viewStability': 0.0,
             'dominantRacketSide': 'unknown',
             'racketSideConfidence': 0.0,
+            'specializedFeatureSummary': _summarize_specialized_features([]),
             'bestFrameOverlayRelativePath': None,
             'overlayFrameCount': 0,
             'debugCounts': {
@@ -754,6 +1359,8 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
     view_confidence = _median(view_confidences) if view_confidences else 0.0
     dominant_racket_side, racket_side_confidence = _summarize_racket_side(usable_frames or detected_frames)
     unknown_view_count = sum(1 for profile in stable_profiles if profile == 'unknown')
+    specialized_feature_summary = _summarize_specialized_features(usable_frames)
+    best_preparation_frame_index = specialized_feature_summary['contactPreparationScore']['peakFrameIndex']
     rejection_reason_details = _build_rejection_reason_details(
         frame_count=len(frames),
         detected_count=detected_count,
@@ -775,6 +1382,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
 
     return {
         'bestFrameIndex': best_frame['frameIndex'],
+        'bestPreparationFrameIndex': best_preparation_frame_index,
         'usableFrameCount': usable_frame_count,
         'coverageRatio': coverage_ratio,
         'medianStabilityScore': median_stability_score,
@@ -801,6 +1409,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         'viewStability': view_stability,
         'dominantRacketSide': dominant_racket_side,
         'racketSideConfidence': racket_side_confidence,
+        'specializedFeatureSummary': specialized_feature_summary,
         'bestFrameOverlayRelativePath': best_frame.get('overlayRelativePath'),
         'overlayFrameCount': overlay_frame_count,
         'debugCounts': {

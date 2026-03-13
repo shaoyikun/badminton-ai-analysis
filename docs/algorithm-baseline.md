@@ -36,6 +36,19 @@
   - raw 层仍以肩宽为主；final 层会叠加肩髋深度差与可见性门控，压制“肩变窄但深度证据不足”的假侧身高分。
 - `racketArmLiftScore`
   - raw 层仍以肩腕高度差为主；final 层会叠加肘部支撑门控，压制腕点瞬时抖动造成的虚高。
+- `specialized`
+  - 当前已新增 11 个专项指标：
+    - `shoulderHipRotationScore`
+    - `trunkCoilScore`
+    - `sideOnReadinessScore`
+    - `chestOpeningScore`
+    - `elbowExtensionScore`
+    - `hittingArmPreparationScore`
+    - `racketSideElbowHeightScore`
+    - `wristAboveShoulderConfidence`
+    - `headStabilityScore`
+    - `contactPreparationScore`
+    - `nonRacketArmBalanceScore`
 - `subjectScale`
   - `max(shoulderSpan, hipSpan, torsoHeight)`。
 - `compositeScore`
@@ -61,6 +74,10 @@
   - `clamp(1 - scoreVariance / 0.04)`。
 - `motionContinuity`
   - 基于相邻 usable 帧 `finalMetrics.compositeScore` 平均绝对差的连续性分数。
+- `specializedFeatureSummary`
+  - 每个专项特征都会输出 `median / peak / observableFrameCount / observableCoverage / peakFrameIndex`。
+- `bestPreparationFrameIndex`
+  - 取 `contactPreparationScore` 的峰值帧，作为下一阶段动作阶段切分的准备态锚点。
 - `viewProfile`
   - 基于 smoothed keypoints 推断；低 `viewConfidence` 或视角频繁跳变的帧在汇总时按 `unknown` 处理。
 - `dominantRacketSide`
@@ -134,16 +151,14 @@
 
 ## 当前缺少的时序与专项特征
 
-- 缺少挥拍时序
-  - 当前没有准备、引拍、击球、随挥阶段切分。
-- 缺少专项几何特征
-  - 没有肘角、肩肘腕夹角、躯干与骨盆相对旋转、重心移动、跨步与蹬转信号。
-- 缺少球拍和球的信息
-  - 当前完全没有持拍物体检测，也没有击球点和来球关系。
-- 缺少动作阶段理解
-  - 现在已有多帧稳定器，但还没有阶段切分或关键瞬间定位。
-- 缺少动作上下文
-  - 不知道这段视频里动作是否完整，也不知道抽到的帧是否覆盖了真正关键瞬间。
+- 阶段切分仍未完成
+  - 现在只有 `contactPreparationScore` 和 `bestPreparationFrameIndex` 作为准备态锚点，还没有完整的准备 / 引拍 / 击球 / 随挥切分。
+- 球拍和来球证据仍缺失
+  - 当前仍然没有球拍、羽球、击球点或来球检测。
+- repeatability 仍然是全局稳定性
+  - 现在还没有把 `repeatability` 升级成“分阶段稳定性”。
+- 动作上下文仍有限
+  - 系统仍不知道抽到的帧是否覆盖了真正击球瞬间，只能判断准备态证据。
 
 ## 调试建议
 

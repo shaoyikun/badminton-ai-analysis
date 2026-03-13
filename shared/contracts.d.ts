@@ -169,12 +169,47 @@ export interface PoseKeypoint {
   visibility: number;
 }
 
+export interface PoseSpecializedFrameMetrics {
+  shoulderHipRotationScore: number | null;
+  trunkCoilScore: number | null;
+  sideOnReadinessScore: number | null;
+  chestOpeningScore: number | null;
+  elbowExtensionScore: number | null;
+  hittingArmPreparationScore: number | null;
+  racketSideElbowHeightScore: number | null;
+  wristAboveShoulderConfidence: number | null;
+  headStabilityScore: number | null;
+  contactPreparationScore: number | null;
+  nonRacketArmBalanceScore: number | null;
+}
+
+export interface PoseFeatureObservability {
+  observable: boolean;
+  reasons: string[];
+}
+
+export interface PoseSpecializedDebug {
+  selectedRacketSide?: DominantRacketSide;
+  selectedRacketSideSource?: string;
+  observability?: Record<string, PoseFeatureObservability>;
+  components?: Record<string, unknown>;
+}
+
+export interface PoseSpecializedFeatureSummaryItem {
+  median: number | null;
+  peak: number | null;
+  observableFrameCount: number;
+  observableCoverage: number;
+  peakFrameIndex: number | null;
+}
+
 export interface PoseFrameMetrics {
   stabilityScore: number;
   shoulderSpan: number | null;
   hipSpan: number | null;
   bodyTurnScore: number | null;
   racketArmLiftScore: number | null;
+  specialized?: PoseSpecializedFrameMetrics;
   subjectScale?: number | null;
   compositeScore?: number;
   debug?: {
@@ -198,6 +233,7 @@ export interface PoseFrameMetrics {
       dominantRacketSide?: DominantRacketSide;
       racketSideConfidence?: number;
     };
+    specialized?: PoseSpecializedDebug;
     statusReasons?: string[];
   };
   summaryText: string;
@@ -227,6 +263,7 @@ export interface PoseRejectionReasonDetail {
 
 export interface PoseOverallSummary {
   bestFrameIndex: number | null;
+  bestPreparationFrameIndex?: number | null;
   usableFrameCount: number;
   coverageRatio: number;
   medianStabilityScore: number;
@@ -241,6 +278,7 @@ export interface PoseOverallSummary {
   viewStability?: number;
   dominantRacketSide?: DominantRacketSide;
   racketSideConfidence?: number;
+  specializedFeatureSummary?: Record<string, PoseSpecializedFeatureSummaryItem>;
   bestFrameOverlayRelativePath?: string;
   overlayFrameCount?: number;
   debugCounts?: {
@@ -274,6 +312,7 @@ export interface PoseInfo {
     usableFrameCount?: number;
     coverageRatio?: number;
     bestFrameIndex?: number | null;
+    bestPreparationFrameIndex?: number | null;
     medianStabilityScore?: number;
     medianBodyTurnScore?: number;
     medianRacketArmLiftScore?: number;
@@ -286,6 +325,7 @@ export interface PoseInfo {
     viewStability?: number;
     dominantRacketSide?: DominantRacketSide;
     racketSideConfidence?: number;
+    specializedFeatureSummary?: Record<string, PoseSpecializedFeatureSummaryItem>;
     bestFrameOverlayRelativePath?: string;
     overlayFrameCount?: number;
     debugCounts?: {
