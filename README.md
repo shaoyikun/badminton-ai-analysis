@@ -133,6 +133,8 @@ make dev
 | `FRONTEND_PORT` | `5173` | 本地开发和 Compose 映射的前端端口 |
 | `VITE_API_BASE` | 空 | frontend API 根地址；Compose 推荐留空走同源，本地脚本会自动回退到 `http://127.0.0.1:${BACKEND_PORT}` |
 | `PYTHON_BIN` | `python3` | backend 脚本和本地开发使用的 Python 入口 |
+| `POSE_LANDMARKER_MODEL_PATH` | 空 | analysis-service 显式 pose landmarker 模型路径；设置后优先使用该文件 |
+| `POSE_LANDMARKER_MODEL_CACHE_DIR` | 空 | analysis-service pose landmarker 缓存目录；默认使用 `analysis-service/models/` |
 | `UPLOAD_MAX_FILE_SIZE_BYTES` | `209715200` | backend 上传大小限制 |
 | `APT_MIRROR` | `mirrors.aliyun.com` | backend Dockerfile 安装系统依赖时使用的镜像源 |
 

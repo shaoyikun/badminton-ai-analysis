@@ -159,6 +159,8 @@ curl http://127.0.0.1:8787/api/tasks/<taskId>/result
 | `FRONTEND_PORT` | `5173` | 本地开发与 Compose 端口映射 |
 | `VITE_API_BASE` | 空 | Compose 推荐留空走同源；本地脚本会自动回退到后端地址 |
 | `PYTHON_BIN` | `python3` | 本地开发和脚本调用的 Python 入口 |
+| `POSE_LANDMARKER_MODEL_PATH` | 空 | analysis-service 显式 pose landmarker 模型路径；设置后优先使用该文件 |
+| `POSE_LANDMARKER_MODEL_CACHE_DIR` | 空 | analysis-service pose landmarker 缓存目录；默认使用 `analysis-service/models/` |
 | `UPLOAD_MAX_FILE_SIZE_BYTES` | `209715200` | 上传限制 |
 | `APT_MIRROR` | `mirrors.aliyun.com` | backend Docker 构建镜像源 |
 

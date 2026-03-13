@@ -1,12 +1,25 @@
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
+import os
 from pathlib import Path
 from statistics import mean, median, pvariance
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.request import urlretrieve
 
-import cv2
-import mediapipe as mp
+try:  # pragma: no cover - import availability depends on local runtime
+    import cv2
+except ModuleNotFoundError:  # pragma: no cover - import availability depends on local runtime
+    cv2 = None
+
+try:  # pragma: no cover - import availability depends on local runtime
+    import mediapipe as mp
+except ModuleNotFoundError:  # pragma: no cover - import availability depends on local runtime
+    mp = None
+
+from services.frame_loader import load_frame_timestamps_ms
 
 
 POSE_LANDMARK_NAMES = [
@@ -32,9 +45,9 @@ POSE_CONNECTIONS = [
     ('right_knee', 'right_ankle'),
 ]
 
-POSE_LANDMARKER_MODEL_URL = (
+DEFAULT_POSE_LANDMARKER_MODEL_URL = (
     'https://storage.googleapis.com/mediapipe-models/pose_landmarker/'
-    'pose_landmarker_lite/float16/latest/pose_landmarker_lite.task'
+    'pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
 )
 
 USABLE_STABILITY_THRESHOLD = 0.6
@@ -43,6 +56,13 @@ SUBJECT_SCALE_THRESHOLD = 0.12
 MIN_USABLE_FRAME_COUNT = 6
 MIN_COVERAGE_RATIO = 0.6
 MAX_SCORE_VARIANCE = 0.04
+EMA_COORDINATE_ALPHA = 0.35
+EMA_VISIBILITY_ALPHA = 0.5
+MOTION_CONTINUITY_SCALE = 0.2
+MOTION_CONTINUITY_REJECTION_THRESHOLD = 0.55
+LARGE_MOTION_JUMP_THRESHOLD = 0.18
+MIN_STABLE_VIEW_CONFIDENCE = 0.45
+MIN_VIEW_TRANSITIONS_FOR_UNKNOWN = 2
 
 VIEW_PROFILE_LABELS = {
     'rear': '后方',
@@ -63,8 +83,12 @@ RACKET_SIDE_LABELS = {
 }
 
 
+class TasksModeError(RuntimeError):
+    pass
+
+
 def _extract_keypoints_from_legacy(results: Any) -> List[Dict[str, Any]]:
-    if not results.pose_landmarks:
+    if not getattr(results, 'pose_landmarks', None):
         return []
 
     keypoints: List[Dict[str, Any]] = []
@@ -127,6 +151,13 @@ def _variance(values: List[float]) -> float:
     if len(values) < 2:
         return 0.0
     return _round(pvariance(values))
+
+
+def _mean_abs_delta(values: List[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    deltas = [abs(current - previous) for previous, current in zip(values, values[1:])]
+    return _round(_safe_mean(deltas))
 
 
 def _backend_root_from_task_dir(task_dir: Path) -> Path:
@@ -361,6 +392,79 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _compute_elbow_support(points: Dict[str, Dict[str, Any]], racket_side: str) -> float:
+    if racket_side not in {'left', 'right'}:
+        return 0.55
+
+    shoulder = _safe_get(points, f'{racket_side}_shoulder')
+    elbow = _safe_get(points, f'{racket_side}_elbow')
+    wrist = _safe_get(points, f'{racket_side}_wrist')
+    if not all([shoulder, elbow, wrist]):
+        return 0.55
+
+    elbow_height_support = _clamp((shoulder['y'] - elbow['y'] + 0.18) / 0.35)
+    elbow_visibility = _safe_mean([
+        _point_visibility(shoulder),
+        _point_visibility(elbow),
+        _point_visibility(wrist),
+    ])
+    wrist_alignment_support = _clamp(1 - (abs(elbow['x'] - wrist['x']) / 0.35))
+    return _round(_safe_mean([elbow_height_support, elbow_visibility, wrist_alignment_support]))
+
+
+def _build_final_metrics(metrics: Optional[Dict[str, Any]], keypoints: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not metrics:
+        return None
+
+    final_metrics = copy.deepcopy(metrics)
+    points = _get_point_map(keypoints)
+    debug_payload = final_metrics.setdefault('debug', {})
+
+    torso_visibility = _safe_mean([
+        _point_visibility(_safe_get(points, 'left_shoulder')),
+        _point_visibility(_safe_get(points, 'right_shoulder')),
+        _point_visibility(_safe_get(points, 'left_hip')),
+        _point_visibility(_safe_get(points, 'right_hip')),
+    ])
+    shoulder_depth_gap = float(debug_payload.get('shoulderDepthGap') or 0.0)
+    hip_depth_gap = float(debug_payload.get('hipDepthGap') or 0.0)
+    depth_evidence = max(shoulder_depth_gap, hip_depth_gap)
+
+    original_turn = float(final_metrics.get('bodyTurnScore') or 0.0)
+    turn_cap_without_depth = _clamp(0.48 + (torso_visibility * 0.18) + (depth_evidence * 0.9), 0.48, 0.72)
+    if depth_evidence < 0.08:
+        final_turn = _round(min(original_turn, turn_cap_without_depth))
+    else:
+        depth_support = _clamp(depth_evidence * 2.6)
+        final_turn = _round((original_turn * 0.8) + (depth_support * 0.2))
+
+    racket_side, _, _, _ = _infer_frame_racket_side(points)
+    elbow_support = _compute_elbow_support(points, racket_side)
+    original_lift = float(final_metrics.get('racketArmLiftScore') or 0.0)
+    lift_gate = 0.9 if racket_side == 'unknown' else (0.7 + (elbow_support * 0.3))
+    final_lift = _round(original_lift * lift_gate)
+
+    final_metrics['bodyTurnScore'] = final_turn
+    final_metrics['racketArmLiftScore'] = final_lift
+    final_metrics['compositeScore'] = _round(
+        (float(final_metrics.get('stabilityScore') or 0.0) * 0.45)
+        + (final_turn * 0.3)
+        + (final_lift * 0.25)
+    )
+    debug_payload['finalAdjustments'] = {
+        'bodyTurnDepthEvidence': _round(depth_evidence),
+        'bodyTurnCapWithoutDepth': _round(turn_cap_without_depth),
+        'bodyTurnOriginal': _round(original_turn),
+        'bodyTurnFinal': final_turn,
+        'racketSideForLiftGate': racket_side,
+        'elbowSupport': _round(elbow_support),
+        'racketArmLiftOriginal': _round(original_lift),
+        'racketArmLiftGate': _round(lift_gate),
+        'racketArmLiftFinal': final_lift,
+    }
+    return final_metrics
+
+
 def _build_rejection_reason_details(
     frame_count: int,
     detected_count: int,
@@ -368,6 +472,8 @@ def _build_rejection_reason_details(
     coverage_ratio: float,
     median_stability_score: float,
     score_variance: float,
+    temporal_consistency: float,
+    motion_continuity: float,
     too_small_count: int,
     low_stability_count: int,
     unknown_view_count: int,
@@ -388,6 +494,12 @@ def _build_rejection_reason_details(
         '稳定识别帧数、覆盖率或稳定度中位数未达到正式报告门槛。'
         if coverage_triggered
         else '当前稳定识别帧数、覆盖率和稳定度中位数均满足正式报告门槛。'
+    )
+    action_evidence_triggered = (
+        usable_frame_count >= MIN_USABLE_FRAME_COUNT
+        and coverage_ratio >= MIN_COVERAGE_RATIO
+        and score_variance > MAX_SCORE_VARIANCE
+        and motion_continuity < MOTION_CONTINUITY_REJECTION_THRESHOLD
     )
 
     return [
@@ -433,15 +545,18 @@ def _build_rejection_reason_details(
         },
         {
             'code': 'insufficient_action_evidence',
-            'triggered': (
-                usable_frame_count >= MIN_USABLE_FRAME_COUNT
-                and coverage_ratio >= MIN_COVERAGE_RATIO
-                and score_variance > MAX_SCORE_VARIANCE
-            ),
-            'observed': score_variance,
-            'threshold': MAX_SCORE_VARIANCE,
-            'comparator': '>',
-            'explanation': '稳定帧之间的综合分波动过大时，系统会认为动作证据不够稳定。',
+            'triggered': action_evidence_triggered,
+            'observed': {
+                'scoreVariance': score_variance,
+                'temporalConsistency': temporal_consistency,
+                'motionContinuity': motion_continuity,
+            },
+            'threshold': {
+                'maxScoreVariance': MAX_SCORE_VARIANCE,
+                'minMotionContinuity': MOTION_CONTINUITY_REJECTION_THRESHOLD,
+            },
+            'comparator': '> and <',
+            'explanation': '稳定帧之间的综合分波动过大且时序连续性不足时，系统会认为动作证据不够稳定。',
         },
         {
             'code': 'invalid_camera_angle',
@@ -481,12 +596,11 @@ def _summarize_view_profile(profiles: List[str]) -> Tuple[str, float]:
 def _summarize_racket_side(frames: List[Dict[str, Any]]) -> Tuple[str, float]:
     weighted_scores = {'left': 0.0, 'right': 0.0}
     for frame in frames:
-        points = _get_point_map(frame['keypoints'])
-        side, confidence, left_score, right_score = _infer_frame_racket_side(points)
-        weighted_scores['left'] += left_score
-        weighted_scores['right'] += right_score
+        side = frame.get('dominantRacketSide', 'unknown')
+        confidence = float(frame.get('racketSideConfidence', 0.0))
+        lift_score = float(((frame.get('finalMetrics') or {}).get('racketArmLiftScore')) or 0.0)
         if side in weighted_scores:
-            weighted_scores[side] += confidence * 0.2
+            weighted_scores[side] += max(lift_score, 0.08) + (confidence * 0.2)
 
     total = weighted_scores['left'] + weighted_scores['right']
     if total < 0.12:
@@ -534,8 +648,36 @@ def _build_human_summary(
     return f'{evidence_prefix}生成：当前识别为{view_text}，以{side_text}为主，主体可见，但转体展开和挥拍臂准备都还偏弱。'
 
 
+def _stable_view_profile_sequence(usable_frames: List[Dict[str, Any]]) -> Tuple[List[str], int]:
+    stable_profiles: List[str] = []
+    previous_profile = 'unknown'
+    transition_count = 0
+
+    for frame in usable_frames:
+        profile = frame.get('viewProfile', 'unknown')
+        confidence = float(frame.get('viewConfidence', 0.0))
+        if confidence < MIN_STABLE_VIEW_CONFIDENCE:
+            stable_profiles.append('unknown')
+            previous_profile = 'unknown'
+            continue
+
+        if previous_profile not in {'unknown', profile}:
+            transition_count += 1
+            stable_profiles.append('unknown')
+            previous_profile = 'unknown'
+            continue
+
+        stable_profiles.append(profile)
+        previous_profile = profile
+
+    if transition_count >= max(MIN_VIEW_TRANSITIONS_FOR_UNKNOWN, len(usable_frames) // 3):
+        stable_profiles = ['unknown' if profile != 'unknown' else profile for profile in stable_profiles]
+
+    return stable_profiles, transition_count
+
+
 def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) -> Dict[str, Any]:
-    detected_frames = [frame for frame in frames if frame['status'] in {'detected', 'usable'} and frame['metrics']]
+    detected_frames = [frame for frame in frames if frame['status'] in {'detected', 'usable'} and frame.get('finalMetrics')]
     if not detected_frames:
         rejection_reason_details = _build_rejection_reason_details(
             frame_count=len(frames),
@@ -544,6 +686,8 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
             coverage_ratio=0.0,
             median_stability_score=0.0,
             score_variance=0.0,
+            temporal_consistency=0.0,
+            motion_continuity=0.0,
             too_small_count=0,
             low_stability_count=0,
             unknown_view_count=0,
@@ -556,6 +700,10 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
             'medianBodyTurnScore': 0.0,
             'medianRacketArmLiftScore': 0.0,
             'scoreVariance': 0.0,
+            'rawScoreVariance': 0.0,
+            'temporalConsistency': 0.0,
+            'motionContinuity': 0.0,
+            'metricSource': 'finalMetrics',
             'rejectionReasons': ['body_not_detected'],
             'rejectionReasonDetails': rejection_reason_details,
             'humanSummary': '当前样本还没有稳定识别到人体关键点。',
@@ -572,29 +720,40 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
                 'unknownViewCount': 0,
                 'usableFrameCount': 0,
                 'detectedFrameCount': detected_count,
+                'viewTransitionCount': 0,
+                'largeMotionJumpCount': 0,
             },
         }
 
     usable_frames = [frame for frame in detected_frames if frame['status'] == 'usable']
     usable_frame_count = len(usable_frames)
     coverage_ratio = _round(usable_frame_count / len(frames)) if frames else 0.0
-    median_stability_score = _median([frame['metrics']['stabilityScore'] for frame in usable_frames])
-    median_body_turn_score = _median([frame['metrics']['bodyTurnScore'] for frame in usable_frames])
-    median_racket_arm_lift_score = _median([frame['metrics']['racketArmLiftScore'] for frame in usable_frames])
-    score_variance = _variance([frame['metrics']['compositeScore'] for frame in usable_frames])
+    median_stability_score = _median([frame['finalMetrics']['stabilityScore'] for frame in usable_frames])
+    median_body_turn_score = _median([frame['finalMetrics']['bodyTurnScore'] for frame in usable_frames])
+    median_racket_arm_lift_score = _median([frame['finalMetrics']['racketArmLiftScore'] for frame in usable_frames])
+    raw_score_variance = _variance([frame['rawMetrics']['compositeScore'] for frame in usable_frames if frame.get('rawMetrics')])
+    composite_scores = [frame['finalMetrics']['compositeScore'] for frame in usable_frames]
+    score_variance = _variance(composite_scores)
+    temporal_consistency = _round(_clamp(1 - (score_variance / MAX_SCORE_VARIANCE)))
+    mean_abs_delta = _mean_abs_delta(composite_scores)
+    motion_continuity = _round(_clamp(1 - (mean_abs_delta / MOTION_CONTINUITY_SCALE)))
+    large_motion_jump_count = sum(
+        1 for previous, current in zip(composite_scores, composite_scores[1:])
+        if abs(current - previous) > LARGE_MOTION_JUMP_THRESHOLD
+    )
 
-    too_small_count = sum(1 for frame in detected_frames if (frame['metrics']['subjectScale'] or 0.0) < SUBJECT_SCALE_THRESHOLD)
-    low_stability_count = sum(1 for frame in detected_frames if (frame['metrics']['stabilityScore'] or 0.0) < LOW_STABILITY_THRESHOLD)
-    usable_profiles = [frame.get('viewProfile', 'unknown') for frame in usable_frames]
-    view_profile, view_stability = _summarize_view_profile(usable_profiles)
+    too_small_count = sum(1 for frame in detected_frames if (frame['finalMetrics']['subjectScale'] or 0.0) < SUBJECT_SCALE_THRESHOLD)
+    low_stability_count = sum(1 for frame in detected_frames if (frame['finalMetrics']['stabilityScore'] or 0.0) < LOW_STABILITY_THRESHOLD)
+    stable_profiles, view_transition_count = _stable_view_profile_sequence(usable_frames)
+    view_profile, view_stability = _summarize_view_profile(stable_profiles)
     view_confidences = [
         float(frame.get('viewConfidence', 0.0))
-        for frame in usable_frames
-        if frame.get('viewProfile') == view_profile
+        for frame, stable_profile in zip(usable_frames, stable_profiles)
+        if stable_profile == view_profile
     ]
     view_confidence = _median(view_confidences) if view_confidences else 0.0
     dominant_racket_side, racket_side_confidence = _summarize_racket_side(usable_frames or detected_frames)
-    unknown_view_count = sum(1 for profile in usable_profiles if profile == 'unknown')
+    unknown_view_count = sum(1 for profile in stable_profiles if profile == 'unknown')
     rejection_reason_details = _build_rejection_reason_details(
         frame_count=len(frames),
         detected_count=detected_count,
@@ -602,6 +761,8 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         coverage_ratio=coverage_ratio,
         median_stability_score=median_stability_score,
         score_variance=score_variance,
+        temporal_consistency=temporal_consistency,
+        motion_continuity=motion_continuity,
         too_small_count=too_small_count,
         low_stability_count=low_stability_count,
         unknown_view_count=unknown_view_count,
@@ -609,7 +770,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
     rejection_reasons = _collect_triggered_rejection_reasons(rejection_reason_details)
 
     best_frame_candidates = usable_frames or detected_frames
-    best_frame = max(best_frame_candidates, key=lambda frame: frame['metrics']['compositeScore'])
+    best_frame = max(best_frame_candidates, key=lambda frame: frame['finalMetrics']['compositeScore'])
     overlay_frame_count = sum(1 for frame in frames if frame.get('overlayRelativePath'))
 
     return {
@@ -620,6 +781,10 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         'medianBodyTurnScore': median_body_turn_score,
         'medianRacketArmLiftScore': median_racket_arm_lift_score,
         'scoreVariance': score_variance,
+        'rawScoreVariance': raw_score_variance,
+        'temporalConsistency': temporal_consistency,
+        'motionContinuity': motion_continuity,
+        'metricSource': 'finalMetrics',
         'rejectionReasons': rejection_reasons,
         'rejectionReasonDetails': rejection_reason_details,
         'humanSummary': _build_human_summary(
@@ -644,17 +809,87 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
             'unknownViewCount': unknown_view_count,
             'usableFrameCount': usable_frame_count,
             'detectedFrameCount': detected_count,
+            'viewTransitionCount': view_transition_count,
+            'largeMotionJumpCount': large_motion_jump_count,
         },
     }
 
 
-def _ensure_pose_landmarker_model() -> Path:
-    model_dir = Path(__file__).resolve().parent.parent / 'models'
+def _load_model_lock_info(lock_path: Path) -> Dict[str, Any]:
+    if not lock_path.exists():
+        raise FileNotFoundError(f'pose model lock file not found: {lock_path}')
+
+    lock_data = json.loads(lock_path.read_text(encoding='utf-8'))
+    required_keys = {'version', 'fileName', 'url', 'sha256'}
+    missing_keys = required_keys - set(lock_data.keys())
+    if missing_keys:
+        raise ValueError(f'pose model lock file is missing keys: {sorted(missing_keys)}')
+    return lock_data
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open('rb') as handle:
+        while True:
+            chunk = handle.read(65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_model_sha(path: Path, expected_sha: str) -> str:
+    actual_sha = _file_sha256(path)
+    if actual_sha != expected_sha:
+        raise ValueError(f'pose landmarker checksum mismatch for {path}: expected {expected_sha}, got {actual_sha}')
+    return actual_sha
+
+
+def _model_lock_path() -> Path:
+    return Path(__file__).resolve().parent.parent / 'models' / 'pose_landmarker_lite.lock.json'
+
+
+def _default_model_cache_dir() -> Path:
+    return Path(__file__).resolve().parent.parent / 'models'
+
+
+def _ensure_pose_landmarker_model() -> Tuple[Path, Dict[str, Any]]:
+    explicit_model_path = os.getenv('POSE_LANDMARKER_MODEL_PATH')
+    if explicit_model_path:
+        model_path = Path(explicit_model_path).expanduser().resolve()
+        if not model_path.exists():
+            raise FileNotFoundError(f'POSE_LANDMARKER_MODEL_PATH does not exist: {model_path}')
+        return model_path, {
+            'source': 'explicit_path',
+            'path': str(model_path),
+            'version': 'external',
+            'sha256': _file_sha256(model_path),
+        }
+
+    lock_info = _load_model_lock_info(_model_lock_path())
+    model_dir = Path(os.getenv('POSE_LANDMARKER_MODEL_CACHE_DIR', str(_default_model_cache_dir()))).expanduser().resolve()
     model_dir.mkdir(parents=True, exist_ok=True)
-    model_path = model_dir / 'pose_landmarker_lite.task'
-    if not model_path.exists():
-        urlretrieve(POSE_LANDMARKER_MODEL_URL, model_path)
-    return model_path
+    model_path = model_dir / str(lock_info['fileName'])
+
+    if model_path.exists():
+        actual_sha = _verify_model_sha(model_path, str(lock_info['sha256']))
+        return model_path, {
+            'source': 'cache',
+            'path': str(model_path),
+            'version': str(lock_info['version']),
+            'sha256': actual_sha,
+            'url': str(lock_info['url']),
+        }
+
+    urlretrieve(str(lock_info['url']), model_path)
+    actual_sha = _verify_model_sha(model_path, str(lock_info['sha256']))
+    return model_path, {
+        'source': 'download',
+        'path': str(model_path),
+        'version': str(lock_info['version']),
+        'sha256': actual_sha,
+        'url': str(lock_info['url']),
+    }
 
 
 def _frame_status_details(metrics: Optional[Dict[str, Any]]) -> Tuple[str, List[str]]:
@@ -683,6 +918,9 @@ def _draw_overlay(
     keypoints: List[Dict[str, Any]],
     labels: List[str],
 ) -> Any:
+    if cv2 is None:  # pragma: no cover - depends on optional runtime dependency
+        raise ModuleNotFoundError('opencv-python is required to render overlays')
+
     canvas = image.copy()
     points = _get_point_map(keypoints)
 
@@ -714,33 +952,87 @@ def _draw_overlay(
     return canvas
 
 
+def _ema_smooth_keypoint_sequence(sequence: List[List[Dict[str, Any]]]) -> List[List[Dict[str, Any]]]:
+    smoothed_sequence: List[List[Dict[str, Any]]] = []
+    previous_state: Optional[Dict[str, Dict[str, Any]]] = None
+
+    for keypoints in sequence:
+        if not keypoints:
+            smoothed_sequence.append([])
+            previous_state = None
+            continue
+
+        current_names = {point['name'] for point in keypoints}
+        if previous_state is not None and current_names != set(previous_state.keys()):
+            previous_state = None
+
+        smoothed_keypoints: List[Dict[str, Any]] = []
+        current_state: Dict[str, Dict[str, Any]] = {}
+        for point in keypoints:
+            previous_point = previous_state.get(point['name']) if previous_state else None
+            if previous_point is None:
+                smoothed_point = dict(point)
+            else:
+                smoothed_point = {
+                    'name': point['name'],
+                    'x': _round((float(point['x']) * EMA_COORDINATE_ALPHA) + (float(previous_point['x']) * (1 - EMA_COORDINATE_ALPHA))),
+                    'y': _round((float(point['y']) * EMA_COORDINATE_ALPHA) + (float(previous_point['y']) * (1 - EMA_COORDINATE_ALPHA))),
+                    'z': _round((float(point['z']) * EMA_COORDINATE_ALPHA) + (float(previous_point['z']) * (1 - EMA_COORDINATE_ALPHA))),
+                    'visibility': _round((float(point['visibility']) * EMA_VISIBILITY_ALPHA) + (float(previous_point['visibility']) * (1 - EMA_VISIBILITY_ALPHA))),
+                }
+            smoothed_keypoints.append(smoothed_point)
+            current_state[point['name']] = smoothed_point
+
+        smoothed_sequence.append(smoothed_keypoints)
+        previous_state = current_state
+
+    return smoothed_sequence
+
+
 def _build_frame_payload(
     task_dir: Path,
     frame_path: Path,
     index: int,
     image: Any,
     keypoints: List[Dict[str, Any]],
+    smoothed_keypoints: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    metrics = _compute_frame_metrics(keypoints) if keypoints else None
-    status, status_reasons = _frame_status_details(metrics) if keypoints else ('not_detected', ['keypoints_not_detected'])
-    points = _get_point_map(keypoints)
-    frame_view_profile, view_confidence = _infer_frame_view_profile(points) if keypoints else ('unknown', 0.0)
-    frame_racket_side, racket_side_confidence, _, _ = _infer_frame_racket_side(points) if keypoints else ('unknown', 0.0, 0.0, 0.0)
+    raw_metrics = _compute_frame_metrics(keypoints) if keypoints else None
+    smoothed_metrics = _compute_frame_metrics(smoothed_keypoints) if smoothed_keypoints else None
+    final_metrics = _build_final_metrics(smoothed_metrics, smoothed_keypoints) if smoothed_metrics else None
+    status, status_reasons = _frame_status_details(final_metrics) if final_metrics else ('not_detected', ['keypoints_not_detected'])
+
+    raw_points = _get_point_map(keypoints)
+    smoothed_points = _get_point_map(smoothed_keypoints)
+    raw_view_profile, raw_view_confidence = _infer_frame_view_profile(raw_points) if keypoints else ('unknown', 0.0)
+    frame_view_profile, view_confidence = _infer_frame_view_profile(smoothed_points) if smoothed_keypoints else ('unknown', 0.0)
+    raw_racket_side, raw_racket_side_confidence, _, _ = _infer_frame_racket_side(raw_points) if keypoints else ('unknown', 0.0, 0.0, 0.0)
+    frame_racket_side, racket_side_confidence, _, _ = _infer_frame_racket_side(smoothed_points) if smoothed_keypoints else ('unknown', 0.0, 0.0, 0.0)
     overlay_relative_path = None
 
-    if metrics:
-        debug_payload = metrics.setdefault('debug', {})
-        debug_payload['frameInference'] = {
+    for metrics_payload in [raw_metrics, smoothed_metrics, final_metrics]:
+        if metrics_payload:
+            metrics_payload.setdefault('debug', {})
+            metrics_payload['debug']['statusReasons'] = status_reasons
+
+    if final_metrics:
+        final_metrics['debug']['frameInference'] = {
             'viewProfile': frame_view_profile,
             'viewConfidence': view_confidence,
             'dominantRacketSide': frame_racket_side,
             'racketSideConfidence': racket_side_confidence,
         }
-        debug_payload['statusReasons'] = status_reasons
+        final_metrics['debug']['rawFrameInference'] = {
+            'viewProfile': raw_view_profile,
+            'viewConfidence': raw_view_confidence,
+            'dominantRacketSide': raw_racket_side,
+            'racketSideConfidence': raw_racket_side_confidence,
+        }
 
-    if image is not None and keypoints:
+    overlay_keypoints = smoothed_keypoints or keypoints
+    if image is not None and overlay_keypoints:
         overlay_path, overlay_relative_path = _overlay_output_paths(task_dir, frame_path.name)
-        overlay_image = _draw_overlay(image, keypoints, [
+        overlay_image = _draw_overlay(image, overlay_keypoints, [
             f'Frame {index:02d}',
             f'View: {VIEW_PROFILE_LABELS.get(frame_view_profile, frame_view_profile)}',
             f'Racket: {RACKET_SIDE_LABELS.get(frame_racket_side, frame_racket_side)}',
@@ -753,7 +1045,11 @@ def _build_frame_payload(
         'fileName': frame_path.name,
         'status': status,
         'keypoints': keypoints,
-        'metrics': metrics,
+        'smoothedKeypoints': smoothed_keypoints,
+        'rawMetrics': raw_metrics,
+        'smoothedMetrics': smoothed_metrics,
+        'finalMetrics': final_metrics,
+        'metrics': final_metrics,
         'overlayRelativePath': overlay_relative_path,
         'viewProfile': frame_view_profile,
         'viewConfidence': view_confidence,
@@ -762,10 +1058,76 @@ def _build_frame_payload(
     }
 
 
-def _estimate_with_legacy_solutions(frame_paths: List[Path]) -> Dict[str, Any]:
+def _read_frame_image(frame_path: Path) -> Any:
+    if cv2 is None:  # pragma: no cover - depends on optional runtime dependency
+        raise ModuleNotFoundError('opencv-python is required to load pose frames')
+    return cv2.imread(str(frame_path))
+
+
+def _frame_timestamp_ms(frame_path: Path, index: int, task_dir: Path, cached_timestamps: Optional[Dict[str, int]] = None) -> int:
+    timestamps = cached_timestamps if cached_timestamps is not None else load_frame_timestamps_ms(str(task_dir))
+    return int(timestamps.get(frame_path.name, index * 1000))
+
+
+def _build_pose_result(
+    task_dir: Path,
+    samples: List[Dict[str, Any]],
+    *,
+    engine: str,
+    diagnostics: Dict[str, Any],
+) -> Dict[str, Any]:
+    smoothed_sequences = _ema_smooth_keypoint_sequence([sample['keypoints'] for sample in samples])
     frames = []
     detected_count = 0
-    task_dir = frame_paths[0].resolve().parent if frame_paths else Path.cwd()
+
+    for sample, smoothed_keypoints in zip(samples, smoothed_sequences):
+        if sample['keypoints']:
+            detected_count += 1
+
+        if sample['image'] is None:
+            frames.append({
+                'frameIndex': sample['index'],
+                'fileName': sample['framePath'].name,
+                'status': 'read_failed',
+                'keypoints': [],
+                'smoothedKeypoints': [],
+                'rawMetrics': None,
+                'smoothedMetrics': None,
+                'finalMetrics': None,
+                'metrics': None,
+                'overlayRelativePath': None,
+                'viewProfile': 'unknown',
+                'viewConfidence': 0.0,
+                'dominantRacketSide': 'unknown',
+                'racketSideConfidence': 0.0,
+            })
+            continue
+
+        frames.append(_build_frame_payload(
+            task_dir,
+            sample['framePath'],
+            sample['index'],
+            sample['image'],
+            sample['keypoints'],
+            smoothed_keypoints,
+        ))
+
+    return {
+        'engine': engine,
+        'frameCount': len(samples),
+        'detectedFrameCount': detected_count,
+        'summary': _build_overall_summary(frames, detected_count),
+        'frames': frames,
+        'diagnostics': diagnostics,
+    }
+
+
+def _estimate_with_legacy_solutions(frame_paths: List[Path], task_dir: Optional[Path] = None, fallback_reason: Optional[str] = None) -> Dict[str, Any]:
+    if mp is None or not hasattr(mp, 'solutions'):  # pragma: no cover - depends on optional runtime dependency
+        raise ModuleNotFoundError('mediapipe.solutions is required for legacy pose estimation')
+
+    task_dir = (task_dir or (frame_paths[0].resolve().parent if frame_paths else Path.cwd())).resolve()
+    samples = []
 
     with mp.solutions.pose.Pose(
         static_image_mode=True,
@@ -774,91 +1136,144 @@ def _estimate_with_legacy_solutions(frame_paths: List[Path]) -> Dict[str, Any]:
         min_detection_confidence=0.5,
     ) as pose:
         for index, frame_path in enumerate(frame_paths, start=1):
-            image = cv2.imread(str(frame_path))
+            image = _read_frame_image(frame_path)
             if image is None:
-                frames.append({
-                    'frameIndex': index,
-                    'fileName': frame_path.name,
-                    'status': 'read_failed',
-                    'keypoints': [],
-                    'metrics': None,
-                    'overlayRelativePath': None,
-                    'viewProfile': 'unknown',
-                    'viewConfidence': 0.0,
-                    'dominantRacketSide': 'unknown',
-                    'racketSideConfidence': 0.0,
-                })
+                samples.append({'index': index, 'framePath': frame_path, 'image': None, 'keypoints': []})
                 continue
 
             rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             results = pose.process(rgb)
-            keypoints = _extract_keypoints_from_legacy(results)
-            if keypoints:
-                detected_count += 1
+            samples.append({
+                'index': index,
+                'framePath': frame_path,
+                'image': image,
+                'keypoints': _extract_keypoints_from_legacy(results),
+            })
 
-            frames.append(_build_frame_payload(task_dir, frame_path, index, image, keypoints))
+    return _build_pose_result(
+        task_dir,
+        samples,
+        engine='mediapipe-pose',
+        diagnostics={
+            'runningMode': 'LEGACY',
+            'fallbackApplied': fallback_reason is not None,
+            'fallbackReason': fallback_reason,
+            'model': None,
+        },
+    )
 
-    return {
-        'engine': 'mediapipe-pose',
-        'frameCount': len(frame_paths),
-        'detectedFrameCount': detected_count,
-        'summary': _build_overall_summary(frames, detected_count),
-        'frames': frames,
-    }
 
+def _estimate_with_tasks_mode(
+    frame_paths: List[Path],
+    task_dir: Path,
+    *,
+    running_mode_name: str,
+    model_path: Path,
+    model_info: Dict[str, Any],
+) -> Dict[str, Any]:
+    if mp is None:  # pragma: no cover - depends on optional runtime dependency
+        raise ModuleNotFoundError('mediapipe is required for MediaPipe Tasks pose estimation')
 
-def _estimate_with_tasks_api(frame_paths: List[Path]) -> Dict[str, Any]:
     from mediapipe.tasks import python
     from mediapipe.tasks.python import vision
 
-    model_path = _ensure_pose_landmarker_model()
-    frames = []
-    detected_count = 0
-    task_dir = frame_paths[0].resolve().parent if frame_paths else Path.cwd()
-
+    running_mode = getattr(vision.RunningMode, running_mode_name)
     options = vision.PoseLandmarkerOptions(
         base_options=python.BaseOptions(model_asset_path=str(model_path)),
-        running_mode=vision.RunningMode.IMAGE,
+        running_mode=running_mode,
         num_poses=1,
     )
+    timestamps_ms = load_frame_timestamps_ms(str(task_dir))
+    samples = []
 
-    with vision.PoseLandmarker.create_from_options(options) as detector:
+    try:
+        detector = vision.PoseLandmarker.create_from_options(options)
+    except Exception as error:  # pragma: no cover - depends on runtime Tasks availability
+        raise TasksModeError(f'failed to initialize {running_mode_name} landmarker: {error}') from error
+
+    with detector:
         for index, frame_path in enumerate(frame_paths, start=1):
-            image = cv2.imread(str(frame_path))
+            image = _read_frame_image(frame_path)
             if image is None:
-                frames.append({
-                    'frameIndex': index,
-                    'fileName': frame_path.name,
-                    'status': 'read_failed',
-                    'keypoints': [],
-                    'metrics': None,
-                    'overlayRelativePath': None,
-                    'viewProfile': 'unknown',
-                    'viewConfidence': 0.0,
-                    'dominantRacketSide': 'unknown',
-                    'racketSideConfidence': 0.0,
-                })
+                samples.append({'index': index, 'framePath': frame_path, 'image': None, 'keypoints': []})
                 continue
 
             rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            result = detector.detect(mp_image)
-            keypoints = _extract_keypoints_from_tasks(result)
-            if keypoints:
-                detected_count += 1
+            try:
+                if running_mode_name == 'VIDEO':
+                    timestamp_ms = _frame_timestamp_ms(frame_path, index, task_dir, timestamps_ms)
+                    result = detector.detect_for_video(mp_image, timestamp_ms)
+                else:
+                    result = detector.detect(mp_image)
+            except Exception as error:  # pragma: no cover - depends on runtime Tasks availability
+                raise TasksModeError(f'{running_mode_name} detection failed on {frame_path.name}: {error}') from error
 
-            frames.append(_build_frame_payload(task_dir, frame_path, index, image, keypoints))
+            samples.append({
+                'index': index,
+                'framePath': frame_path,
+                'image': image,
+                'keypoints': _extract_keypoints_from_tasks(result),
+            })
 
-    return {
-        'engine': 'mediapipe-tasks-pose-landmarker',
-        'frameCount': len(frame_paths),
-        'detectedFrameCount': detected_count,
-        'summary': _build_overall_summary(frames, detected_count),
-        'frames': frames,
-    }
+    return _build_pose_result(
+        task_dir,
+        samples,
+        engine='mediapipe-tasks-pose-landmarker',
+        diagnostics={
+            'runningMode': running_mode_name,
+            'fallbackApplied': False,
+            'fallbackReason': None,
+            'model': model_info,
+        },
+    )
 
 
-def estimate_pose_for_frames(frame_paths: List[Path]) -> Dict[str, Any]:
-    if hasattr(mp, 'solutions'):
-        return _estimate_with_legacy_solutions(frame_paths)
-    return _estimate_with_tasks_api(frame_paths)
+def _estimate_with_tasks_api(frame_paths: List[Path], task_dir: Optional[Path] = None) -> Dict[str, Any]:
+    if mp is None:  # pragma: no cover - depends on optional runtime dependency
+        raise ModuleNotFoundError('mediapipe is required for MediaPipe Tasks pose estimation')
+
+    task_dir = (task_dir or (frame_paths[0].resolve().parent if frame_paths else Path.cwd())).resolve()
+    model_path, model_info = _ensure_pose_landmarker_model()
+
+    try:
+        return _estimate_with_tasks_mode(
+            frame_paths,
+            task_dir,
+            running_mode_name='VIDEO',
+            model_path=model_path,
+            model_info=model_info,
+        )
+    except TasksModeError as video_error:
+        image_result = _estimate_with_tasks_mode(
+            frame_paths,
+            task_dir,
+            running_mode_name='IMAGE',
+            model_path=model_path,
+            model_info=model_info,
+        )
+        diagnostics = image_result.get('diagnostics', {})
+        diagnostics['fallbackApplied'] = True
+        diagnostics['fallbackReason'] = str(video_error)
+        image_result['diagnostics'] = diagnostics
+        return image_result
+
+
+def estimate_pose_for_frames(frame_paths: List[Path], task_dir: Optional[Path] = None) -> Dict[str, Any]:
+    task_dir = (task_dir or (frame_paths[0].resolve().parent if frame_paths else Path.cwd())).resolve()
+
+    if mp is not None:
+        try:
+            from mediapipe.tasks import python as _  # noqa: F401
+            return _estimate_with_tasks_api(frame_paths, task_dir=task_dir)
+        except (ModuleNotFoundError, ImportError):
+            pass
+        except Exception as tasks_error:
+            if mp is not None and hasattr(mp, 'solutions'):
+                return _estimate_with_legacy_solutions(frame_paths, task_dir=task_dir, fallback_reason=str(tasks_error))
+            raise
+
+    if mp is not None and hasattr(mp, 'solutions'):
+        return _estimate_with_legacy_solutions(frame_paths, task_dir=task_dir)
+
+    raise ModuleNotFoundError('mediapipe is required to estimate pose for frames')

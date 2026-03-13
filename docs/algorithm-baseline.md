@@ -7,13 +7,24 @@
 1. 前端创建任务并上传视频。
 2. backend 用 `ffprobe` 读取视频元数据，再用 `ffmpeg` 按均匀时间点抽帧。
 3. backend 通过子进程调用 `analysis-service/app.py <preprocess-task-dir>`。
-4. Python `pose_estimator.py` 对每张抽帧做单帧 MediaPipe 姿态估计，生成 keypoints、per-frame metrics、summary。
+4. Python `pose_estimator.py` 优先走 MediaPipe Tasks `VIDEO` mode，对抽帧序列做时序姿态估计与 EMA smoothing，生成 keypoints、per-frame metrics、summary。
 5. backend 读取 pose result，若 `summary.rejectionReasons` 非空则直接按首个拒绝原因失败。
 6. 若 pose 通过门槛，backend `reportScoringService.ts` 用规则分数生成 report 和 `scoringEvidence`。
 
 ## 当前使用的指标
 
 ### 单帧指标
+
+每帧同时保留三层指标：
+
+- `rawMetrics`
+  - 基于原始 keypoints 直接计算。
+- `smoothedMetrics`
+  - 基于 EMA 平滑后的 keypoints 计算。
+- `finalMetrics`
+  - 以 `smoothedMetrics` 为基础，再叠加轻量证据门控。
+- `metrics`
+  - 为兼容旧消费保留，等于 `finalMetrics`。
 
 - `stabilityScore`
   - 由肩、髋、手腕、鼻子的 visibility 平均值得到。
@@ -22,9 +33,9 @@
 - `hipSpan`
   - 左右髋横向间距。
 - `bodyTurnScore`
-  - `1 - shoulderSpan` 的裁剪值，肩越窄越倾向被解释为更侧身。
+  - raw 层仍以肩宽为主；final 层会叠加肩髋深度差与可见性门控，压制“肩变窄但深度证据不足”的假侧身高分。
 - `racketArmLiftScore`
-  - 左右手各自根据肩腕高度差和可见性算出 lift，再取更高一侧。
+  - raw 层仍以肩腕高度差为主；final 层会叠加肘部支撑门控，压制腕点瞬时抖动造成的虚高。
 - `subjectScale`
   - `max(shoulderSpan, hipSpan, torsoHeight)`。
 - `compositeScore`
@@ -43,11 +54,17 @@
 - `medianRacketArmLiftScore`
   - usable 帧的挥拍臂上举中位数。
 - `scoreVariance`
-  - usable 帧 `compositeScore` 的总体方差。
+  - usable 帧 `finalMetrics.compositeScore` 的总体方差。
+- `rawScoreVariance`
+  - usable 帧 raw `compositeScore` 的总体方差，用于 A/B 对照。
+- `temporalConsistency`
+  - `clamp(1 - scoreVariance / 0.04)`。
+- `motionContinuity`
+  - 基于相邻 usable 帧 `finalMetrics.compositeScore` 平均绝对差的连续性分数。
 - `viewProfile`
-  - 基于肩宽、身体深度差、人脸关键点可见性推断的视角类别。
+  - 基于 smoothed keypoints 推断；低 `viewConfidence` 或视角频繁跳变的帧在汇总时按 `unknown` 处理。
 - `dominantRacketSide`
-  - 基于左右手上举分数累积推断的主挥拍侧。
+  - 基于 smoothed/final 帧证据加权汇总的主挥拍侧。
 
 ### Report 评分指标
 
@@ -59,6 +76,7 @@
   - `20 + medianRacketArmLiftScore * 80`
 - `repeatability`
   - `usableRatio * 45 + max(0, 1 - scoreVariance / 0.04) * 55`
+  - backend 公式未改，但输入的 `scoreVariance` 已换成 final/smoothed 语义。
 - `totalScore`
   - `stability * 0.28 + turn * 0.28 + lift * 0.24 + repeatability * 0.2`
 
@@ -87,8 +105,10 @@
   - 或在覆盖率已达标时 `medianStabilityScore < 0.6`
 - `insufficient_action_evidence`
   - 覆盖率达标后 `scoreVariance > 0.04`
+  - 且 `motionContinuity < 0.55`
 - `invalid_camera_angle`
   - 覆盖率达标后 `unknownViewCount >= max(4, usableFrameCount - 1)`
+  - `unknownViewCount` 会把低 `viewConfidence` 与频繁视角跳变一并算入证据
 
 ### 报告 issue 阈值
 
@@ -103,12 +123,12 @@
   - 它把“肩横向看起来更窄”直接近似成“侧身更充分”，容易把裁切、透视、耸肩、单臂遮挡误判成转体。
 - `racketArmLiftScore` 只看肩腕高度差
   - 没有区分真实引拍、随意抬手、击球后残留姿态，也没有识别持拍手或拍面。
-- `viewProfile` 主要依赖单帧几何关系
-  - 当前没有跨帧稳定器，镜头轻微晃动或肢体遮挡就可能让视角判断跳动。
-- `invalid_camera_angle` 在真实数据里偏难触发
-  - 因为只要关键点足够完整，当前视角推断通常会给出某个非 `unknown` 标签，所以这个拒绝条件更多是在边缘样本或人为构造样本里暴露出来。
-- `repeatability` 只看 composite 方差
-  - 它不知道动作阶段，只知道多帧分数是否接近，因此可能把“重复出现的错误姿态”也当作稳定复现。
+- `viewProfile` 仍然是轻量几何推断
+  - 现在有跨帧平滑和保守汇总，但还没有真正的时序视角分类器。
+- `invalid_camera_angle` 的证据更保守了
+  - 低置信度和跳变现在更容易累计到 `unknown`，但本质上仍是规则门控，不是完整机位识别。
+- `repeatability` 仍未做动作阶段切分
+  - 现在多了 `temporalConsistency` 和 `motionContinuity`，但还不知道准备、引拍、击球、随挥这些阶段。
 - 当前 report 只取 summary 中位数
   - 不关心最佳帧前后关系，也不关心峰值出现在哪个动作阶段。
 
@@ -120,15 +140,15 @@
   - 没有肘角、肩肘腕夹角、躯干与骨盆相对旋转、重心移动、跨步与蹬转信号。
 - 缺少球拍和球的信息
   - 当前完全没有持拍物体检测，也没有击球点和来球关系。
-- 缺少多帧稳定器
-  - 视角、挥拍侧、最佳帧判断都主要依赖单帧或简单聚合。
+- 缺少动作阶段理解
+  - 现在已有多帧稳定器，但还没有阶段切分或关键瞬间定位。
 - 缺少动作上下文
   - 不知道这段视频里动作是否完整，也不知道抽到的帧是否覆盖了真正关键瞬间。
 
 ## 调试建议
 
 - 看 pose 原始结果时，先看 `summary.rejectionReasonDetails` 和 `summary.debugCounts`，确认是覆盖率、主体尺寸、稳定度还是视角问题。
-- 看单帧时，优先对比 `metrics.debug.statusReasons`、`subjectScaleSource`、`frameInference`。
+- 看单帧时，优先对比 `rawMetrics`、`smoothedMetrics`、`finalMetrics`，再看 `metrics.debug.statusReasons`、`subjectScaleSource`、`frameInference`。
 - 看 report 时，优先对比 `scoringEvidence.dimensionEvidence[].inputs` 和 `scoringEvidence.totalScoreBreakdown`，确认是原始输入变了，还是只是 issue 弱判断调整在生效。
 - 本地开发可直接运行：
 

@@ -15,7 +15,7 @@ def main() -> int:
 
     task_dir = Path(sys.argv[1]).resolve()
     frame_paths = list_frame_paths(str(task_dir))
-    result = estimate_pose_for_frames(frame_paths)
+    result = estimate_pose_for_frames(frame_paths, task_dir=task_dir)
     print(json.dumps({
         'taskDir': str(task_dir),
         'frameFiles': [path.name for path in frame_paths],
