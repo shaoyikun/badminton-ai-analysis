@@ -53,7 +53,20 @@ Common umbrella skills to start with:
 - `repo-maintainer`: repo automation, scripts, docs, AGENTS, onboarding, build/test/verify workflow changes
 - `analysis-pipeline`: upload, preprocess, pose, scoring, report, and frontend result flow changes
 
-Additional specialized skills also live alongside them under `.codex/skills/` for API contracts, analysis-flow state transitions, Python integration, H5 product UI, Playwright QA, docs/spec sync, evaluation/regression, delivery baseline, shared contracts/adapters, and skill evolution from new learnings or pitfalls.
+Specialized skills to trigger directly when their scope matches:
+
+- `analysis-service-integration`: backend preprocess, `ffprobe`/`ffmpeg`, Python analysis-service invocation, pose output parsing, recoverable failure mapping
+- `backend-api-contracts`: Fastify route behavior, request/response shapes, task status payloads, history/comparison/report APIs, error response structure
+- `badminton-analysis-flow`: upload-to-analysis flow, candidate clip coarse scan, segment selection, task state transitions, polling, retry behavior
+- `badminton-h5-product-ui`: mobile H5 productization for home, guide, upload, processing, report, history, compare, and error pages
+- `badminton-playwright-mobile-qa`: mobile-first Playwright coverage, mock API alignment, screenshots, and end-to-end H5 validation
+- `badminton-vision-engineering`: segment detection, recommended clip selection, selected-segment sampling, pose/phase recognition, evidence gating, explainable scoring
+- `docs-spec-sync`: keeping `docs/`, `spec/`, `README.md`, and subsystem READMEs aligned with implementation changes
+- `evaluation-and-regression`: scoring thresholds, pose summaries, fixtures, baselines, drift review, and evaluation guardrails
+- `mobile-ui-interaction-design`: UI interaction review, component selection, mobile UX polish, screenshot-driven review, and structured UI self-check
+- `repo-delivery-baseline`: repository-level run/test/build/verify/evaluate expectations, Docker Compose behavior, and handoff gate changes
+- `shared-contracts-and-adapters`: `shared/contracts.d.ts`, frontend adapters/view models, and backend-to-UI response mapping
+- `skill-evolution`: updating existing skills or adding a new repo-local skill when a reusable workflow, pitfall, or trigger rule is discovered
 
 Frontend-facing specialized skills to prefer when UI work is involved:
 
@@ -62,6 +75,8 @@ Frontend-facing specialized skills to prefer when UI work is involved:
 - `badminton-playwright-mobile-qa`: Playwright validation, mobile screenshots, and end-to-end UI verification
 
 Each skill folder uses `SKILL.md` as the source of truth and may include `examples/` for narrow implementation patterns.
+
+Treat the skill bullets above as direct trigger rules rather than a loose catalog. If a task clearly matches one of those scopes, use that skill explicitly instead of relying only on an umbrella skill; if multiple skills match, use the minimal set that covers the task and start with `change-startup-context-review` for most development changes.
 
 ## Working Agreements
 
