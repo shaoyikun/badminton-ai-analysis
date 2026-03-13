@@ -1,0 +1,78 @@
+{
+  "engine": "mediapipe-pose",
+  "frameCount": 12,
+  "detectedFrameCount": 10,
+  "summary": {
+    "bestFrameIndex": 5,
+    "bestPreparationFrameIndex": 5,
+    "usableFrameCount": 6,
+    "coverageRatio": 0.6,
+    "medianStabilityScore": 0.62,
+    "medianBodyTurnScore": 0.55,
+    "medianRacketArmLiftScore": 0.51,
+    "scoreVariance": 0.034,
+    "temporalConsistency": 0.15,
+    "motionContinuity": 0.44,
+    "rejectionReasons": ["insufficient_action_evidence"],
+    "rejectionReasonDetails": [],
+    "humanSummary": "时序抖动偏大，但主体和机位仍可读。",
+    "viewProfile": "rear_left_oblique",
+    "viewConfidence": 0.82,
+    "viewStability": 0.76,
+    "dominantRacketSide": "right",
+    "racketSideConfidence": 0.68,
+    "phaseCandidates": {
+      "preparation": {
+        "anchorFrameIndex": 6,
+        "windowStartFrameIndex": 5,
+        "windowEndFrameIndex": 6,
+        "score": 0.67,
+        "sourceMetric": "contactPreparationScore",
+        "detectionStatus": "detected"
+      },
+      "backswing": {
+        "anchorFrameIndex": 6,
+        "windowStartFrameIndex": 5,
+        "windowEndFrameIndex": 6,
+        "score": 0.69,
+        "sourceMetric": "hittingArmPreparationScore",
+        "detectionStatus": "detected"
+      },
+      "contactCandidate": {
+        "anchorFrameIndex": 6,
+        "windowStartFrameIndex": 6,
+        "windowEndFrameIndex": 6,
+        "score": 0.52,
+        "sourceMetric": "compositeScore",
+        "detectionStatus": "detected"
+      },
+      "followThrough": {
+        "anchorFrameIndex": null,
+        "windowStartFrameIndex": null,
+        "windowEndFrameIndex": null,
+        "score": null,
+        "sourceMetric": "postContactMotionScore",
+        "detectionStatus": "missing",
+        "missingReason": "no_post_contact_frames"
+      }
+    },
+    "specializedFeatureSummary": {
+      "sideOnReadinessScore": { "median": 0.58, "peak": 0.69, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 6 },
+      "shoulderHipRotationScore": { "median": 0.54, "peak": 0.66, "observableFrameCount": 6, "observableCoverage": 1, "peakFrameIndex": 6 },
+      "trunkCoilScore": { "median": 0.56, "peak": 0.68, "observableFrameCount": 4, "observableCoverage": 0.6667, "peakFrameIndex": 6 },
+      "hittingArmPreparationScore": { "median": 0.55, "peak": 0.67, "observableFrameCount": 4, "observableCoverage": 0.6667, "peakFrameIndex": 6 },
+      "wristAboveShoulderConfidence": { "median": 0.53, "peak": 0.64, "observableFrameCount": 4, "observableCoverage": 0.6667, "peakFrameIndex": 6 },
+      "racketSideElbowHeightScore": { "median": 0.52, "peak": 0.62, "observableFrameCount": 4, "observableCoverage": 0.6667, "peakFrameIndex": 6 },
+      "elbowExtensionScore": { "median": 0.49, "peak": 0.59, "observableFrameCount": 4, "observableCoverage": 0.6667, "peakFrameIndex": 6 },
+      "contactPreparationScore": { "median": 0.52, "peak": 0.67, "observableFrameCount": 3, "observableCoverage": 0.5, "peakFrameIndex": 6 }
+    },
+    "debugCounts": {
+      "tooSmallCount": 0,
+      "lowStabilityCount": 0,
+      "unknownViewCount": 0,
+      "usableFrameCount": 6,
+      "detectedFrameCount": 10
+    }
+  },
+  "frames": []
+}

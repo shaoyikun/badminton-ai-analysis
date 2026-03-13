@@ -223,6 +223,187 @@ test('evaluateFixtureSuite enforces declared required coverage tags', async () =
   });
 });
 
+test('evaluateFixtureSuite tracks boundary coverage and temporal-noise low-confidence cases', async () => {
+  await withTempDir(async (workspace) => {
+    const fixturesDir = path.join(workspace, 'evaluation', 'fixtures');
+    fs.mkdirSync(fixturesDir, { recursive: true });
+
+    const boundaryPosePath = path.join(fixturesDir, 'boundary-low-confidence.pose.json');
+    fs.writeFileSync(boundaryPosePath, JSON.stringify(buildPoseResult({
+      usableFrameCount: 5,
+      coverageRatio: 0.5,
+      medianStabilityScore: 0.62,
+      temporalConsistency: 0.45,
+      motionContinuity: 0.5,
+      rejectionReasons: ['insufficient_pose_coverage'],
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.53, peak: 0.64, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+        shoulderHipRotationScore: { median: 0.5, peak: 0.61, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+        trunkCoilScore: { median: 0.49, peak: 0.6, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+        hittingArmPreparationScore: { median: 0.51, peak: 0.63, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+        wristAboveShoulderConfidence: { median: 0.48, peak: 0.58, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+        racketSideElbowHeightScore: { median: 0.47, peak: 0.57, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+        elbowExtensionScore: { median: 0.45, peak: 0.54, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+        contactPreparationScore: { median: 0.44, peak: 0.55, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 6 },
+      },
+      debugCounts: {
+        tooSmallCount: 0,
+        lowStabilityCount: 0,
+        unknownViewCount: 0,
+        usableFrameCount: 5,
+        detectedFrameCount: 7,
+      },
+    }), null, 2));
+
+    const temporalNoisePosePath = path.join(fixturesDir, 'temporal-noise-low-confidence.pose.json');
+    fs.writeFileSync(temporalNoisePosePath, JSON.stringify(buildPoseResult({
+      usableFrameCount: 6,
+      coverageRatio: 0.6,
+      medianStabilityScore: 0.62,
+      scoreVariance: 0.034,
+      temporalConsistency: 0.15,
+      motionContinuity: 0.44,
+      rejectionReasons: ['insufficient_action_evidence'],
+      phaseCandidates: {
+        preparation: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 5,
+          windowEndFrameIndex: 6,
+          score: 0.67,
+          sourceMetric: 'contactPreparationScore',
+          detectionStatus: 'detected',
+        },
+        backswing: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 5,
+          windowEndFrameIndex: 6,
+          score: 0.69,
+          sourceMetric: 'hittingArmPreparationScore',
+          detectionStatus: 'detected',
+        },
+        contactCandidate: {
+          anchorFrameIndex: 6,
+          windowStartFrameIndex: 6,
+          windowEndFrameIndex: 6,
+          score: 0.52,
+          sourceMetric: 'compositeScore',
+          detectionStatus: 'detected',
+        },
+        followThrough: {
+          anchorFrameIndex: null,
+          windowStartFrameIndex: null,
+          windowEndFrameIndex: null,
+          score: null,
+          sourceMetric: 'postContactMotionScore',
+          detectionStatus: 'missing',
+          missingReason: 'no_post_contact_frames',
+        },
+      },
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.58, peak: 0.69, observableFrameCount: 6, observableCoverage: 1, peakFrameIndex: 6 },
+        shoulderHipRotationScore: { median: 0.54, peak: 0.66, observableFrameCount: 6, observableCoverage: 1, peakFrameIndex: 6 },
+        trunkCoilScore: { median: 0.56, peak: 0.68, observableFrameCount: 4, observableCoverage: 0.6667, peakFrameIndex: 6 },
+        hittingArmPreparationScore: { median: 0.55, peak: 0.67, observableFrameCount: 4, observableCoverage: 0.6667, peakFrameIndex: 6 },
+        wristAboveShoulderConfidence: { median: 0.53, peak: 0.64, observableFrameCount: 4, observableCoverage: 0.6667, peakFrameIndex: 6 },
+        racketSideElbowHeightScore: { median: 0.52, peak: 0.62, observableFrameCount: 4, observableCoverage: 0.6667, peakFrameIndex: 6 },
+        elbowExtensionScore: { median: 0.49, peak: 0.59, observableFrameCount: 4, observableCoverage: 0.6667, peakFrameIndex: 6 },
+        contactPreparationScore: { median: 0.52, peak: 0.67, observableFrameCount: 3, observableCoverage: 0.5, peakFrameIndex: 6 },
+      },
+    }), null, 2));
+
+    const severeCoveragePosePath = path.join(fixturesDir, 'severe-coverage-rejected.pose.json');
+    fs.writeFileSync(severeCoveragePosePath, JSON.stringify(buildPoseResult({
+      usableFrameCount: 4,
+      coverageRatio: 0.4,
+      medianStabilityScore: 0.58,
+      temporalConsistency: 0.32,
+      motionContinuity: 0.41,
+      rejectionReasons: ['insufficient_pose_coverage'],
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.42, peak: 0.54, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+        shoulderHipRotationScore: { median: 0.4, peak: 0.51, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+        trunkCoilScore: { median: 0.39, peak: 0.5, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+        hittingArmPreparationScore: { median: 0.43, peak: 0.55, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+        wristAboveShoulderConfidence: { median: 0.4, peak: 0.52, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+        racketSideElbowHeightScore: { median: 0.39, peak: 0.49, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+        elbowExtensionScore: { median: 0.37, peak: 0.46, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+        contactPreparationScore: { median: 0.36, peak: 0.47, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 6 },
+      },
+      debugCounts: {
+        tooSmallCount: 0,
+        lowStabilityCount: 1,
+        unknownViewCount: 0,
+        usableFrameCount: 4,
+        detectedFrameCount: 6,
+      },
+    }), null, 2));
+
+    const indexPath = path.join(fixturesDir, 'index.json');
+    fs.writeFileSync(indexPath, JSON.stringify({
+      requiredCoverageTags: ['weak_preparation', 'stable_preparation'],
+      fixtures: [
+        {
+          id: 'boundary-low-confidence',
+          actionType: 'clear',
+          input: { poseResultPath: './boundary-low-confidence.pose.json' },
+          expected: {
+            cameraQuality: 'good',
+            majorIssueLabels: ['evidence_quality_gap'],
+            analysisDisposition: 'low_confidence',
+          },
+          coverageTags: ['weak_preparation'],
+        },
+        {
+          id: 'temporal-noise-low-confidence',
+          actionType: 'clear',
+          input: { poseResultPath: './temporal-noise-low-confidence.pose.json' },
+          expected: {
+            cameraQuality: 'good',
+            majorIssueLabels: ['evidence_quality_gap'],
+            analysisDisposition: 'low_confidence',
+          },
+          coverageTags: ['stable_preparation'],
+        },
+        {
+          id: 'severe-coverage-rejected',
+          actionType: 'clear',
+          input: { poseResultPath: './severe-coverage-rejected.pose.json' },
+          expected: {
+            cameraQuality: 'good',
+            majorIssueLabels: [],
+            analysisDisposition: 'rejected',
+          },
+          coverageTags: ['weak_preparation'],
+        },
+      ],
+    }, null, 2));
+
+    const { report } = await evaluateFixtureSuite({
+      indexPath,
+      baseline: {
+        schemaVersion: 1,
+        generatedAt: '2026-03-13T11:00:00.000Z',
+        fixtures: {},
+      },
+      now: () => '2026-03-13T12:00:00.000Z',
+    });
+
+    assert.equal(report.summary.totalFixtures, 3);
+    assert.deepEqual(report.summary.dispositionDistribution, {
+      low_confidence: 2,
+      rejected: 1,
+    });
+    assert.deepEqual(report.summary.primaryErrorCodeDistribution, {
+      insufficient_pose_coverage: 2,
+      insufficient_action_evidence: 1,
+    });
+    assert.equal(report.summary.expectationConsistency.dispositionMatchCount, 3);
+    assert.equal(report.cases[0]?.actual.analysisDisposition, 'low_confidence');
+    assert.deepEqual(report.cases[0]?.actual.lowConfidenceReasons, ['insufficient_pose_coverage']);
+    assert.equal(report.cases[2]?.actual.analysisDisposition, 'rejected');
+  });
+});
+
 test('getEvaluationGateFailures flags missing baseline and drift', () => {
   const report: EvaluationAggregateReport = {
     summary: {

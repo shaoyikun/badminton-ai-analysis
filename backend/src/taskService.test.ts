@@ -170,6 +170,168 @@ function buildLowConfidencePoseResult(): PoseAnalysisResult {
   };
 }
 
+function buildBoundaryCoveragePoseResult(): PoseAnalysisResult {
+  return {
+    engine: 'mediapipe-pose',
+    frameCount: 10,
+    detectedFrameCount: 7,
+    summary: {
+      bestFrameIndex: 4,
+      usableFrameCount: 5,
+      coverageRatio: 0.5,
+      medianStabilityScore: 0.62,
+      medianBodyTurnScore: 0.52,
+      medianRacketArmLiftScore: 0.49,
+      scoreVariance: 0.022,
+      temporalConsistency: 0.45,
+      motionContinuity: 0.5,
+      rejectionReasons: ['insufficient_pose_coverage'],
+      rejectionReasonDetails: [],
+      humanSummary: 'coverage 边界但仍可生成低置信报告。',
+      viewProfile: 'rear_left_oblique',
+      viewConfidence: 0.8,
+      viewStability: 0.75,
+      dominantRacketSide: 'right',
+      racketSideConfidence: 0.61,
+      bestPreparationFrameIndex: 4,
+      phaseCandidates: {
+        preparation: {
+          anchorFrameIndex: 4,
+          windowStartFrameIndex: 3,
+          windowEndFrameIndex: 4,
+          score: 0.55,
+          sourceMetric: 'contactPreparationScore',
+          detectionStatus: 'detected',
+        },
+        backswing: {
+          anchorFrameIndex: 4,
+          windowStartFrameIndex: 3,
+          windowEndFrameIndex: 4,
+          score: 0.57,
+          sourceMetric: 'hittingArmPreparationScore',
+          detectionStatus: 'detected',
+        },
+        contactCandidate: {
+          anchorFrameIndex: 4,
+          windowStartFrameIndex: 4,
+          windowEndFrameIndex: 4,
+          score: 0.55,
+          sourceMetric: 'compositeScore',
+          detectionStatus: 'detected',
+        },
+        followThrough: {
+          anchorFrameIndex: null,
+          windowStartFrameIndex: null,
+          windowEndFrameIndex: null,
+          score: null,
+          sourceMetric: 'postContactMotionScore',
+          detectionStatus: 'missing',
+          missingReason: 'no_post_contact_frames',
+        },
+      },
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.53, peak: 0.64, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+        shoulderHipRotationScore: { median: 0.5, peak: 0.61, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+        trunkCoilScore: { median: 0.49, peak: 0.6, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+        hittingArmPreparationScore: { median: 0.51, peak: 0.63, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+        wristAboveShoulderConfidence: { median: 0.48, peak: 0.58, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+        racketSideElbowHeightScore: { median: 0.47, peak: 0.57, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+        elbowExtensionScore: { median: 0.45, peak: 0.54, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+        contactPreparationScore: { median: 0.44, peak: 0.55, observableFrameCount: 5, observableCoverage: 0.5, peakFrameIndex: 4 },
+      },
+      debugCounts: {
+        tooSmallCount: 0,
+        lowStabilityCount: 0,
+        unknownViewCount: 0,
+        usableFrameCount: 5,
+        detectedFrameCount: 7,
+      },
+    },
+    frames: [],
+  };
+}
+
+function buildSevereCoveragePoseResult(): PoseAnalysisResult {
+  return {
+    engine: 'mediapipe-pose',
+    frameCount: 10,
+    detectedFrameCount: 6,
+    summary: {
+      bestFrameIndex: 4,
+      usableFrameCount: 4,
+      coverageRatio: 0.4,
+      medianStabilityScore: 0.58,
+      medianBodyTurnScore: 0.44,
+      medianRacketArmLiftScore: 0.42,
+      scoreVariance: 0.027,
+      temporalConsistency: 0.32,
+      motionContinuity: 0.41,
+      rejectionReasons: ['insufficient_pose_coverage'],
+      rejectionReasonDetails: [],
+      humanSummary: 'coverage 明显不足，仍应失败。',
+      viewProfile: 'rear_left_oblique',
+      viewConfidence: 0.74,
+      viewStability: 0.69,
+      dominantRacketSide: 'right',
+      racketSideConfidence: 0.56,
+      bestPreparationFrameIndex: 4,
+      phaseCandidates: {
+        preparation: {
+          anchorFrameIndex: 4,
+          windowStartFrameIndex: 4,
+          windowEndFrameIndex: 4,
+          score: 0.47,
+          sourceMetric: 'contactPreparationScore',
+          detectionStatus: 'detected',
+        },
+        backswing: {
+          anchorFrameIndex: 4,
+          windowStartFrameIndex: 4,
+          windowEndFrameIndex: 4,
+          score: 0.46,
+          sourceMetric: 'hittingArmPreparationScore',
+          detectionStatus: 'detected',
+        },
+        contactCandidate: {
+          anchorFrameIndex: 4,
+          windowStartFrameIndex: 4,
+          windowEndFrameIndex: 4,
+          score: 0.45,
+          sourceMetric: 'compositeScore',
+          detectionStatus: 'detected',
+        },
+        followThrough: {
+          anchorFrameIndex: null,
+          windowStartFrameIndex: null,
+          windowEndFrameIndex: null,
+          score: null,
+          sourceMetric: 'postContactMotionScore',
+          detectionStatus: 'missing',
+          missingReason: 'no_post_contact_frames',
+        },
+      },
+      specializedFeatureSummary: {
+        sideOnReadinessScore: { median: 0.42, peak: 0.54, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+        shoulderHipRotationScore: { median: 0.4, peak: 0.51, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+        trunkCoilScore: { median: 0.39, peak: 0.5, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+        hittingArmPreparationScore: { median: 0.43, peak: 0.55, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+        wristAboveShoulderConfidence: { median: 0.4, peak: 0.52, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+        racketSideElbowHeightScore: { median: 0.39, peak: 0.49, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+        elbowExtensionScore: { median: 0.37, peak: 0.46, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+        contactPreparationScore: { median: 0.36, peak: 0.47, observableFrameCount: 4, observableCoverage: 0.4, peakFrameIndex: 4 },
+      },
+      debugCounts: {
+        tooSmallCount: 0,
+        lowStabilityCount: 1,
+        unknownViewCount: 0,
+        usableFrameCount: 4,
+        detectedFrameCount: 6,
+      },
+    },
+    frames: [],
+  };
+}
+
 test('runAnalysisPipeline completes low-confidence sample and still stores a report', async () => {
   await withTempWorkspace(async () => {
     const originalDelay = process.env.MOCK_ANALYSIS_DELAY_MS;
@@ -201,6 +363,85 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
       assert.ok(reportRow);
       assert.equal(report?.scoringEvidence?.analysisDisposition, 'low_confidence');
       assert.ok((report?.confidenceScore ?? 100) < 70);
+    } finally {
+      if (originalDelay === undefined) {
+        delete process.env.MOCK_ANALYSIS_DELAY_MS;
+      } else {
+        process.env.MOCK_ANALYSIS_DELAY_MS = originalDelay;
+      }
+    }
+  });
+});
+
+test('runAnalysisPipeline completes boundary coverage sample as low confidence', async () => {
+  await withTempWorkspace(async () => {
+    const originalDelay = process.env.MOCK_ANALYSIS_DELAY_MS;
+    process.env.MOCK_ANALYSIS_DELAY_MS = '0';
+
+    try {
+      const task = createTask('clear');
+      const stored = writePoseResult(task.taskId, buildBoundaryCoveragePoseResult());
+      saveTask({
+        ...task,
+        status: 'processing',
+        stage: 'generating_report',
+        progressPercent: 90,
+        startedAt: new Date().toISOString(),
+        artifacts: {
+          ...task.artifacts,
+          poseResultPath: stored.absolutePath,
+        },
+      });
+
+      await runAnalysisPipelineForTests(task.taskId);
+
+      const completedTask = getTask(task.taskId);
+      const reportRow = getReportRow(task.taskId);
+      const report = reportRow ? JSON.parse(reportRow.report_json) as ReportResult : null;
+
+      assert.equal(completedTask?.status, 'completed');
+      assert.equal(completedTask?.error?.code, undefined);
+      assert.ok(reportRow);
+      assert.equal(report?.scoringEvidence?.analysisDisposition, 'low_confidence');
+      assert.ok(report?.scoringEvidence?.rejectionDecision?.lowConfidenceReasons?.includes('insufficient_pose_coverage'));
+    } finally {
+      if (originalDelay === undefined) {
+        delete process.env.MOCK_ANALYSIS_DELAY_MS;
+      } else {
+        process.env.MOCK_ANALYSIS_DELAY_MS = originalDelay;
+      }
+    }
+  });
+});
+
+test('runAnalysisPipeline still fails severe coverage deficit', async () => {
+  await withTempWorkspace(async () => {
+    const originalDelay = process.env.MOCK_ANALYSIS_DELAY_MS;
+    process.env.MOCK_ANALYSIS_DELAY_MS = '0';
+
+    try {
+      const task = createTask('clear');
+      const stored = writePoseResult(task.taskId, buildSevereCoveragePoseResult());
+      saveTask({
+        ...task,
+        status: 'processing',
+        stage: 'generating_report',
+        progressPercent: 90,
+        startedAt: new Date().toISOString(),
+        artifacts: {
+          ...task.artifacts,
+          poseResultPath: stored.absolutePath,
+        },
+      });
+
+      await runAnalysisPipelineForTests(task.taskId);
+
+      const failedTask = getTask(task.taskId);
+      const reportRow = getReportRow(task.taskId);
+
+      assert.equal(failedTask?.status, 'failed');
+      assert.equal(failedTask?.error?.code, 'insufficient_pose_coverage');
+      assert.equal(reportRow, undefined);
     } finally {
       if (originalDelay === undefined) {
         delete process.env.MOCK_ANALYSIS_DELAY_MS;

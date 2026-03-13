@@ -36,6 +36,8 @@
 - `confidenceScore` 用于表达“当前报告有多可信”，不直接代表动作质量
 - `dimensionScores` 当前展示的是 `证据质量 / 身体准备 / 挥拍臂准备 / 挥拍复现稳定性`
 - `issues` 与 `suggestions` 会同时保留旧版 `title / description / impact` 兼容字段，并补充教练式结构化字段
+- `poseSummary.rejectionReasons` / `scoringEvidence.rejectionReasons` 保留 pose 层原始触发信号，不直接等价于任务失败
+- 最终应以 `analysisDisposition` 与 `scoringEvidence.rejectionDecision` 判断是“硬拒绝”“低置信完成”还是“正常可分析”
 
 ### phaseBreakdown
 - phaseKey（`preparation` / `backswing` / `contactCandidate` / `followThrough`）
@@ -106,7 +108,8 @@
 说明：
 - MVP 目标协议以 `status + stage + error snapshot` 表达任务状态；`preprocessStatus`、`poseStatus` 仍可在内部或调试接口保留，但不再作为前端主状态机
 - 错误信息不再使用零散字段自由组合，统一走稳定 `errorCode`
-- 常见错误码包括 `upload_failed`、`invalid_duration`、`multi_person_detected`、`body_not_detected`、`poor_lighting_or_occlusion`、`invalid_camera_angle`、`preprocess_failed`、`pose_failed`
+- 常见失败态错误码包括 `upload_failed`、`invalid_duration`、`multi_person_detected`、`body_not_detected`、`poor_lighting_or_occlusion`、`insufficient_pose_coverage`、`preprocess_failed`、`pose_failed`
+- `invalid_camera_angle` 与边界型 `insufficient_pose_coverage` 在当前基线下优先下沉到 `completed + low_confidence`，不再默认进入失败态
 
 ### error response
 - error
@@ -259,6 +262,8 @@
 - `cameraSuitability` 只参与置信度，不直接进入 `totalScore`
 - `fallbacksUsed` 用于标记哪些维度仍由旧 turn/lift 或全局稳定性代理补足
 - Phase 2 起，`swing_repeatability` 优先使用 `contactCandidate` / `followThrough` 阶段证据；若阶段证据不足，会明确记录为阶段回退
+- `rejectionReasons` 记录 pose 原始触发原因；最终 hard/soft 分类以 `rejectionDecision.hardRejectReasons` 和 `rejectionDecision.lowConfidenceReasons` 为准
+- Phase 4 起，`insufficient_pose_coverage` 在接近门槛但仍有可读动作证据时，可出现在 `lowConfidenceReasons`，不再默认等价于失败
 
 ### preprocess
 - metadata（可选）

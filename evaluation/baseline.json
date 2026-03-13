@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-03-13T06:30:02.516Z",
+  "generatedAt": "2026-03-13T06:49:35.825Z",
   "fixtures": {
     "clear-normal": {
       "analysisDisposition": "analyzable",
@@ -125,6 +125,28 @@
         "phase_repeatability_fallback"
       ]
     },
+    "clear-boundary-low-confidence": {
+      "analysisDisposition": "low_confidence",
+      "rejectionReasons": [
+        "insufficient_pose_coverage"
+      ],
+      "lowConfidenceReasons": [
+        "insufficient_pose_coverage"
+      ],
+      "topIssueLabels": [
+        "evidence_quality_gap",
+        "body_preparation_gap",
+        "racket_arm_preparation_gap"
+      ],
+      "totalScore": 59,
+      "confidenceScore": 60,
+      "scoreVariance": 0.022,
+      "temporalConsistency": 0.45,
+      "motionContinuity": 0.5,
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
+    },
     "clear-boundary-rejected": {
       "analysisDisposition": "rejected",
       "rejectionReasons": [
@@ -134,9 +156,31 @@
       "topIssueLabels": [],
       "totalScore": null,
       "confidenceScore": null,
-      "scoreVariance": 0.022,
-      "temporalConsistency": 0.45,
-      "motionContinuity": 0.5,
+      "scoreVariance": 0.027,
+      "temporalConsistency": 0.32,
+      "motionContinuity": 0.41,
+      "fallbacksUsed": [
+        "phase_repeatability_fallback"
+      ]
+    },
+    "clear-temporal-noise-low-confidence": {
+      "analysisDisposition": "low_confidence",
+      "rejectionReasons": [
+        "insufficient_action_evidence"
+      ],
+      "lowConfidenceReasons": [
+        "insufficient_action_evidence"
+      ],
+      "topIssueLabels": [
+        "evidence_quality_gap",
+        "body_preparation_gap",
+        "racket_arm_preparation_gap"
+      ],
+      "totalScore": 58,
+      "confidenceScore": 64,
+      "scoreVariance": 0.034,
+      "temporalConsistency": 0.15,
+      "motionContinuity": 0.44,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
       ]

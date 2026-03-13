@@ -93,7 +93,8 @@
 
 ## 6. 错误映射约束
 - `upload_failed` / `invalid_duration`：优先回上传
-- `multi_person_detected` / `body_not_detected` / `poor_lighting_or_occlusion` / `invalid_camera_angle`：优先回拍摄规范
+- `multi_person_detected` / `body_not_detected` / `poor_lighting_or_occlusion` / `insufficient_pose_coverage`（严重 coverage deficit）：优先回拍摄规范
+- `invalid_camera_angle` 与边界型 `insufficient_pose_coverage`：优先完成为 `low_confidence` 报告，不默认进入失败页
 - `preprocess_failed` / `pose_failed`：允许重新上传，也允许回看拍摄规范
 
 ## 7. 原型对应

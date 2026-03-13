@@ -1,0 +1,43 @@
+{
+  "engine": "mediapipe-pose",
+  "frameCount": 10,
+  "detectedFrameCount": 7,
+  "summary": {
+    "bestFrameIndex": 4,
+    "bestPreparationFrameIndex": 4,
+    "usableFrameCount": 5,
+    "coverageRatio": 0.5,
+    "medianStabilityScore": 0.62,
+    "medianBodyTurnScore": 0.52,
+    "medianRacketArmLiftScore": 0.49,
+    "scoreVariance": 0.022,
+    "temporalConsistency": 0.45,
+    "motionContinuity": 0.5,
+    "rejectionReasons": ["insufficient_pose_coverage"],
+    "rejectionReasonDetails": [],
+    "humanSummary": "coverage 接近门槛，但仍保留一定可读动作证据。",
+    "viewProfile": "rear_left_oblique",
+    "viewConfidence": 0.8,
+    "viewStability": 0.75,
+    "dominantRacketSide": "right",
+    "racketSideConfidence": 0.61,
+    "specializedFeatureSummary": {
+      "sideOnReadinessScore": { "median": 0.53, "peak": 0.64, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 },
+      "shoulderHipRotationScore": { "median": 0.5, "peak": 0.61, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 },
+      "trunkCoilScore": { "median": 0.49, "peak": 0.6, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 },
+      "hittingArmPreparationScore": { "median": 0.51, "peak": 0.63, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 },
+      "wristAboveShoulderConfidence": { "median": 0.48, "peak": 0.58, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 },
+      "racketSideElbowHeightScore": { "median": 0.47, "peak": 0.57, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 },
+      "elbowExtensionScore": { "median": 0.45, "peak": 0.54, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 },
+      "contactPreparationScore": { "median": 0.44, "peak": 0.55, "observableFrameCount": 5, "observableCoverage": 0.5, "peakFrameIndex": 4 }
+    },
+    "debugCounts": {
+      "tooSmallCount": 0,
+      "lowStabilityCount": 0,
+      "unknownViewCount": 0,
+      "usableFrameCount": 5,
+      "detectedFrameCount": 7
+    }
+  },
+  "frames": []
+}

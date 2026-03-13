@@ -113,6 +113,21 @@
       "reviewerNotes": "主要观察边界样例是否仍保持 analyzable"
     },
     {
+      "id": "clear-boundary-low-confidence",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-boundary-low-confidence.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["evidence_quality_gap"],
+        "analysisDisposition": "low_confidence"
+      },
+      "coverageTags": ["weak_preparation"],
+      "notes": "coverage 接近门槛但可降级为低置信完成",
+      "reviewerNotes": "守护 Phase 4：insufficient_pose_coverage 边界 case 下沉为 low_confidence"
+    },
+    {
       "id": "clear-boundary-rejected",
       "actionType": "clear",
       "input": {
@@ -124,8 +139,23 @@
         "analysisDisposition": "rejected"
       },
       "coverageTags": ["stable_preparation"],
-      "notes": "coverage 边界拒绝样例",
-      "reviewerNotes": "主要观察 insufficient_pose_coverage 是否仍为硬拒绝"
+      "notes": "coverage 明显不足的硬拒绝样例",
+      "reviewerNotes": "守护 Phase 4：明显 coverage deficit 仍保持 hard reject"
+    },
+    {
+      "id": "clear-temporal-noise-low-confidence",
+      "actionType": "clear",
+      "input": {
+        "poseResultPath": "./pose/clear-temporal-noise-low-confidence.pose.json"
+      },
+      "expected": {
+        "cameraQuality": "good",
+        "majorIssueLabels": ["evidence_quality_gap"],
+        "analysisDisposition": "low_confidence"
+      },
+      "coverageTags": ["stable_preparation"],
+      "notes": "时序抖动较大但仍可完成报告",
+      "reviewerNotes": "守护 Phase 4：insufficient_action_evidence 稳定落到 low_confidence"
     }
   ]
 }

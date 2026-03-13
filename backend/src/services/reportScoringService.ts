@@ -177,8 +177,11 @@ const HARD_REJECT_REASONS = new Set<FlowErrorCode>([
   'body_not_detected',
   'subject_too_small_or_cropped',
   'poor_lighting_or_occlusion',
-  'insufficient_pose_coverage',
 ]);
+
+const MIN_SOFT_COVERAGE_FRAME_COUNT = 5;
+const MIN_SOFT_COVERAGE_RATIO = 0.5;
+const MIN_SOFT_COVERAGE_STABILITY = 0.6;
 
 const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
   invalid_action_type: 'actionType is invalid',
@@ -339,12 +342,49 @@ function addLowConfidenceReason(
   notes.push(note);
 }
 
+function shouldDowngradeCoverageFailure(summary: PoseAnalysisResult['summary']) {
+  return summary.usableFrameCount >= MIN_SOFT_COVERAGE_FRAME_COUNT
+    && summary.coverageRatio >= MIN_SOFT_COVERAGE_RATIO
+    && summary.medianStabilityScore >= MIN_SOFT_COVERAGE_STABILITY;
+}
+
+function classifyCoverageReason(
+  summary: PoseAnalysisResult['summary'],
+  hardRejectReasons: FlowErrorCode[],
+  lowConfidenceReasons: FlowErrorCode[],
+  confidencePenaltyNotes: string[],
+) {
+  if (shouldDowngradeCoverageFailure(summary)) {
+    addLowConfidenceReason(
+      lowConfidenceReasons,
+      confidencePenaltyNotes,
+      'insufficient_pose_coverage',
+      '当前样本覆盖率接近正式报告门槛，报告可读但建议补一条覆盖更完整的同机位样本。',
+    );
+    return;
+  }
+
+  hardRejectReasons.push('insufficient_pose_coverage');
+}
+
 function getAnalysisDisposition(poseResult: PoseAnalysisResult): AnalysisDisposition {
-  const hardRejectReasons = uniqueReasons(
-    poseResult.summary.rejectionReasons.filter((reason) => HARD_REJECT_REASONS.has(reason)),
-  );
-  const lowConfidenceReasons = [...poseResult.summary.rejectionReasons.filter((reason) => !HARD_REJECT_REASONS.has(reason))];
+  const hardRejectReasons: FlowErrorCode[] = [];
+  const lowConfidenceReasons: FlowErrorCode[] = [];
   const confidencePenaltyNotes: string[] = [];
+
+  for (const reason of poseResult.summary.rejectionReasons) {
+    if (reason === 'insufficient_pose_coverage') {
+      classifyCoverageReason(poseResult.summary, hardRejectReasons, lowConfidenceReasons, confidencePenaltyNotes);
+      continue;
+    }
+
+    if (HARD_REJECT_REASONS.has(reason)) {
+      hardRejectReasons.push(reason);
+      continue;
+    }
+
+    lowConfidenceReasons.push(reason);
+  }
 
   const viewProfile = poseResult.summary.viewProfile ?? 'unknown';
   const unknownViewCount = poseResult.summary.debugCounts?.unknownViewCount ?? 0;
@@ -372,7 +412,7 @@ function getAnalysisDisposition(poseResult: PoseAnalysisResult): AnalysisDisposi
   }
 
   return {
-    hardRejectReasons,
+    hardRejectReasons: uniqueReasons(hardRejectReasons),
     lowConfidenceReasons: uniqueReasons(lowConfidenceReasons),
     confidencePenaltyNotes: [...new Set(confidencePenaltyNotes)],
   };

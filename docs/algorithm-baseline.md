@@ -148,9 +148,12 @@
 - `poor_lighting_or_occlusion`
   - `lowStabilityCount >= max(3, frameCount // 3)`
 - `insufficient_pose_coverage`
-  - `usableFrameCount < 6`
-  - 或 `coverageRatio < 0.6`
-  - 或在覆盖率已达标时 `medianStabilityScore < 0.6`
+  - 只有“明显不足”的覆盖样本继续硬拒绝
+  - 当前保守门槛是：
+    - `usableFrameCount < 5`
+    - 或 `coverageRatio < 0.5`
+    - 或 `medianStabilityScore < 0.6`
+  - 命中上述任一条件时，仍进入失败态
 
 #### 降级为低置信完成的条件
 
@@ -161,6 +164,21 @@
 - `insufficient_action_evidence`
   - 覆盖率已过最低门槛，但 `scoreVariance` 仍偏高
   - 当前更像“证据偏散”，不再直接作为硬失败
+- `insufficient_pose_coverage`
+  - 当前会先保留在 pose 层 `rejectionReasons`
+  - 但若样本仅接近门槛，同时仍满足：
+    - `usableFrameCount >= 5`
+    - `coverageRatio >= 0.5`
+    - `medianStabilityScore >= 0.6`
+  - backend 会把它下沉为 `low_confidence`，并写入 `rejectionDecision.lowConfidenceReasons`
+
+#### 原始 rejectionReasons 与最终 disposition 的关系
+
+- `summary.rejectionReasons` 代表 pose 层原始触发信号
+- backend 会再根据当前阈值把它们分成：
+  - `rejectionDecision.hardRejectReasons`
+  - `rejectionDecision.lowConfidenceReasons`
+- 因此 `rejectionReasons` 中出现 `invalid_camera_angle` 或 `insufficient_pose_coverage`，并不自动代表任务失败；最终以 `analysisDisposition` 为准
 
 #### confidenceScore 阈值
 
@@ -168,6 +186,21 @@
   - `analysisDisposition=low_confidence`
 - `confidenceScore >= 70`
   - `analysisDisposition=analyzable`
+
+### Phase 4 评测校准结果
+
+- Phase 3 checked-in baseline（8 fixtures）：
+  - `successRate = 5/8 (0.625)`
+  - `dispositionDistribution = analyzable=4, low_confidence=1, rejected=3`
+- Phase 4 checked-in baseline（10 fixtures）：
+  - `successRate = 7/10 (0.7)`
+  - `dispositionDistribution = analyzable=4, low_confidence=3, rejected=3`
+- 本次新增并固定了两类边界样本：
+  - `clear-boundary-low-confidence`
+    - 守护 coverage 接近门槛时的 `low_confidence`
+  - `clear-temporal-noise-low-confidence`
+    - 守护时序抖动/阶段证据不完整时的 `low_confidence`
+- 同时保留 `clear-boundary-rejected` 作为“明显 coverage deficit 仍硬拒绝”的 guard rail
 
 ### 报告 issue 阈值
 

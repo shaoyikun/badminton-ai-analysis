@@ -255,13 +255,16 @@
 | `multi_person_detected` | 检测到多人同框 | 查看拍摄规范 | 重新上传 |
 | `body_not_detected` | 未识别到清晰人体 | 查看拍摄规范 | 重新上传 |
 | `poor_lighting_or_occlusion` | 画面质量不足 | 查看拍摄规范 | 重新上传 |
-| `invalid_camera_angle` | 机位不利于分析 | 查看拍摄规范 | 重新上传 |
+| `insufficient_pose_coverage` | 有效覆盖不足 | 重新上传 | 查看拍摄规范 |
+| `invalid_camera_angle` | 机位不利于分析（兼容失败态） | 查看拍摄规范 | 重新上传 |
 | `preprocess_failed` | 预处理失败 | 重新上传 | 查看拍摄规范 |
 | `pose_failed` | 姿态识别失败 | 重新上传 | 查看拍摄规范 |
 
 原则：
 - 错误页只说明用户可执行动作，不披露技术细节
 - 所有错误都应能回到上传页或拍摄指引页
+- `invalid_camera_angle` 与边界型 `insufficient_pose_coverage` 在当前基线下优先走 `completed + low_confidence` 报告，不作为默认错误页路径
+- 只有明显 coverage deficit 的 `insufficient_pose_coverage` 才继续进入失败态
 
 ---
 

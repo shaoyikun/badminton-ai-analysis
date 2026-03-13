@@ -214,6 +214,284 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
   };
 }
 
+function buildBoundaryCoveragePoseResult() {
+  return buildPoseResult({
+    usableFrameCount: 5,
+    coverageRatio: 0.5,
+    medianStabilityScore: 0.62,
+    temporalConsistency: 0.5,
+    motionContinuity: 0.58,
+    rejectionReasons: ['insufficient_pose_coverage'],
+    phaseCandidates: {
+      preparation: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.55,
+        sourceMetric: 'contactPreparationScore',
+        detectionStatus: 'detected',
+      },
+      backswing: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.57,
+        sourceMetric: 'hittingArmPreparationScore',
+        detectionStatus: 'detected',
+      },
+      contactCandidate: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 6,
+        windowEndFrameIndex: 6,
+        score: 0.55,
+        sourceMetric: 'compositeScore',
+        detectionStatus: 'detected',
+      },
+      followThrough: {
+        anchorFrameIndex: null,
+        windowStartFrameIndex: null,
+        windowEndFrameIndex: null,
+        score: null,
+        sourceMetric: 'postContactMotionScore',
+        detectionStatus: 'missing',
+        missingReason: 'no_post_contact_frames',
+      },
+    },
+    specializedFeatureSummary: buildSpecializedSummary({
+      sideOnReadinessScore: {
+        median: 0.53,
+        peak: 0.64,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+      shoulderHipRotationScore: {
+        median: 0.5,
+        peak: 0.61,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+      trunkCoilScore: {
+        median: 0.49,
+        peak: 0.6,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+      hittingArmPreparationScore: {
+        median: 0.51,
+        peak: 0.63,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+      wristAboveShoulderConfidence: {
+        median: 0.48,
+        peak: 0.58,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+      racketSideElbowHeightScore: {
+        median: 0.47,
+        peak: 0.57,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+      elbowExtensionScore: {
+        median: 0.45,
+        peak: 0.54,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+      contactPreparationScore: {
+        median: 0.44,
+        peak: 0.55,
+        observableFrameCount: 5,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+    }),
+    debugCounts: {
+      tooSmallCount: 0,
+      lowStabilityCount: 0,
+      unknownViewCount: 0,
+      usableFrameCount: 5,
+      detectedFrameCount: 7,
+    },
+  });
+}
+
+function buildSevereCoveragePoseResult() {
+  return buildPoseResult({
+    usableFrameCount: 4,
+    coverageRatio: 0.4,
+    medianStabilityScore: 0.58,
+    temporalConsistency: 0.32,
+    motionContinuity: 0.41,
+    rejectionReasons: ['insufficient_pose_coverage'],
+    specializedFeatureSummary: buildSpecializedSummary({
+      sideOnReadinessScore: {
+        median: 0.42,
+        peak: 0.54,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+      shoulderHipRotationScore: {
+        median: 0.4,
+        peak: 0.51,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+      trunkCoilScore: {
+        median: 0.39,
+        peak: 0.5,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+      hittingArmPreparationScore: {
+        median: 0.43,
+        peak: 0.55,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+      wristAboveShoulderConfidence: {
+        median: 0.4,
+        peak: 0.52,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+      racketSideElbowHeightScore: {
+        median: 0.39,
+        peak: 0.49,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+      elbowExtensionScore: {
+        median: 0.37,
+        peak: 0.46,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+      contactPreparationScore: {
+        median: 0.36,
+        peak: 0.47,
+        observableFrameCount: 4,
+        observableCoverage: 0.4,
+        peakFrameIndex: 6,
+      },
+    }),
+    debugCounts: {
+      tooSmallCount: 0,
+      lowStabilityCount: 1,
+      unknownViewCount: 0,
+      usableFrameCount: 4,
+      detectedFrameCount: 6,
+    },
+  });
+}
+
+function buildTemporalNoisePoseResult() {
+  return buildPoseResult({
+    usableFrameCount: 6,
+    coverageRatio: 0.6,
+    medianStabilityScore: 0.62,
+    scoreVariance: 0.034,
+    temporalConsistency: 0.15,
+    motionContinuity: 0.44,
+    rejectionReasons: ['insufficient_action_evidence'],
+    phaseCandidates: {
+      preparation: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.67,
+        sourceMetric: 'contactPreparationScore',
+        detectionStatus: 'detected',
+      },
+      backswing: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 5,
+        windowEndFrameIndex: 6,
+        score: 0.69,
+        sourceMetric: 'hittingArmPreparationScore',
+        detectionStatus: 'detected',
+      },
+      contactCandidate: {
+        anchorFrameIndex: 6,
+        windowStartFrameIndex: 6,
+        windowEndFrameIndex: 6,
+        score: 0.52,
+        sourceMetric: 'compositeScore',
+        detectionStatus: 'detected',
+      },
+      followThrough: {
+        anchorFrameIndex: null,
+        windowStartFrameIndex: null,
+        windowEndFrameIndex: null,
+        score: null,
+        sourceMetric: 'postContactMotionScore',
+        detectionStatus: 'missing',
+        missingReason: 'no_post_contact_frames',
+      },
+    },
+    specializedFeatureSummary: buildSpecializedSummary({
+      trunkCoilScore: {
+        median: 0.56,
+        peak: 0.68,
+        observableFrameCount: 4,
+        observableCoverage: 0.6667,
+        peakFrameIndex: 6,
+      },
+      hittingArmPreparationScore: {
+        median: 0.55,
+        peak: 0.67,
+        observableFrameCount: 4,
+        observableCoverage: 0.6667,
+        peakFrameIndex: 6,
+      },
+      wristAboveShoulderConfidence: {
+        median: 0.53,
+        peak: 0.64,
+        observableFrameCount: 4,
+        observableCoverage: 0.6667,
+        peakFrameIndex: 6,
+      },
+      racketSideElbowHeightScore: {
+        median: 0.52,
+        peak: 0.62,
+        observableFrameCount: 4,
+        observableCoverage: 0.6667,
+        peakFrameIndex: 6,
+      },
+      elbowExtensionScore: {
+        median: 0.49,
+        peak: 0.59,
+        observableFrameCount: 4,
+        observableCoverage: 0.6667,
+        peakFrameIndex: 6,
+      },
+      contactPreparationScore: {
+        median: 0.52,
+        peak: 0.67,
+        observableFrameCount: 3,
+        observableCoverage: 0.5,
+        peakFrameIndex: 6,
+      },
+    }),
+  });
+}
+
 test('getPoseQualityFailure returns the first hard rejection reason only', () => {
   const result = buildPoseResult({
     rejectionReasons: ['invalid_camera_angle', 'insufficient_pose_coverage'],
@@ -304,6 +582,41 @@ test('buildRuleBasedResult treats poor camera angle as low confidence instead of
   assert.equal(report.scoringEvidence?.analysisDisposition, 'analyzable');
   assert.equal(report.scoringEvidence?.cameraSuitability, 58);
   assert.match(report.evidenceNotes?.[0] ?? '', /机位降低了置信度/);
+});
+
+test('buildRuleBasedResult downgrades boundary coverage failure to low confidence', () => {
+  const poseResult = buildBoundaryCoveragePoseResult();
+
+  const report = buildRuleBasedResult(buildTask(), poseResult);
+
+  assert.equal(getPoseQualityFailure(poseResult), null);
+  assert.equal(report.scoringEvidence?.analysisDisposition, 'low_confidence');
+  assert.ok((report.confidenceScore ?? 100) < 70);
+  assert.deepEqual(report.scoringEvidence?.rejectionDecision?.hardRejectReasons, []);
+  assert.deepEqual(report.scoringEvidence?.rejectionDecision?.lowConfidenceReasons, ['insufficient_pose_coverage']);
+  assert.ok(report.evidenceNotes?.some((note) => note.includes('覆盖率接近正式报告门槛')));
+});
+
+test('getPoseQualityFailure keeps severe coverage deficit as hard rejection', () => {
+  const result = buildSevereCoveragePoseResult();
+
+  const failure = getPoseQualityFailure(result);
+
+  assert.deepEqual(failure, {
+    code: 'insufficient_pose_coverage',
+    message: 'stable pose coverage is below the minimum report threshold',
+  });
+});
+
+test('buildRuleBasedResult maps temporal noise to low confidence instead of hard rejection', () => {
+  const poseResult = buildTemporalNoisePoseResult();
+
+  const report = buildRuleBasedResult(buildTask(), poseResult);
+
+  assert.equal(getPoseQualityFailure(poseResult), null);
+  assert.equal(report.scoringEvidence?.analysisDisposition, 'low_confidence');
+  assert.ok(report.scoringEvidence?.rejectionDecision?.lowConfidenceReasons?.includes('insufficient_action_evidence'));
+  assert.ok(report.evidenceNotes?.some((note) => note.includes('复现证据偏散')));
 });
 
 test('buildRuleBasedResult keeps jitter-heavy sample analyzable but lowers repeatability confidence', () => {
