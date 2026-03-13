@@ -282,6 +282,23 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
             'racketArmLiftScore': None,
             'subjectScale': None,
             'compositeScore': 0.0,
+            'debug': {
+                'torsoHeight': None,
+                'shoulderDepthGap': None,
+                'hipDepthGap': None,
+                'leftArmLiftScore': None,
+                'rightArmLiftScore': None,
+                'visibilities': {},
+                'subjectScaleSource': {
+                    'dominantMetric': 'unknown',
+                    'values': {
+                        'shoulderSpan': None,
+                        'hipSpan': None,
+                        'torsoHeight': None,
+                    },
+                },
+                'statusReasons': ['incomplete_keypoints'],
+            },
             'summaryText': '关键点不完整，暂时无法计算姿态摘要。',
         }
 
@@ -289,21 +306,30 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
     hip_span = abs(left_hip['x'] - right_hip['x'])
     torso_height = abs(((left_shoulder['y'] + right_shoulder['y']) / 2) - ((left_hip['y'] + right_hip['y']) / 2))
     subject_scale = max(shoulder_span, hip_span, torso_height)
+    shoulder_depth_gap = abs(left_shoulder['z'] - right_shoulder['z'])
+    hip_depth_gap = abs(left_hip['z'] - right_hip['z'])
     body_turn_score = _round(max(0.0, min(1.0, 1 - shoulder_span)))
     frame_racket_side, _, left_lift_score, right_lift_score = _infer_frame_racket_side(points)
     racket_arm_lift_score = _round(max(left_lift_score, right_lift_score))
 
-    visibilities = [
-        left_shoulder['visibility'],
-        right_shoulder['visibility'],
-        left_hip['visibility'],
-        right_hip['visibility'],
-        left_wrist['visibility'],
-        right_wrist['visibility'],
-        nose['visibility'],
-    ]
+    visibility_map = {
+        'leftShoulder': _round(left_shoulder['visibility']),
+        'rightShoulder': _round(right_shoulder['visibility']),
+        'leftHip': _round(left_hip['visibility']),
+        'rightHip': _round(right_hip['visibility']),
+        'leftWrist': _round(left_wrist['visibility']),
+        'rightWrist': _round(right_wrist['visibility']),
+        'nose': _round(nose['visibility']),
+    }
+    visibilities = list(visibility_map.values())
     stability_score = _round(mean(visibilities))
     composite_score = _round((stability_score * 0.45) + (body_turn_score * 0.3) + (racket_arm_lift_score * 0.25))
+    subject_scale_candidates = {
+        'shoulderSpan': _round(shoulder_span),
+        'hipSpan': _round(hip_span),
+        'torsoHeight': _round(torso_height),
+    }
+    dominant_subject_scale_metric = max(subject_scale_candidates.items(), key=lambda item: item[1])[0]
 
     body_text = '转体展开较明显' if body_turn_score >= 0.45 else '身体仍较多正对镜头'
     if frame_racket_side == 'unknown':
@@ -319,11 +345,23 @@ def _compute_frame_metrics(keypoints: List[Dict[str, Any]]) -> Dict[str, Any]:
         'racketArmLiftScore': racket_arm_lift_score,
         'subjectScale': _round(subject_scale),
         'compositeScore': composite_score,
+        'debug': {
+            'torsoHeight': _round(torso_height),
+            'shoulderDepthGap': _round(shoulder_depth_gap),
+            'hipDepthGap': _round(hip_depth_gap),
+            'leftArmLiftScore': _round(left_lift_score),
+            'rightArmLiftScore': _round(right_lift_score),
+            'visibilities': visibility_map,
+            'subjectScaleSource': {
+                'dominantMetric': dominant_subject_scale_metric,
+                'values': subject_scale_candidates,
+            },
+        },
         'summaryText': f'{body_text}，{arm_text}。',
     }
 
 
-def _build_rejection_reasons(
+def _build_rejection_reason_details(
     frame_count: int,
     detected_count: int,
     usable_frame_count: int,
@@ -333,30 +371,99 @@ def _build_rejection_reasons(
     too_small_count: int,
     low_stability_count: int,
     unknown_view_count: int,
-) -> List[str]:
-    if detected_count == 0:
-        return ['body_not_detected']
+) -> List[Dict[str, Any]]:
+    too_small_threshold = max(3, frame_count // 3)
+    low_stability_threshold = max(3, frame_count // 3)
+    unknown_view_threshold = max(4, usable_frame_count - 1)
+    coverage_triggered = (
+        usable_frame_count < MIN_USABLE_FRAME_COUNT
+        or coverage_ratio < MIN_COVERAGE_RATIO
+        or (
+            usable_frame_count >= MIN_USABLE_FRAME_COUNT
+            and coverage_ratio >= MIN_COVERAGE_RATIO
+            and median_stability_score < USABLE_STABILITY_THRESHOLD
+        )
+    )
+    coverage_explanation = (
+        '稳定识别帧数、覆盖率或稳定度中位数未达到正式报告门槛。'
+        if coverage_triggered
+        else '当前稳定识别帧数、覆盖率和稳定度中位数均满足正式报告门槛。'
+    )
 
-    reasons: List[str] = []
-    if too_small_count >= max(3, frame_count // 3):
-        reasons.append('subject_too_small_or_cropped')
-    if low_stability_count >= max(3, frame_count // 3):
-        reasons.append('poor_lighting_or_occlusion')
-    if usable_frame_count < MIN_USABLE_FRAME_COUNT or coverage_ratio < MIN_COVERAGE_RATIO:
-        reasons.append('insufficient_pose_coverage')
-    if usable_frame_count >= MIN_USABLE_FRAME_COUNT and coverage_ratio >= MIN_COVERAGE_RATIO:
-        if median_stability_score < USABLE_STABILITY_THRESHOLD:
-            reasons.append('insufficient_pose_coverage')
-        if score_variance > MAX_SCORE_VARIANCE:
-            reasons.append('insufficient_action_evidence')
-        if unknown_view_count >= max(4, usable_frame_count - 1):
-            reasons.append('invalid_camera_angle')
+    return [
+        {
+            'code': 'body_not_detected',
+            'triggered': detected_count == 0,
+            'observed': detected_count,
+            'threshold': 0,
+            'comparator': '==',
+            'explanation': '完全没有检测到人体关键点时，系统直接拒绝生成正式报告。',
+        },
+        {
+            'code': 'subject_too_small_or_cropped',
+            'triggered': too_small_count >= too_small_threshold,
+            'observed': too_small_count,
+            'threshold': too_small_threshold,
+            'comparator': '>=',
+            'explanation': '主体尺寸过小或入镜不完整的帧过多时，系统认为样本不适合正式分析。',
+        },
+        {
+            'code': 'poor_lighting_or_occlusion',
+            'triggered': low_stability_count >= low_stability_threshold,
+            'observed': low_stability_count,
+            'threshold': low_stability_threshold,
+            'comparator': '>=',
+            'explanation': '低稳定度帧过多通常意味着光照、模糊或遮挡影响了关键点质量。',
+        },
+        {
+            'code': 'insufficient_pose_coverage',
+            'triggered': coverage_triggered,
+            'observed': {
+                'usableFrameCount': usable_frame_count,
+                'coverageRatio': coverage_ratio,
+                'medianStabilityScore': median_stability_score,
+            },
+            'threshold': {
+                'minUsableFrameCount': MIN_USABLE_FRAME_COUNT,
+                'minCoverageRatio': MIN_COVERAGE_RATIO,
+                'minMedianStabilityScore': USABLE_STABILITY_THRESHOLD,
+            },
+            'comparator': '< or < or <',
+            'explanation': coverage_explanation,
+        },
+        {
+            'code': 'insufficient_action_evidence',
+            'triggered': (
+                usable_frame_count >= MIN_USABLE_FRAME_COUNT
+                and coverage_ratio >= MIN_COVERAGE_RATIO
+                and score_variance > MAX_SCORE_VARIANCE
+            ),
+            'observed': score_variance,
+            'threshold': MAX_SCORE_VARIANCE,
+            'comparator': '>',
+            'explanation': '稳定帧之间的综合分波动过大时，系统会认为动作证据不够稳定。',
+        },
+        {
+            'code': 'invalid_camera_angle',
+            'triggered': (
+                usable_frame_count >= MIN_USABLE_FRAME_COUNT
+                and coverage_ratio >= MIN_COVERAGE_RATIO
+                and unknown_view_count >= unknown_view_threshold
+            ),
+            'observed': unknown_view_count,
+            'threshold': unknown_view_threshold,
+            'comparator': '>=',
+            'explanation': '多数稳定帧仍无法确认视角时，系统会认为机位不利于当前规则判断。',
+        },
+    ]
 
-    deduped: List[str] = []
-    for reason in reasons:
-        if reason not in deduped:
-            deduped.append(reason)
-    return deduped
+
+def _collect_triggered_rejection_reasons(details: List[Dict[str, Any]]) -> List[str]:
+    triggered_codes: List[str] = []
+    for detail in details:
+        if detail['triggered'] and detail['code'] not in triggered_codes:
+            triggered_codes.append(detail['code'])
+    return triggered_codes
 
 
 def _summarize_view_profile(profiles: List[str]) -> Tuple[str, float]:
@@ -430,6 +537,17 @@ def _build_human_summary(
 def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) -> Dict[str, Any]:
     detected_frames = [frame for frame in frames if frame['status'] in {'detected', 'usable'} and frame['metrics']]
     if not detected_frames:
+        rejection_reason_details = _build_rejection_reason_details(
+            frame_count=len(frames),
+            detected_count=detected_count,
+            usable_frame_count=0,
+            coverage_ratio=0.0,
+            median_stability_score=0.0,
+            score_variance=0.0,
+            too_small_count=0,
+            low_stability_count=0,
+            unknown_view_count=0,
+        )
         return {
             'bestFrameIndex': None,
             'usableFrameCount': 0,
@@ -439,6 +557,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
             'medianRacketArmLiftScore': 0.0,
             'scoreVariance': 0.0,
             'rejectionReasons': ['body_not_detected'],
+            'rejectionReasonDetails': rejection_reason_details,
             'humanSummary': '当前样本还没有稳定识别到人体关键点。',
             'viewProfile': 'unknown',
             'viewConfidence': 0.0,
@@ -447,6 +566,13 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
             'racketSideConfidence': 0.0,
             'bestFrameOverlayRelativePath': None,
             'overlayFrameCount': 0,
+            'debugCounts': {
+                'tooSmallCount': 0,
+                'lowStabilityCount': 0,
+                'unknownViewCount': 0,
+                'usableFrameCount': 0,
+                'detectedFrameCount': detected_count,
+            },
         }
 
     usable_frames = [frame for frame in detected_frames if frame['status'] == 'usable']
@@ -469,7 +595,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
     view_confidence = _median(view_confidences) if view_confidences else 0.0
     dominant_racket_side, racket_side_confidence = _summarize_racket_side(usable_frames or detected_frames)
     unknown_view_count = sum(1 for profile in usable_profiles if profile == 'unknown')
-    rejection_reasons = _build_rejection_reasons(
+    rejection_reason_details = _build_rejection_reason_details(
         frame_count=len(frames),
         detected_count=detected_count,
         usable_frame_count=usable_frame_count,
@@ -480,6 +606,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         low_stability_count=low_stability_count,
         unknown_view_count=unknown_view_count,
     )
+    rejection_reasons = _collect_triggered_rejection_reasons(rejection_reason_details)
 
     best_frame_candidates = usable_frames or detected_frames
     best_frame = max(best_frame_candidates, key=lambda frame: frame['metrics']['compositeScore'])
@@ -494,6 +621,7 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         'medianRacketArmLiftScore': median_racket_arm_lift_score,
         'scoreVariance': score_variance,
         'rejectionReasons': rejection_reasons,
+        'rejectionReasonDetails': rejection_reason_details,
         'humanSummary': _build_human_summary(
             frame_count=len(frames),
             usable_frame_count=usable_frame_count,
@@ -510,6 +638,13 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
         'racketSideConfidence': racket_side_confidence,
         'bestFrameOverlayRelativePath': best_frame.get('overlayRelativePath'),
         'overlayFrameCount': overlay_frame_count,
+        'debugCounts': {
+            'tooSmallCount': too_small_count,
+            'lowStabilityCount': low_stability_count,
+            'unknownViewCount': unknown_view_count,
+            'usableFrameCount': usable_frame_count,
+            'detectedFrameCount': detected_count,
+        },
     }
 
 
@@ -522,14 +657,18 @@ def _ensure_pose_landmarker_model() -> Path:
     return model_path
 
 
-def _frame_status(metrics: Optional[Dict[str, Any]]) -> str:
+def _frame_status_details(metrics: Optional[Dict[str, Any]]) -> Tuple[str, List[str]]:
     if not metrics:
-        return 'not_detected'
+        return 'not_detected', ['keypoints_not_detected']
+
+    reasons: List[str] = []
     if (metrics['subjectScale'] or 0.0) < SUBJECT_SCALE_THRESHOLD:
-        return 'detected'
+        reasons.append('subject_scale_below_threshold')
     if (metrics['stabilityScore'] or 0.0) < USABLE_STABILITY_THRESHOLD:
-        return 'detected'
-    return 'usable'
+        reasons.append('stability_below_threshold')
+    if reasons:
+        return 'detected', reasons
+    return 'usable', ['all_thresholds_passed']
 
 
 def _point_to_pixel(point: Dict[str, Any], image_shape: Tuple[int, int, int]) -> Tuple[int, int]:
@@ -583,11 +722,21 @@ def _build_frame_payload(
     keypoints: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     metrics = _compute_frame_metrics(keypoints) if keypoints else None
-    status = _frame_status(metrics) if keypoints else 'not_detected'
+    status, status_reasons = _frame_status_details(metrics) if keypoints else ('not_detected', ['keypoints_not_detected'])
     points = _get_point_map(keypoints)
     frame_view_profile, view_confidence = _infer_frame_view_profile(points) if keypoints else ('unknown', 0.0)
     frame_racket_side, racket_side_confidence, _, _ = _infer_frame_racket_side(points) if keypoints else ('unknown', 0.0, 0.0, 0.0)
     overlay_relative_path = None
+
+    if metrics:
+        debug_payload = metrics.setdefault('debug', {})
+        debug_payload['frameInference'] = {
+            'viewProfile': frame_view_profile,
+            'viewConfidence': view_confidence,
+            'dominantRacketSide': frame_racket_side,
+            'racketSideConfidence': racket_side_confidence,
+        }
+        debug_payload['statusReasons'] = status_reasons
 
     if image is not None and keypoints:
         overlay_path, overlay_relative_path = _overlay_output_paths(task_dir, frame_path.name)

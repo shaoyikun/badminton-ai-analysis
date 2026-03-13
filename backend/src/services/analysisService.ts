@@ -11,14 +11,17 @@ function getAnalysisServiceEntry() {
 }
 
 function getTaskArtifactsDir(relativeArtifactsDir: string) {
+  if (path.isAbsolute(relativeArtifactsDir)) {
+    return relativeArtifactsDir;
+  }
   return path.join(process.cwd(), relativeArtifactsDir);
 }
 
-export async function estimatePoseForArtifacts(relativeArtifactsDir: string): Promise<PoseAnalysisResult> {
+export async function estimatePoseForTaskDir(taskDir: string): Promise<PoseAnalysisResult> {
   const pythonBin = process.env.PYTHON_BIN || 'python3';
   const analysisEntry = getAnalysisServiceEntry();
-  const taskDir = getTaskArtifactsDir(relativeArtifactsDir);
-  const { stdout } = await execFileAsync(pythonBin, [analysisEntry, taskDir], {
+  const resolvedTaskDir = getTaskArtifactsDir(taskDir);
+  const { stdout } = await execFileAsync(pythonBin, [analysisEntry, resolvedTaskDir], {
     encoding: 'utf8',
   });
   const output = stdout.trim();
@@ -29,4 +32,8 @@ export async function estimatePoseForArtifacts(relativeArtifactsDir: string): Pr
   }
 
   return parsed.result;
+}
+
+export async function estimatePoseForArtifacts(relativeArtifactsDir: string): Promise<PoseAnalysisResult> {
+  return estimatePoseForTaskDir(relativeArtifactsDir);
 }

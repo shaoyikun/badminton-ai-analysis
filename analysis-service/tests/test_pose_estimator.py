@@ -93,6 +93,43 @@ def make_test_image(target_path: Path):
     return image
 
 
+def make_summary_frame(
+    frame_index: int,
+    *,
+    status: str = "usable",
+    stability_score: float = 0.82,
+    subject_scale: float = 0.2,
+    body_turn_score: float = 0.56,
+    racket_arm_lift_score: float = 0.58,
+    composite_score: float = 0.67,
+    view_profile: str = "rear_left_oblique",
+):
+    return {
+        "frameIndex": frame_index,
+        "fileName": f"frame-{frame_index:02d}.jpg",
+        "status": status,
+        "keypoints": [],
+        "metrics": {
+            "stabilityScore": stability_score,
+            "shoulderSpan": 0.18,
+            "hipSpan": 0.14,
+            "bodyTurnScore": body_turn_score,
+            "racketArmLiftScore": racket_arm_lift_score,
+            "subjectScale": subject_scale,
+            "compositeScore": composite_score,
+            "summaryText": "debug",
+            "debug": {
+                "statusReasons": ["synthetic-test-frame"],
+            },
+        },
+        "overlayRelativePath": f"artifacts/tasks/task_pose_test/pose/overlays/frame-{frame_index:02d}-overlay.jpg",
+        "viewProfile": view_profile,
+        "viewConfidence": 0.88,
+        "dominantRacketSide": "right",
+        "racketSideConfidence": 0.72,
+    }
+
+
 class PoseEstimatorTests(unittest.TestCase):
     def setUp(self) -> None:
         if POSE_IMPORT_ERROR is not None:
@@ -145,6 +182,65 @@ class PoseEstimatorTests(unittest.TestCase):
         self.assertEqual(summary["dominantRacketSide"], "right")
         self.assertTrue(summary["bestFrameOverlayRelativePath"].endswith("frame-01-overlay.jpg"))
         self.assertEqual(summary["overlayFrameCount"], 2)
+
+    def test_frame_payload_exposes_debug_metrics(self) -> None:
+        image = make_test_image(self.preprocess_dir / "frame-debug.ppm")
+        payload = _build_frame_payload(self.preprocess_dir, self.preprocess_dir / "frame-debug.jpg", 3, image, make_keypoints())
+
+        metrics = payload["metrics"]
+        self.assertIsNotNone(metrics)
+        self.assertIn("compositeScore", metrics)
+        self.assertIn("debug", metrics)
+        self.assertIn("torsoHeight", metrics["debug"])
+        self.assertIn("shoulderDepthGap", metrics["debug"])
+        self.assertIn("hipDepthGap", metrics["debug"])
+        self.assertIn("leftArmLiftScore", metrics["debug"])
+        self.assertIn("rightArmLiftScore", metrics["debug"])
+        self.assertIn("subjectScaleSource", metrics["debug"])
+        self.assertIn("frameInference", metrics["debug"])
+        self.assertIn("statusReasons", metrics["debug"])
+        self.assertEqual(metrics["debug"]["frameInference"]["viewProfile"], payload["viewProfile"])
+        self.assertEqual(metrics["debug"]["frameInference"]["dominantRacketSide"], payload["dominantRacketSide"])
+        self.assertGreater(len(metrics["debug"]["statusReasons"]), 0)
+        self.assertIn("viewConfidence", payload)
+        self.assertIn("racketSideConfidence", payload)
+
+    def test_summary_exposes_rejection_reason_details_and_debug_counts(self) -> None:
+        frames = [
+            make_summary_frame(index, status="detected", stability_score=0.3, subject_scale=0.1, composite_score=0.31)
+            for index in range(1, 4)
+        ] + [
+            make_summary_frame(index, status="usable", stability_score=0.83, subject_scale=0.18, composite_score=0.72)
+            for index in range(4, 7)
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=6)
+        detail_map = {item["code"]: item for item in summary["rejectionReasonDetails"]}
+
+        self.assertEqual(summary["debugCounts"]["tooSmallCount"], 3)
+        self.assertEqual(summary["debugCounts"]["lowStabilityCount"], 3)
+        self.assertEqual(summary["debugCounts"]["usableFrameCount"], 3)
+        self.assertEqual(summary["debugCounts"]["detectedFrameCount"], 6)
+        self.assertIn("subject_too_small_or_cropped", summary["rejectionReasons"])
+        self.assertIn("poor_lighting_or_occlusion", summary["rejectionReasons"])
+        self.assertIn("insufficient_pose_coverage", summary["rejectionReasons"])
+        self.assertTrue(detail_map["subject_too_small_or_cropped"]["triggered"])
+        self.assertTrue(detail_map["poor_lighting_or_occlusion"]["triggered"])
+        self.assertTrue(detail_map["insufficient_pose_coverage"]["triggered"])
+
+    def test_summary_marks_invalid_camera_angle_when_unknown_view_dominates_usable_frames(self) -> None:
+        frames = [
+            make_summary_frame(index, status="usable", stability_score=0.84, subject_scale=0.2, composite_score=0.74, view_profile="unknown")
+            for index in range(1, 7)
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=6)
+        detail_map = {item["code"]: item for item in summary["rejectionReasonDetails"]}
+
+        self.assertIn("invalid_camera_angle", summary["rejectionReasons"])
+        self.assertEqual(summary["debugCounts"]["unknownViewCount"], 6)
+        self.assertTrue(detail_map["invalid_camera_angle"]["triggered"])
+        self.assertEqual(detail_map["invalid_camera_angle"]["threshold"], 5)
 
 
 if __name__ == "__main__":

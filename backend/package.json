@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.json",
-    "test": "node --import tsx --test --test-concurrency=1 src/server.test.ts src/taskService.test.ts src/reportScoringService.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 src/server.test.ts src/taskService.test.ts src/reportScoringService.test.ts src/debugAlgorithmBaseline.test.ts",
     "verify": "npm run build && npm run test"
   },
   "dependencies": {

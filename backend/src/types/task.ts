@@ -18,6 +18,7 @@ export type {
   PoseInfo,
   PoseKeypoint,
   PoseOverallSummary,
+  PoseRejectionReasonDetail,
   PoseStatus,
   PreprocessArtifacts,
   PreprocessFrameItem,

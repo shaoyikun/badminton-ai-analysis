@@ -8,7 +8,8 @@ import { getTask, saveReport, saveTask } from './services/taskRepository';
 import { buildErrorSnapshot } from './services/errorCatalog';
 import { failTask } from './domain/analysisTask';
 import { setAnalysisWorkerForTests } from './services/taskService';
-import type { ReportResult } from './types/task';
+import { writePoseResult } from './services/artifactStore';
+import type { PoseAnalysisResult, ReportResult } from './types/task';
 
 function buildMultipartPayload(fileName: string, content: Buffer | string, mimeType = 'video/mp4') {
   const boundary = `----badminton-test-${Date.now()}`;
@@ -267,5 +268,103 @@ test('history detail and comparison endpoints read from dedicated projections', 
     const comparisonPayload = comparisonResponse.json() as { baselineTask: { taskId: string }; comparison: { totalScoreDelta: number } };
     assert.equal(comparisonPayload.baselineTask.taskId, firstTaskId);
     assert.equal(comparisonPayload.comparison.totalScoreDelta, 5);
+  });
+});
+
+test('debug pose endpoint returns richer pose payload without changing route shape', async (t) => {
+  await withTempWorkspace(async () => {
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'clear' },
+    });
+    const taskId = (createResponse.json() as { taskId: string }).taskId;
+    const poseResult: PoseAnalysisResult = {
+      engine: 'mediapipe-pose',
+      frameCount: 1,
+      detectedFrameCount: 1,
+      summary: {
+        bestFrameIndex: 1,
+        usableFrameCount: 1,
+        coverageRatio: 1,
+        medianStabilityScore: 0.84,
+        medianBodyTurnScore: 0.58,
+        medianRacketArmLiftScore: 0.52,
+        scoreVariance: 0.01,
+        rejectionReasons: [],
+        rejectionReasonDetails: [{
+          code: 'invalid_camera_angle',
+          triggered: false,
+          observed: 0,
+          threshold: 4,
+          comparator: '>=',
+          explanation: 'debug',
+        }],
+        humanSummary: 'debug summary',
+        viewProfile: 'rear_left_oblique',
+        viewConfidence: 0.84,
+        viewStability: 1,
+        dominantRacketSide: 'right',
+        racketSideConfidence: 0.72,
+        bestFrameOverlayRelativePath: 'artifacts/tasks/debug/pose/overlays/frame-01-overlay.jpg',
+        overlayFrameCount: 1,
+        debugCounts: {
+          tooSmallCount: 0,
+          lowStabilityCount: 0,
+          unknownViewCount: 0,
+          usableFrameCount: 1,
+          detectedFrameCount: 1,
+        },
+      },
+      frames: [{
+        frameIndex: 1,
+        fileName: 'frame-01.jpg',
+        status: 'usable',
+        keypoints: [],
+        metrics: {
+          stabilityScore: 0.84,
+          shoulderSpan: 0.18,
+          hipSpan: 0.14,
+          bodyTurnScore: 0.58,
+          racketArmLiftScore: 0.52,
+          subjectScale: 0.24,
+          compositeScore: 0.67,
+          debug: {
+            torsoHeight: 0.24,
+            statusReasons: ['all_thresholds_passed'],
+          },
+          summaryText: 'debug',
+        },
+        viewProfile: 'rear_left_oblique',
+        viewConfidence: 0.84,
+        dominantRacketSide: 'right',
+        racketSideConfidence: 0.72,
+      }],
+    };
+    const stored = writePoseResult(taskId, poseResult);
+    const task = getTask(taskId)!;
+    saveTask({
+      ...task,
+      artifacts: {
+        ...task.artifacts,
+        poseResultPath: stored.absolutePath,
+      },
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/debug/tasks/${taskId}/pose`,
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json() as typeof poseResult;
+    assert.equal(payload.summary.rejectionReasonDetails?.[0]?.code, 'invalid_camera_angle');
+    assert.equal(payload.summary.debugCounts?.detectedFrameCount, 1);
+    assert.equal(payload.frames[0]?.metrics?.compositeScore, 0.67);
   });
 });

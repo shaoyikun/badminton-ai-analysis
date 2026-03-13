@@ -19,6 +19,7 @@ export function buildPoseSummary(result: PoseAnalysisResult): PoseInfo['summary'
     medianRacketArmLiftScore: result.summary?.medianRacketArmLiftScore,
     scoreVariance: result.summary?.scoreVariance,
     rejectionReasons: result.summary?.rejectionReasons,
+    rejectionReasonDetails: result.summary?.rejectionReasonDetails,
     humanSummary: result.summary?.humanSummary,
     viewProfile: result.summary?.viewProfile,
     viewConfidence: result.summary?.viewConfidence,
@@ -27,6 +28,7 @@ export function buildPoseSummary(result: PoseAnalysisResult): PoseInfo['summary'
     racketSideConfidence: result.summary?.racketSideConfidence,
     bestFrameOverlayRelativePath: result.summary?.bestFrameOverlayRelativePath,
     overlayFrameCount: result.summary?.overlayFrameCount,
+    debugCounts: result.summary?.debugCounts,
   };
 }
 

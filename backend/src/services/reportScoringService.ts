@@ -23,9 +23,16 @@ function toPercent(value: number) {
   return clampScore(value * 100);
 }
 
+function roundDebugValue(value: number, digits = 4) {
+  return Number(value.toFixed(digits));
+}
+
 type MetricKey = 'stability' | 'turn' | 'lift' | 'repeatability';
 
 type MetricScores = Record<MetricKey, number>;
+type StructuredEvidenceValue = string | number | boolean | null;
+type StructuredEvidenceRecord = Record<string, StructuredEvidenceValue>;
+type DimensionEvidenceEntry = NonNullable<NonNullable<ReportResult['scoringEvidence']>['dimensionEvidence']>[number];
 
 type RankedIssue = ReportResult['issues'][number] & {
   metricKey: MetricKey;
@@ -52,6 +59,13 @@ const METRIC_LABELS: Record<MetricKey, string> = {
   turn: '侧身展开',
   lift: '挥拍臂上举',
   repeatability: '动作复现稳定性',
+};
+
+const TOTAL_SCORE_WEIGHTS: Record<MetricKey, number> = {
+  stability: 0.28,
+  turn: 0.28,
+  lift: 0.24,
+  repeatability: 0.2,
 };
 
 const VIEW_PROFILE_LABELS: Record<ViewProfile, string> = {
@@ -254,6 +268,126 @@ function buildMetricScores(summary: PoseAnalysisResult['summary'], frameCount: n
   return { stability, turn, lift, repeatability };
 }
 
+function isWeakTurnView(viewProfile?: ViewProfile) {
+  return WEAK_TURN_VIEW_PROFILES.has(viewProfile ?? 'unknown');
+}
+
+function buildDimensionEvidence(
+  metricKey: MetricKey,
+  metricScores: MetricScores,
+  summary: PoseAnalysisResult['summary'],
+  frameCount: number,
+): DimensionEvidenceEntry {
+  const usableRatio = frameCount > 0 ? summary.usableFrameCount / frameCount : 0;
+  const weakTurnAdjustmentApplied = metricKey === 'turn' && isWeakTurnView(summary.viewProfile);
+
+  switch (metricKey) {
+    case 'stability': {
+      const inputs: StructuredEvidenceRecord = {
+        coverageRatio: summary.coverageRatio,
+        medianStabilityScore: summary.medianStabilityScore,
+      };
+      const adjustments: StructuredEvidenceRecord = {
+        weakViewAdjustmentApplied: false,
+      };
+      return {
+        key: metricKey,
+        label: METRIC_LABELS[metricKey],
+        score: metricScores[metricKey],
+        available: true,
+        confidence: getMetricConfidence(metricKey, summary.viewProfile),
+        source: `coverageRatio=${summary.coverageRatio}, medianStability=${summary.medianStabilityScore}`,
+        inputs,
+        formula: 'clamp(round(coverageRatio * 40 + medianStabilityScore * 60))',
+        adjustments,
+      };
+    }
+    case 'turn': {
+      const inputs: StructuredEvidenceRecord = {
+        medianBodyTurnScore: summary.medianBodyTurnScore,
+        viewProfile: summary.viewProfile ?? 'unknown',
+      };
+      const adjustments: StructuredEvidenceRecord = {
+        weakViewAdjustmentApplied: weakTurnAdjustmentApplied,
+        issueSeverityMultiplier: weakTurnAdjustmentApplied ? 0.55 : 1,
+      };
+      return {
+        key: metricKey,
+        label: METRIC_LABELS[metricKey],
+        score: metricScores[metricKey],
+        available: true,
+        confidence: getMetricConfidence(metricKey, summary.viewProfile),
+        source: `medianBodyTurnScore=${summary.medianBodyTurnScore}`,
+        inputs,
+        formula: 'clamp(round(20 + medianBodyTurnScore * 80))',
+        adjustments,
+      };
+    }
+    case 'lift': {
+      const inputs: StructuredEvidenceRecord = {
+        medianRacketArmLiftScore: summary.medianRacketArmLiftScore,
+        viewProfile: summary.viewProfile ?? 'unknown',
+      };
+      const adjustments: StructuredEvidenceRecord = {
+        frontViewEvidenceBoost: summary.viewProfile === 'front' || summary.viewProfile === 'front_left_oblique' || summary.viewProfile === 'front_right_oblique',
+      };
+      return {
+        key: metricKey,
+        label: METRIC_LABELS[metricKey],
+        score: metricScores[metricKey],
+        available: true,
+        confidence: getMetricConfidence(metricKey, summary.viewProfile),
+        source: `medianRacketArmLiftScore=${summary.medianRacketArmLiftScore}`,
+        inputs,
+        formula: 'clamp(round(20 + medianRacketArmLiftScore * 80))',
+        adjustments,
+      };
+    }
+    case 'repeatability': {
+      const inputs: StructuredEvidenceRecord = {
+        usableFrameCount: summary.usableFrameCount,
+        frameCount,
+        usableRatio: roundDebugValue(usableRatio),
+        scoreVariance: summary.scoreVariance,
+      };
+      const adjustments: StructuredEvidenceRecord = {
+        varianceThreshold: 0.04,
+      };
+      return {
+        key: metricKey,
+        label: METRIC_LABELS[metricKey],
+        score: metricScores[metricKey],
+        available: true,
+        confidence: getMetricConfidence(metricKey, summary.viewProfile),
+        source: `usableFrameCount=${summary.usableFrameCount}, scoreVariance=${summary.scoreVariance}`,
+        inputs,
+        formula: 'clamp(round(usableRatio * 45 + max(0, 1 - scoreVariance / 0.04) * 55))',
+        adjustments,
+      };
+    }
+  }
+}
+
+function buildTotalScoreBreakdown(metricScores: MetricScores) {
+  const contributions = (Object.keys(METRIC_LABELS) as MetricKey[]).map((key) => ({
+    key,
+    label: METRIC_LABELS[key],
+    score: metricScores[key],
+    weight: TOTAL_SCORE_WEIGHTS[key],
+    weightedScore: roundDebugValue(metricScores[key] * TOTAL_SCORE_WEIGHTS[key]),
+  }));
+  const rawWeightedTotal = roundDebugValue(
+    contributions.reduce((total, item) => total + item.weightedScore, 0),
+  );
+  const finalTotalScore = clampScore(rawWeightedTotal);
+
+  return {
+    rawWeightedTotal,
+    finalTotalScore,
+    contributions,
+  };
+}
+
 function buildSummaryText(metricScores: MetricScores, poseSummary: PoseAnalysisResult['summary'], frameCount: number) {
   const weakestMetric = Object.entries(metricScores).sort((a, b) => a[1] - b[1])[0] as [MetricKey, number];
   const evidence = `本次基于 ${poseSummary.usableFrameCount}/${frameCount} 帧稳定识别结果生成。`;
@@ -271,7 +405,7 @@ function buildRankedIssues(metricScores: MetricScores, poseSummary: PoseAnalysis
     .map((definition) => {
       const metricScore = metricScores[definition.metricKey];
       const rawGap = definition.threshold - metricScore;
-      const gap = definition.metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(poseSummary.viewProfile ?? 'unknown')
+      const gap = definition.metricKey === 'turn' && isWeakTurnView(poseSummary.viewProfile)
         ? rawGap * 0.55
         : rawGap;
       if (gap <= 0) return null;
@@ -279,7 +413,7 @@ function buildRankedIssues(metricScores: MetricScores, poseSummary: PoseAnalysis
       return {
         title: definition.title,
         description: `${definition.description}（${METRIC_LABELS[definition.metricKey]} ${metricScore} 分）${getMetricViewNote(definition.metricKey, poseSummary.viewProfile)}`,
-        impact: `${definition.impact}${definition.metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(poseSummary.viewProfile ?? 'unknown') ? ' 当前视角下，这一项会建议你在下次尽量保持同机位复测确认。' : ''}`,
+        impact: `${definition.impact}${definition.metricKey === 'turn' && isWeakTurnView(poseSummary.viewProfile) ? ' 当前视角下，这一项会建议你在下次尽量保持同机位复测确认。' : ''}`,
         metricKey: definition.metricKey,
         severity: gap,
         suggestion: definition.suggestion,
@@ -363,15 +497,14 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
     confidence: getMetricConfidence(key, poseResult.summary.viewProfile),
     note: getMetricViewNote(key, poseResult.summary.viewProfile),
   }));
-  const totalScore = clampScore(
-    metricScores.stability * 0.28
-    + metricScores.turn * 0.28
-    + metricScores.lift * 0.24
-    + metricScores.repeatability * 0.2,
-  );
+  const totalScoreBreakdown = buildTotalScoreBreakdown(metricScores);
+  const totalScore = totalScoreBreakdown.finalTotalScore;
   const rankedIssues = buildRankedIssues(metricScores, poseResult.summary);
   const recognitionContext = buildRecognitionContext(poseResult.summary, poseResult.engine);
   const visualEvidence = buildVisualEvidence(task, poseResult);
+  const dimensionEvidence = (Object.keys(METRIC_LABELS) as MetricKey[]).map((key) => (
+    buildDimensionEvidence(key, metricScores, poseResult.summary, poseResult.frameCount)
+  ));
 
   const issues = rankedIssues.length > 0
     ? rankedIssues.slice(0, 3).map(({ title, description, impact }) => ({
@@ -421,40 +554,9 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
       scoreVariance: poseResult.summary.scoreVariance,
       bestFrameIndex: poseResult.summary.bestFrameIndex,
       rejectionReasons: poseResult.summary.rejectionReasons,
-      dimensionEvidence: [
-        {
-          key: 'stability',
-          label: METRIC_LABELS.stability,
-          score: metricScores.stability,
-          available: true,
-          confidence: getMetricConfidence('stability', poseResult.summary.viewProfile),
-          source: `coverageRatio=${poseResult.summary.coverageRatio}, medianStability=${poseResult.summary.medianStabilityScore}`,
-        },
-        {
-          key: 'turn',
-          label: METRIC_LABELS.turn,
-          score: metricScores.turn,
-          available: true,
-          confidence: getMetricConfidence('turn', poseResult.summary.viewProfile),
-          source: `medianBodyTurnScore=${poseResult.summary.medianBodyTurnScore}`,
-        },
-        {
-          key: 'lift',
-          label: METRIC_LABELS.lift,
-          score: metricScores.lift,
-          available: true,
-          confidence: getMetricConfidence('lift', poseResult.summary.viewProfile),
-          source: `medianRacketArmLiftScore=${poseResult.summary.medianRacketArmLiftScore}`,
-        },
-        {
-          key: 'repeatability',
-          label: METRIC_LABELS.repeatability,
-          score: metricScores.repeatability,
-          available: true,
-          confidence: getMetricConfidence('repeatability', poseResult.summary.viewProfile),
-          source: `usableFrameCount=${poseResult.summary.usableFrameCount}, scoreVariance=${poseResult.summary.scoreVariance}`,
-        },
-      ],
+      metricScores,
+      totalScoreBreakdown,
+      dimensionEvidence,
       humanSummary: poseResult.summary.humanSummary,
     },
     preprocess: {

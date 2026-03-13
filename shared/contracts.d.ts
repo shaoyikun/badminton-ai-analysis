@@ -176,6 +176,30 @@ export interface PoseFrameMetrics {
   bodyTurnScore: number | null;
   racketArmLiftScore: number | null;
   subjectScale?: number | null;
+  compositeScore?: number;
+  debug?: {
+    torsoHeight?: number | null;
+    shoulderDepthGap?: number | null;
+    hipDepthGap?: number | null;
+    leftArmLiftScore?: number | null;
+    rightArmLiftScore?: number | null;
+    visibilities?: Record<string, number>;
+    subjectScaleSource?: {
+      dominantMetric?: 'shoulderSpan' | 'hipSpan' | 'torsoHeight' | 'unknown';
+      values?: {
+        shoulderSpan?: number | null;
+        hipSpan?: number | null;
+        torsoHeight?: number | null;
+      };
+    };
+    frameInference?: {
+      viewProfile?: ViewProfile;
+      viewConfidence?: number;
+      dominantRacketSide?: DominantRacketSide;
+      racketSideConfidence?: number;
+    };
+    statusReasons?: string[];
+  };
   summaryText: string;
 }
 
@@ -187,7 +211,18 @@ export interface PoseFrameResult {
   metrics: PoseFrameMetrics | null;
   overlayRelativePath?: string;
   viewProfile?: ViewProfile;
+  viewConfidence?: number;
   dominantRacketSide?: DominantRacketSide;
+  racketSideConfidence?: number;
+}
+
+export interface PoseRejectionReasonDetail {
+  code: FlowErrorCode;
+  triggered: boolean;
+  observed: number | string | boolean | null | Record<string, number | string | boolean | null>;
+  threshold: number | string | boolean | null | Record<string, number | string | boolean | null>;
+  comparator: string;
+  explanation: string;
 }
 
 export interface PoseOverallSummary {
@@ -199,6 +234,7 @@ export interface PoseOverallSummary {
   medianRacketArmLiftScore: number;
   scoreVariance: number;
   rejectionReasons: FlowErrorCode[];
+  rejectionReasonDetails?: PoseRejectionReasonDetail[];
   humanSummary: string;
   viewProfile?: ViewProfile;
   viewConfidence?: number;
@@ -207,6 +243,13 @@ export interface PoseOverallSummary {
   racketSideConfidence?: number;
   bestFrameOverlayRelativePath?: string;
   overlayFrameCount?: number;
+  debugCounts?: {
+    tooSmallCount?: number;
+    lowStabilityCount?: number;
+    unknownViewCount?: number;
+    usableFrameCount?: number;
+    detectedFrameCount?: number;
+  };
 }
 
 export interface PoseAnalysisResult {
@@ -236,6 +279,7 @@ export interface PoseInfo {
     medianRacketArmLiftScore?: number;
     scoreVariance?: number;
     rejectionReasons?: FlowErrorCode[];
+    rejectionReasonDetails?: PoseRejectionReasonDetail[];
     humanSummary?: string;
     viewProfile?: ViewProfile;
     viewConfidence?: number;
@@ -244,6 +288,13 @@ export interface PoseInfo {
     racketSideConfidence?: number;
     bestFrameOverlayRelativePath?: string;
     overlayFrameCount?: number;
+    debugCounts?: {
+      tooSmallCount?: number;
+      lowStabilityCount?: number;
+      unknownViewCount?: number;
+      usableFrameCount?: number;
+      detectedFrameCount?: number;
+    };
   };
 }
 
@@ -363,6 +414,18 @@ export interface ReportResult {
     scoreVariance?: number;
     bestFrameIndex?: number | null;
     rejectionReasons?: FlowErrorCode[];
+    metricScores?: Record<string, number>;
+    totalScoreBreakdown?: {
+      rawWeightedTotal?: number;
+      finalTotalScore?: number;
+      contributions?: Array<{
+        key: string;
+        label: string;
+        score: number;
+        weight: number;
+        weightedScore: number;
+      }>;
+    };
     dimensionEvidence?: Array<{
       key: string;
       label: string;
@@ -370,6 +433,9 @@ export interface ReportResult {
       available?: boolean;
       confidence?: number;
       source: string;
+      inputs?: Record<string, number | string | boolean | null>;
+      formula?: string;
+      adjustments?: Record<string, number | string | boolean | null>;
     }>;
     humanSummary?: string;
   };

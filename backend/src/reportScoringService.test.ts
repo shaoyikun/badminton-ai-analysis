@@ -61,6 +61,7 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       medianRacketArmLiftScore: 0.48,
       scoreVariance: 0.011,
       rejectionReasons: [],
+      rejectionReasonDetails: [],
       humanSummary: '本次基于 8/12 帧稳定识别结果生成：已经能看到较稳定的侧身展开和挥拍臂上举。',
       viewProfile: 'rear_left_oblique',
       viewConfidence: 0.84,
@@ -69,6 +70,13 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       racketSideConfidence: 0.71,
       bestFrameOverlayRelativePath: 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg',
       overlayFrameCount: 1,
+      debugCounts: {
+        tooSmallCount: 0,
+        lowStabilityCount: 0,
+        unknownViewCount: 0,
+        usableFrameCount: 8,
+        detectedFrameCount: 10,
+      },
       ...summaryOverrides,
     },
     frames: [
@@ -120,11 +128,45 @@ test('buildRuleBasedResult maps report fields from pose evidence only', () => {
   assert.equal(report.scoringEvidence?.dimensionEvidence?.length, 4);
   assert.equal(report.scoringEvidence?.usableFrameCount, 8);
   assert.equal(report.scoringEvidence?.rejectionReasons?.length, 0);
+  assert.deepEqual(report.scoringEvidence?.metricScores, {
+    stability: 73,
+    turn: 62,
+    lift: 58,
+    repeatability: 70,
+  });
+  assert.equal(report.scoringEvidence?.totalScoreBreakdown?.finalTotalScore, 66);
+  assert.equal(report.scoringEvidence?.totalScoreBreakdown?.contributions?.length, 4);
+  assert.equal(report.scoringEvidence?.dimensionEvidence?.[0]?.formula, 'clamp(round(coverageRatio * 40 + medianStabilityScore * 60))');
+  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[0]?.inputs, {
+    coverageRatio: 0.6667,
+    medianStabilityScore: 0.78,
+  });
+  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[1]?.adjustments, {
+    weakViewAdjustmentApplied: false,
+    issueSeverityMultiplier: 1,
+  });
+  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[3]?.inputs, {
+    usableFrameCount: 8,
+    frameCount: 12,
+    usableRatio: 0.6667,
+    scoreVariance: 0.011,
+  });
   assert.equal(report.recognitionContext?.viewLabel, '左后斜');
   assert.equal(report.recognitionContext?.dominantRacketSideLabel, '右手挥拍侧');
   assert.equal(report.visualEvidence?.bestFrameImagePath, 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg');
   assert.equal(report.visualEvidence?.bestFrameOverlayPath, 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg');
   assert.equal(report.visualEvidence?.overlayFrames.length, 2);
+});
+
+test('buildRuleBasedResult exposes weak turn view adjustments inside scoring evidence', () => {
+  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+    viewProfile: 'front',
+  }));
+
+  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[1]?.adjustments, {
+    weakViewAdjustmentApplied: true,
+    issueSeverityMultiplier: 0.55,
+  });
 });
 
 test('buildRuleBasedResult keeps visual evidence usable when overlay is missing', () => {
