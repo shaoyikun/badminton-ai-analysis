@@ -31,35 +31,22 @@ export function ErrorPage() {
     <div className={pageStyles.pageStack}>
       <section className={pageStyles.heroCard}>
         <span className={pageStyles.badgeWarning}>处理失败</span>
-        <h2>{errorState.title}</h2>
+        <h1>{errorState.title}</h1>
         <p>{errorState.summary}</p>
       </section>
 
-      <section className={pageStyles.card}>
-        <div className={pageStyles.sectionHeader}>
-          <h2>发生了什么</h2>
-        </div>
-        <p>{errorState.explanation}</p>
-      </section>
+      <Notice tone="error" title="为什么要先处理这个问题">
+        {errorState.explanation}
+      </Notice>
 
       <section className={pageStyles.card}>
         <div className={pageStyles.sectionHeader}>
-          <h2>这次建议这样处理</h2>
+          <h2>恢复建议</h2>
         </div>
         <div className={pageStyles.infoList}>
           {errorState.suggestions.map((suggestion) => (
             <div key={suggestion} className={pageStyles.listRow}>{suggestion}</div>
           ))}
-        </div>
-      </section>
-
-      <Notice tone="error" title="为什么要先处理这个问题">
-        这不是模型坏掉，而是当前视频条件已经影响到动作判断可信度。先把拍摄条件拉回到可分析范围，后面的结论才更可靠。
-      </Notice>
-
-      <section className={pageStyles.card}>
-        <div className={pageStyles.sectionHeader}>
-          <h2>恢复路径</h2>
         </div>
         <div className={styles.actionHint}>
           <strong>主操作只保留一个：</strong>

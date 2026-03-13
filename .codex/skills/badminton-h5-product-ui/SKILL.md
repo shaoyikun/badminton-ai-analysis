@@ -77,6 +77,21 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
 13. `UploadPage` 这类大文件是待拆债务，不是模板。新增 UI 逻辑优先向子组件、helper 或 adapter 外抽。
 14. 不要为了美化页面绕过当前数据流；需要新视图模型时，先配合 `shared-contracts-and-adapters` 处理映射。
 
+## 常见错误 / Anti-patterns
+
+- 不要把上传准备、候选片段确认、片段微调、最终确认长期堆在同一个超长页面里。
+- 不要让上传页默认常驻一个“选片工作台”；候选片段优先进入独立步骤页、全屏弹层或更轻量的二级承接面。
+- 不要把“步骤感”做成普通标题、说明文案或按钮感卡片；主链路必须用真实流程组件或明确的阶段式结构。
+- 不要把首页、上传页、报告页做成 PC 文档流的长内容堆叠页；移动端首屏必须围绕当前任务收口。
+- 不要先各页各做一套布局，再回头补全局壳层；应先统一标题栏、底部 Tab、滚动容器和 CTA 框架，再排页面内容。
+
+## 新增执行规则
+
+- 当主链路包含多个阶段时，优先判断是否应该拆成多个步骤页，而不是默认继续在原页加 section。
+- `UploadPage` 只负责输入准备、基础校验和进入粗扫；粗扫后的候选片段确认默认移出上传页主内容。
+- 长说明、详细指标和高级调整默认折叠或延后，不与主 CTA 同层竞争。
+- 页面改完后，必须复核首屏是否清楚表达“这页现在只负责什么任务”。
+
 ## 何时联动其他 skills
 
 - `mobile-ui-interaction-design`：需要主动做交互体检、组件选型校正、截图 review 或结构化自评时
@@ -92,6 +107,7 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
 - `examples/homepage-productization.md`：首页叙事、CTA、入口层级变化时读
 - `examples/upload-preparation-page.md`：上传准备、提示、候选片段前置说明变化时读
 - `examples/report-page-productization.md`：报告页产品化和模块化展示变化时读
+- `examples/global-shell-and-step-flow.md`：需要先统一全局壳层，再把多阶段流程拆成正式页面时读
 
 ## 任务完成后的输出要求
 

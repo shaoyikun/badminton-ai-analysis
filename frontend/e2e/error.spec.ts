@@ -40,8 +40,7 @@ test('错误页带恢复建议时展示主次 CTA', async ({ page }) => {
   )
 
   await expect(page.getByRole('heading', { name: '画面质量不足' })).toBeVisible()
-  await expect(page.getByText('发生了什么')).toBeVisible()
-  await expect(page.getByText('这次建议这样处理')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '恢复建议' })).toBeVisible()
   await expect(page.getByRole('link', { name: '查看拍摄指引' })).toHaveAttribute('href', '/guide')
   await expect(page.getByRole('link', { name: '重新上传' })).toHaveAttribute('href', uploadPath)
 })

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Collapse } from 'antd-mobile'
 import type { SegmentSelectionWindow, SwingSegmentCandidate } from '../../../../shared/contracts'
 import { StatusPill } from '../../components/ui/StatusPill'
 import { cn } from '../../lib/cn'
@@ -243,18 +244,12 @@ export function SegmentSelectionCard({
               onClick={() => onSelect(segment.segmentId)}
               type="button"
             >
-              {previewUrl ? (
-                <SegmentPreviewVideo
-                  src={previewUrl}
-                  startTimeMs={chipWindow.startTimeMs}
-                  endTimeMs={chipWindow.endTimeMs}
-                  posterLabel={`${formatSegmentTimestamp(chipWindow.startTimeMs)} - ${formatSegmentTimestamp(chipWindow.endTimeMs)}`}
-                />
-              ) : null}
               <strong>{segment.segmentId}</strong>
               <span>{formatSegmentTimestamp(chipWindow.startTimeMs)} - {formatSegmentTimestamp(chipWindow.endTimeMs)}</span>
-              {segment.segmentId === recommendedSegmentId ? <em>推荐</em> : null}
-              {segment.segmentId === selectedSegmentId ? <em>已选中</em> : null}
+              <div className={styles.inlinePills}>
+                {segment.segmentId === recommendedSegmentId ? <em>系统推荐</em> : null}
+                {segment.segmentId === selectedSegmentId ? <em>当前选择</em> : null}
+              </div>
             </button>
           )
         })}
@@ -284,12 +279,6 @@ export function SegmentSelectionCard({
             </div>
           </div>
 
-          <div className={pageStyles.keyGrid}>
-            <div className={pageStyles.keyItem}><span>运动强度</span><strong>{activeSegment.motionScore.toFixed(2)}</strong></div>
-            <div className={pageStyles.keyItem}><span>推荐置信度</span><strong>{Math.round(activeSegment.confidence * 100)}%</strong></div>
-            <div className={pageStyles.keyItem}><span>排序分</span><strong>{activeSegment.rankingScore.toFixed(2)}</strong></div>
-          </div>
-
           <div className={pageStyles.tagRow}>
             {activeSegment.coarseQualityFlags.length > 0 ? (
               activeSegment.coarseQualityFlags.map((flag) => (
@@ -302,16 +291,27 @@ export function SegmentSelectionCard({
 
           <div className={pageStyles.infoList}>
             <div className={pageStyles.listRow}>当前会送去精分析的时间窗：{formatSegmentTimestamp(effectiveWindow.startTimeMs)} - {formatSegmentTimestamp(effectiveWindow.endTimeMs)}</div>
-            <div className={pageStyles.listRow}>如果系统切得偏紧，可以只在这里轻微往前或往后补一点。</div>
+            <div className={pageStyles.listRow}>如果系统切得偏紧，再展开下面的高级微调补一点边界即可。</div>
           </div>
 
-          <div className={styles.adjustGrid}>
-            <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('start', -SEGMENT_ADJUST_STEP_MS)}>起点提前</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('start', SEGMENT_ADJUST_STEP_MS)}>起点后移</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('end', -SEGMENT_ADJUST_STEP_MS)}>终点前移</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('end', SEGMENT_ADJUST_STEP_MS)}>终点延后</button>
-            <button type="button" className={styles.secondaryButton} onClick={onResetWindow}>恢复系统切段</button>
-          </div>
+          <Collapse className={styles.advancedCollapse}>
+            <Collapse.Panel key="adjustments" title="高级微调（可选）">
+              <div className={styles.advancedBody}>
+                <div className={pageStyles.keyGrid}>
+                  <div className={pageStyles.keyItem}><span>运动强度</span><strong>{activeSegment.motionScore.toFixed(2)}</strong></div>
+                  <div className={pageStyles.keyItem}><span>推荐置信度</span><strong>{Math.round(activeSegment.confidence * 100)}%</strong></div>
+                  <div className={pageStyles.keyItem}><span>排序分</span><strong>{activeSegment.rankingScore.toFixed(2)}</strong></div>
+                </div>
+                <div className={styles.adjustGrid}>
+                  <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('start', -SEGMENT_ADJUST_STEP_MS)}>起点提前</button>
+                  <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('start', SEGMENT_ADJUST_STEP_MS)}>起点后移</button>
+                  <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('end', -SEGMENT_ADJUST_STEP_MS)}>终点前移</button>
+                  <button type="button" className={styles.secondaryButton} onClick={() => handleAdjust('end', SEGMENT_ADJUST_STEP_MS)}>终点延后</button>
+                  <button type="button" className={styles.secondaryButton} onClick={onResetWindow}>恢复系统切段</button>
+                </div>
+              </div>
+            </Collapse.Panel>
+          </Collapse>
         </div>
       ) : null}
     </section>

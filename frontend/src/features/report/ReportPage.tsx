@@ -272,6 +272,43 @@ export function ReportPage() {
 
       <section className={pageStyles.card}>
         <div className={pageStyles.sectionHeader}>
+          <h2>关键证据</h2>
+          <p className={pageStyles.muted}>先确认系统实际分析了哪一段，再看骨架证据和动作阶段拆解。</p>
+        </div>
+        <div className={pageStyles.keyGrid}>
+          <div className={pageStyles.keyItem}>
+            <span>当前分析片段</span>
+            <strong>{selectedSegment ? `${formatSegmentTime(selectedSegment.startTimeMs)} - ${formatSegmentTime(selectedSegment.endTimeMs)}` : '系统推荐片段'}</strong>
+            <p>整段视频会先粗扫，再由你确认真正进入精分析的这一段。</p>
+          </div>
+          <div className={pageStyles.keyItem}>
+            <span>证据帧</span>
+            <strong>{report.scoringEvidence?.usableFrameCount ?? '—'} / {report.scoringEvidence?.detectedFrameCount ?? '—'} 帧</strong>
+            <p>当前报告优先基于可稳定识别的人体关键帧生成。</p>
+          </div>
+        </div>
+        {bestFrameOverlay ? (
+          <div className={styles.evidenceFrame}>
+            <img alt="当前动作最佳骨架叠加帧" src={bestFrameOverlay} />
+          </div>
+        ) : null}
+        {report.phaseBreakdown?.length ? (
+          <div className={styles.phaseGrid}>
+            {report.phaseBreakdown.map((phase) => (
+              <div key={phase.phaseKey} className={styles.phaseCard}>
+                <div className={styles.phaseHeader}>
+                  <strong>{phase.label}</strong>
+                  <StatusPill label={getPhaseLabel(phase.status)} tone={getPhaseTone(phase.status)} />
+                </div>
+                <p>{phase.summary}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <section className={pageStyles.card}>
+        <div className={pageStyles.sectionHeader}>
           <h2>动作问题拆解</h2>
           <p className={pageStyles.muted}>先看最影响结果的主问题，再看它为什么值得先练。</p>
         </div>
@@ -305,40 +342,23 @@ export function ReportPage() {
         </div>
       </section>
 
-      <section className={pageStyles.card}>
-        <div className={pageStyles.sectionHeader}>
-          <h2>识别信息</h2>
-          <p className={pageStyles.muted}>先确认系统看到的是哪种视角、哪一侧持拍，再理解后面的证据。</p>
-        </div>
-        <div className={pageStyles.keyGrid}>
-          <div className={pageStyles.keyItem}>
-            <span>视角识别</span>
-            <strong>{report.recognitionContext?.viewLabel ?? '未知视角'}</strong>
-            <p>可信度 {Math.round((report.recognitionContext?.viewConfidence ?? 0) * 100)}%</p>
-          </div>
-          <div className={pageStyles.keyItem}>
-            <span>挥拍侧</span>
-            <strong>{report.recognitionContext?.dominantRacketSideLabel ?? '未识别'}</strong>
-            <p>引擎：{report.recognitionContext?.engine ?? 'mediapipe-pose'}</p>
-          </div>
-          <div className={pageStyles.keyItem}>
-            <span>当前报告已分析</span>
-            <strong>{selectedSegment ? `${formatSegmentTime(selectedSegment.startTimeMs)} - ${formatSegmentTime(selectedSegment.endTimeMs)}` : '系统推荐片段'}</strong>
-            <p>整段视频会先粗扫，再由你确认真正进入精分析的这一段。</p>
-          </div>
-          <div className={pageStyles.keyItem}>
-            <span>证据帧</span>
-            <strong>{report.scoringEvidence?.usableFrameCount ?? '—'} / {report.scoringEvidence?.detectedFrameCount ?? '—'} 帧</strong>
-            <p>当前报告优先基于可稳定识别的人体关键帧生成。</p>
-          </div>
-        </div>
-      </section>
-
       {report.swingSegments?.length ? (
         <section className={pageStyles.card}>
           <div className={pageStyles.sectionHeader}>
-            <h2>疑似挥拍片段</h2>
-            <p className={pageStyles.muted}>当前报告使用其中一段进入精分析，其余片段保留给你回看系统切段效果。</p>
+            <h2>识别视角与候选片段</h2>
+            <p className={pageStyles.muted}>这些信息属于二级细节，用来帮助你理解系统看到的上下文和切段结果。</p>
+          </div>
+          <div className={pageStyles.keyGrid}>
+            <div className={pageStyles.keyItem}>
+              <span>视角识别</span>
+              <strong>{report.recognitionContext?.viewLabel ?? '未知视角'}</strong>
+              <p>可信度 {Math.round((report.recognitionContext?.viewConfidence ?? 0) * 100)}%</p>
+            </div>
+            <div className={pageStyles.keyItem}>
+              <span>挥拍侧</span>
+              <strong>{report.recognitionContext?.dominantRacketSideLabel ?? '未识别'}</strong>
+              <p>引擎：{report.recognitionContext?.engine ?? 'mediapipe-pose'}</p>
+            </div>
           </div>
           <div className={styles.segmentList}>
             {report.swingSegments.map((segment) => {
@@ -354,38 +374,6 @@ export function ReportPage() {
                 </button>
               )
             })}
-          </div>
-        </section>
-      ) : null}
-
-      {report.phaseBreakdown?.length ? (
-        <section className={pageStyles.card}>
-          <div className={pageStyles.sectionHeader}>
-            <h2>动作阶段拆解</h2>
-            <p className={pageStyles.muted}>阶段拆解帮助你看清是准备、引拍还是击球后衔接更值得先回看。</p>
-          </div>
-          <div className={styles.phaseGrid}>
-            {report.phaseBreakdown.map((phase) => (
-              <div key={phase.phaseKey} className={styles.phaseCard}>
-                <div className={styles.phaseHeader}>
-                  <strong>{phase.label}</strong>
-                  <StatusPill label={getPhaseLabel(phase.status)} tone={getPhaseTone(phase.status)} />
-                </div>
-                <p>{phase.summary}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {bestFrameOverlay ? (
-        <section className={pageStyles.card}>
-          <div className={pageStyles.sectionHeader}>
-            <h2>骨架识别图</h2>
-            <p className={pageStyles.muted}>这张图帮助你理解系统最重点参考了哪一帧动作结构。</p>
-          </div>
-          <div className={styles.evidenceFrame}>
-            <img alt="当前动作最佳骨架叠加帧" src={bestFrameOverlay} />
           </div>
         </section>
       ) : null}

@@ -12,6 +12,10 @@ export function buildProcessingRoute(taskId: string) {
   return `/analyses/${taskId}/processing`
 }
 
+export function buildSegmentsRoute(taskId: string) {
+  return `/analyses/${taskId}/segments`
+}
+
 export function buildReportRoute(taskId: string) {
   return `/analyses/${taskId}/report`
 }

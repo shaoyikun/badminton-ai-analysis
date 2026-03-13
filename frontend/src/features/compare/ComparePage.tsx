@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import type { ComparisonResponse } from '../../../../shared/contracts'
 import { fetchTaskComparison } from '../../app/analysis-session/api'
 import { buildProcessingRoute, buildReportRoute, ROUTES } from '../../app/routes'
@@ -150,9 +150,8 @@ export function ComparePage() {
         </section>
         <BottomCTA
           primary={{ label: '继续复测上传', to: ROUTES.upload }}
-          secondary={{ label: '更换对比基线', to: ROUTES.history, tone: 'secondary' }}
+          secondary={{ label: '返回本次报告', to: buildReportRoute(params.taskId), tone: 'secondary' }}
         />
-        <Link className={styles.backLink} to={buildReportRoute(params.taskId)}>返回本次报告</Link>
       </div>
     )
   }
@@ -194,8 +193,8 @@ export function ComparePage() {
 
       <section className={pageStyles.card}>
         <div className={pageStyles.sectionHeader}>
-          <h2>当前基线</h2>
-          <p className={pageStyles.muted}>复测对比只在“当前样本”和“你选中的历史基线”之间展开。</p>
+          <h2>当前样本 vs 当前基线</h2>
+          <p className={pageStyles.muted}>先明确系统正在拿哪条历史样本做比较，再看后面的阶段和维度变化。</p>
         </div>
         <div className={styles.phaseGrid}>
           <div className={styles.phaseCard}>
@@ -219,8 +218,8 @@ export function ComparePage() {
 
       <section className={pageStyles.card}>
         <div className={pageStyles.sectionHeader}>
-          <h2>教练式复盘</h2>
-          <p className={pageStyles.muted}>先判断这次训练方向有没有在起作用，再决定下次只盯什么。</p>
+          <h2>这次先看什么</h2>
+          <p className={pageStyles.muted}>先判断训练方向有没有起作用，再决定下次只盯什么，不要一口气追所有分数项。</p>
         </div>
         <div className={pageStyles.infoList}>
           <div className={pageStyles.listRow}>
@@ -286,9 +285,8 @@ export function ComparePage() {
 
       <BottomCTA
         primary={{ label: '继续复测上传', to: ROUTES.upload }}
-        secondary={{ label: '更换对比基线', to: ROUTES.history, tone: 'secondary' }}
+        secondary={{ label: '返回本次报告', to: buildReportRoute(params.taskId), tone: 'secondary' }}
       />
-      <Link className={styles.backLink} to={buildReportRoute(params.taskId)}>返回本次报告</Link>
     </div>
   )
 }

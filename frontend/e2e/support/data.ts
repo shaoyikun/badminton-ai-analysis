@@ -21,6 +21,8 @@ type SessionSnapshot = {
   selectedCompareTaskIds: Partial<Record<ActionType, string>>
   selectedVideoSummary: null
   uploadChecklistConfirmed: boolean
+  segmentScan: SegmentScanSummary | null
+  selectedSegmentId: string
   selectedSegmentWindow: SegmentSelectionWindow | null
   errorState: {
     errorCode?: FlowErrorCode | string
@@ -36,8 +38,8 @@ type SessionSnapshot = {
 }
 
 type SessionSnapshotOverrides = Partial<SessionSnapshot> & {
-  latestCompletedTaskId?: string
-  selectedCompareTaskId?: string
+    latestCompletedTaskId?: string
+    selectedCompareTaskId?: string
 }
 
 function readJson<T>(filename: string) {
@@ -224,6 +226,8 @@ export function buildSessionSnapshot(
     selectedCompareTaskIds,
     selectedVideoSummary: null,
     uploadChecklistConfirmed: false,
+    segmentScan: null,
+    selectedSegmentId: '',
     selectedSegmentWindow: null,
     errorState: null,
     debugEnabled: false,

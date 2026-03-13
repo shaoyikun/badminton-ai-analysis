@@ -1,4 +1,7 @@
+import { useEffect, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useMobileShell } from '../../app/MobileShellContext'
 import { cn } from '../../lib/cn'
 import styles from './BottomCTA.module.scss'
 
@@ -42,6 +45,25 @@ function CTAButton({ action }: { action: CTAAction }) {
   )
 }
 
+function BottomCTAContent({
+  primary,
+  secondary,
+  hasTabs,
+}: {
+  primary: CTAAction
+  secondary?: CTAAction
+  hasTabs: boolean
+}) {
+  return (
+    <div className={cn(styles.wrapper, hasTabs && styles.withTabs)}>
+      <div className={styles.actions}>
+        <CTAButton action={{ ...primary, tone: primary.tone ?? 'primary' }} />
+        {secondary ? <CTAButton action={{ ...secondary, tone: secondary.tone ?? 'secondary' }} /> : null}
+      </div>
+    </div>
+  )
+}
+
 export function BottomCTA({
   primary,
   secondary,
@@ -51,12 +73,23 @@ export function BottomCTA({
   secondary?: CTAAction
   sticky?: boolean
 }) {
-  return (
-    <div className={cn(styles.wrapper, sticky ? styles.sticky : styles.static)}>
-      <div className={styles.actions}>
-        <CTAButton action={{ ...primary, tone: primary.tone ?? 'primary' }} />
-        {secondary ? <CTAButton action={{ ...secondary, tone: secondary.tone ?? 'secondary' }} /> : null}
-      </div>
-    </div>
+  const shell = useMobileShell()
+  const node = useMemo<ReactNode>(
+    () => <BottomCTAContent hasTabs={shell?.hasTabs ?? false} primary={primary} secondary={secondary} />,
+    [primary, secondary, shell?.hasTabs],
   )
+
+  useEffect(() => {
+    if (!shell || sticky === false) return
+    shell.setActionBar(node)
+    return () => {
+      shell.setActionBar(null)
+    }
+  }, [node, shell, sticky])
+
+  if (sticky !== false && shell) {
+    return null
+  }
+
+  return <BottomCTAContent hasTabs={false} primary={primary} secondary={secondary} />
 }

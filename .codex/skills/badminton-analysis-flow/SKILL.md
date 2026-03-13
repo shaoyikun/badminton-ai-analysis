@@ -76,6 +76,19 @@ description: Use when changing the upload-to-analysis task flow, especially cand
 11. `AnalysisSessionProvider` 和 `UploadPage` 已是待拆大文件。新增流程逻辑优先抽成 helper、section component 或 flow module；若未拆分，交付说明必须说明原因。
 12. 若更改了任务阶段、错误码、候选片段对象或启动入参，必须联动 `backend-api-contracts` 和 `shared-contracts-and-adapters`。
 
+## 常见错误 / Anti-patterns
+
+- 不要把“上传完整视频 -> 候选片段确认 -> 微调 -> 启动分析”长期压在上传页里。
+- 不要把候选片段选择区做成默认常驻的大型工作台；优先使用独立步骤页、全屏弹层或轻量二级承接。
+- 不要把微调能力做成参数控制台式的主内容；默认应是可选高级能力。
+- 不要让流程页继续显示会打断任务的全局导航，尤其是处理中、错误恢复、选片确认这类单任务页面。
+
+## 新增执行规则
+
+- 当 `segmentScan` 已经形成稳定阶段时，前端默认应该给它单独的页面或独立承接面，而不是继续塞回上传准备页。
+- 进入 `startSelectedSegmentFlow` 前，页面应先明确告诉用户“当前在第几步、下一步会发生什么”。
+- 若页面上同时出现候选片段、详细指标和微调控件，先判断是否应拆页；不要默认继续压在一个组件里。
+
 ## 何时联动其他 skills
 
 - `backend-api-contracts`：`start` 入参、任务状态、错误结构变化
@@ -92,6 +105,7 @@ description: Use when changing the upload-to-analysis task flow, especially cand
 - `examples/candidate-clip-flow.md`：候选片段粗扫与选择变化时读
 - `examples/async-analysis-progress.md`：处理中轮询、进度反馈变化时读
 - `examples/failure-recovery-pattern.md`：错误恢复与重试策略变化时读
+- `examples/upload-vs-segment-boundary.md`：需要明确上传准备页与片段确认页边界时读
 
 ## 任务完成后的输出要求
 

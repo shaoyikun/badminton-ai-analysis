@@ -3,6 +3,7 @@ import { matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { DebugDrawer } from '../components/debug/DebugDrawer'
 import { TabBar } from '../components/ui/TabBar'
 import { useAnalysisTask } from '../hooks/useAnalysisTask'
+import { MobileShellContext } from './MobileShellContext'
 import { buildReportRoute, ROUTES } from './routes'
 import styles from './MobileAppShell.module.scss'
 
@@ -18,7 +19,8 @@ type RouteMetaItem = {
 const ROUTE_META: RouteMetaItem[] = [
   { path: ROUTES.home, title: 'Badminton AI', subtitle: '移动端动作分析', root: true },
   { path: ROUTES.guide, title: '拍摄指引', subtitle: '上传前先看一眼' },
-  { path: ROUTES.upload, title: '上传视频', subtitle: '两步式动作分析', root: true },
+  { path: ROUTES.upload, title: '上传准备', subtitle: '先把输入条件确认好', root: true },
+  { path: '/analyses/:taskId/segments', title: '确认片段', subtitle: '第 2 步：确认本次分析片段' },
   { path: '/analyses/:taskId/processing', title: '分析中', subtitle: '请稍候' },
   { path: '/analyses/:taskId/report', title: '分析报告', subtitle: '本次动作结论' },
   { path: ROUTES.history, title: '历史记录', subtitle: '持续训练反馈', root: true },
@@ -36,6 +38,7 @@ export function MobileAppShell({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [debugOpen, setDebugOpen] = useState(false)
+  const [actionBar, setActionBar] = useState<ReactNode | null>(null)
   const { debugEnabled, latestCompletedTaskId } = useAnalysisTask()
 
   const meta = getRouteMeta(location.pathname)
@@ -54,55 +57,63 @@ export function MobileAppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={styles.appShell}>
-      <div className={designMode ? styles.designFrame : styles.deviceFrame}>
-        {!designMode ? <div className={styles.deviceGlow} /> : null}
-        <div className={designMode ? styles.designScreen : styles.deviceScreen}>
-          <header className={styles.topNav}>
-            <div className={styles.topNavMain}>
-              {meta.root ? (
-                <div>
-                  <span className={styles.eyebrow}>羽毛球动作分析</span>
-                  <strong className={styles.title}>{meta.title}</strong>
+    <MobileShellContext.Provider value={{ hasTabs: showTabs, setActionBar }}>
+      <div className={styles.appShell}>
+        <div className={designMode ? styles.designFrame : styles.deviceFrame}>
+          {!designMode ? <div className={styles.deviceGlow} /> : null}
+          <div className={designMode ? styles.designScreen : styles.deviceScreen}>
+            <header className={styles.topNav}>
+              <div className={styles.topNavMain}>
+                {meta.root ? (
+                  <div>
+                    <span className={styles.eyebrow}>羽毛球动作分析</span>
+                    <strong className={styles.title}>{meta.title}</strong>
+                  </div>
+                ) : (
+                  <button className={styles.backButton} onClick={handleBack} type="button">
+                    返回
+                  </button>
+                )}
+                <div className={styles.topNavCopy}>
+                  {!meta.root ? <strong className={styles.title}>{meta.title}</strong> : null}
+                  <span className={styles.subtitle}>{meta.subtitle}</span>
                 </div>
-              ) : (
-                <button className={styles.backButton} onClick={handleBack} type="button">
-                  返回
-                </button>
-              )}
-              <div className={styles.topNavCopy}>
-                {!meta.root ? <strong className={styles.title}>{meta.title}</strong> : null}
-                <span className={styles.subtitle}>{meta.subtitle}</span>
               </div>
-            </div>
 
-            {debugEnabled ? (
-              <button className={styles.debugButton} onClick={() => setDebugOpen(true)} type="button">
-                联调
-              </button>
+              {debugEnabled ? (
+                <button className={styles.debugButton} onClick={() => setDebugOpen(true)} type="button">
+                  联调
+                </button>
+              ) : null}
+            </header>
+
+            <main className={styles.pageScroll}>
+              <div className={styles.pageInner}>{children}</div>
+            </main>
+
+            {actionBar ? (
+              <div className={styles.actionBarSlot} data-has-tabs={showTabs}>
+                {actionBar}
+              </div>
             ) : null}
-          </header>
 
-          <main className={showTabs ? styles.pageScrollWithTabs : styles.pageScroll}>
-            {children}
-          </main>
-
-          {showTabs ? (
-            <TabBar
-              items={[
-                { to: ROUTES.home, label: '首页' },
-                { to: ROUTES.upload, label: '上传' },
-                latestCompletedTaskId
-                  ? { to: buildReportRoute(latestCompletedTaskId), label: '报告' }
-                  : { label: '报告', disabled: true },
-                { to: ROUTES.history, label: '记录' },
-              ]}
-            />
-          ) : null}
+            {showTabs ? (
+              <TabBar
+                items={[
+                  { to: ROUTES.home, label: '首页' },
+                  { to: ROUTES.upload, label: '上传' },
+                  latestCompletedTaskId
+                    ? { to: buildReportRoute(latestCompletedTaskId), label: '报告' }
+                    : { label: '报告', disabled: true },
+                  { to: ROUTES.history, label: '记录' },
+                ]}
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      <DebugDrawer open={debugOpen} onClose={() => setDebugOpen(false)} />
-    </div>
+        <DebugDrawer open={debugOpen} onClose={() => setDebugOpen(false)} />
+      </div>
+    </MobileShellContext.Provider>
   )
 }

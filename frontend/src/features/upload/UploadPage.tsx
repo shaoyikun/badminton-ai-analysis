@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BottomCTA } from '../../components/ui/BottomCTA'
+import { FlowStepHeader } from '../../components/ui/FlowStepHeader'
 import { Notice } from '../../components/ui/Notice'
 import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
-import { buildProcessingRoute, ROUTES } from '../../app/routes'
+import { buildSegmentsRoute, ROUTES } from '../../app/routes'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
 import pageStyles from '../../styles/PageLayout.module.scss'
 import styles from './UploadPage.module.scss'
-import { SegmentSelectionCard } from './SegmentSelectionCard'
 import {
   ACTION_SPECIAL_REMINDER_COPY,
   buildLocalVideoSummary,
@@ -36,30 +36,19 @@ export function UploadPage() {
     selectedVideoSummary,
     setSelectedVideoSummary,
     segmentScan,
-    selectedSegmentId,
-    setSelectedSegmentId,
-    selectedSegmentWindow,
-    setSelectedSegmentWindow,
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
     isBusy,
     errorState,
     clearErrorState,
     prepareFreshUpload,
-    selectedActionLabel,
     scanVideoFlow,
-    startSelectedSegmentFlow,
   } = useAnalysisTask()
   const [submissionError, setSubmissionError] = useState('')
-  const segmentSelectionRef = useRef<HTMLElement | null>(null)
+  const pendingSegmentsRouteRef = useRef(false)
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file])
 
   const currentVideoSummary = file ? selectedVideoSummary : null
-  const videoDurationMs = Math.max(
-    1,
-    Math.round((currentVideoSummary?.durationSeconds ?? 0) * 1000),
-    ...(segmentScan?.swingSegments ?? []).map((segment) => segment.endTimeMs),
-  )
   const readinessItems = useMemo(
     () => buildUploadReadinessItems(file, currentVideoSummary),
     [currentVideoSummary, file],
@@ -70,7 +59,6 @@ export function UploadPage() {
   )
   const scanDisabled = isBusy || blockingReasons.length > 0
   const hasSegmentChoices = Boolean(segmentScan?.swingSegments?.length)
-  const startAnalysisDisabled = isBusy || !hasSegmentChoices || !selectedSegmentId
   const previousAttemptSummary = !file && errorState && selectedVideoSummary ? selectedVideoSummary : null
   const actionReminder = ACTION_SPECIAL_REMINDER_COPY[actionType]
 
@@ -93,9 +81,10 @@ export function UploadPage() {
   }, [file, previewUrl, setSelectedVideoSummary])
 
   useEffect(() => {
-    if (!hasSegmentChoices || !segmentSelectionRef.current) return
-    segmentSelectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [hasSegmentChoices])
+    if (!pendingSegmentsRouteRef.current || !hasSegmentChoices || !taskId) return
+    navigate(buildSegmentsRoute(taskId))
+    pendingSegmentsRouteRef.current = false
+  }, [hasSegmentChoices, navigate, taskId])
 
   async function handleScanVideo() {
     setSubmissionError('')
@@ -107,6 +96,7 @@ export function UploadPage() {
 
     const result = await scanVideoFlow()
     if (result.ok) {
+      pendingSegmentsRouteRef.current = true
       return
     }
 
@@ -118,38 +108,18 @@ export function UploadPage() {
     setSubmissionError(result.message ?? '上传或粗扫失败，请稍后再试。')
   }
 
-  async function handleStartAnalysis() {
-    setSubmissionError('')
-
-    if (startAnalysisDisabled) {
-      setSubmissionError('请先从粗扫结果里选好一个要精分析的片段。')
-      return
-    }
-
-    const result = await startSelectedSegmentFlow()
-    if (result.ok) {
-      navigate(buildProcessingRoute(taskId))
-      return
-    }
-
-    if (result.reason === 'server') {
-      navigate(ROUTES.error)
-      return
-    }
-
-    setSubmissionError(result.message ?? '启动分析失败，请稍后再试。')
-  }
-
   return (
     <div className={pageStyles.pageStack}>
-      <section className={pageStyles.heroCard}>
-        <span className={pageStyles.badge}>分析入口</span>
-        <h1>先上传完整视频，再确认真正要分析的挥拍片段</h1>
-        <p>
-          第一步先上传整段视频并做候选片段粗扫；第二步再由你确认要精分析的那一拍。
-          这样系统和你都能明确“这份报告到底分析了哪一段”。
-        </p>
-      </section>
+      <FlowStepHeader
+        badge="第 1 步"
+        title="先把上传准备和输入条件确认好"
+        description="这一页只负责动作、视频和基础校验。候选片段确认会在下一步单独承接，不再长期堆在同一页。"
+        steps={[
+          { key: 'prepare', label: '上传准备', hint: '确认动作、视频和拍摄条件', state: 'current' },
+          { key: 'segments', label: '确认片段', hint: '粗扫后单独确认真正要分析的一段', state: 'upcoming' },
+          { key: 'processing', label: '等待结果', hint: '系统自动进入分析并跳转报告', state: 'upcoming' },
+        ]}
+      />
 
       {errorState ? (
         <Notice tone="warning" title={`上次失败原因：${errorState.title}`}>
@@ -159,28 +129,45 @@ export function UploadPage() {
 
       <section className={pageStyles.card}>
         <div className={pageStyles.sectionHeader}>
-          <h2>当前分析动作</h2>
-          <p className={pageStyles.muted}>当前上传、分析和报告都会按 {selectedActionLabel} 的正式口径执行。</p>
+          <h2>当前分析动作与拍摄重点</h2>
+          <p className={pageStyles.muted}>先锁定本次分析动作，上传规则、候选解释和后续报告都会跟着这个动作切换。</p>
         </div>
         <ActionTypeSelector disabled={isBusy} />
+        <Notice compact tone="info" title={`${actionReminder.title}专项提醒`}>
+          {actionReminder.description}
+        </Notice>
       </section>
 
       <section className={pageStyles.card}>
-        <span className={pageStyles.eyebrow}>Step 1</span>
         <div className={pageStyles.sectionHeader}>
-          <h2>先确认输入条件</h2>
-          <p className={pageStyles.muted}>先把动作、时长、机位和文件状态确认好，再让系统去粗扫候选片段。</p>
+          <h2>上传前快速检查</h2>
+          <p className={pageStyles.muted}>首屏只保留会直接影响粗扫质量的关键条件，细节解释尽量不和主操作抢层级。</p>
         </div>
 
-        <div className={pageStyles.infoList}>
-          <div className={pageStyles.listRow}>当前正式支持：正手高远球、杀球；一段视频只分析一种动作</div>
-          <div className={pageStyles.listRow}>时长：{UPLOAD_CONSTRAINTS.minDurationSeconds}~{UPLOAD_CONSTRAINTS.maxDurationSeconds} 秒</div>
-          <div className={pageStyles.listRow}>机位：优先 {UPLOAD_CONSTRAINTS.recommendedAngles.join(' 或 ')}</div>
-          <div className={pageStyles.listRow}>画面：单人出镜、全身尽量完整入镜、避免逆光和遮挡</div>
-          <div className={pageStyles.listRow}>文件：{UPLOAD_CONSTRAINTS.supportedExtensions.join(' / ')}，建议小于 {Math.round(UPLOAD_CONSTRAINTS.defaultMaxFileSizeBytes / 1024 / 1024)}MB</div>
-          <div className={pageStyles.listRow}>{actionReminder.title}专项：{actionReminder.description}</div>
+        <div className={styles.constraintGrid}>
+          <div className={pageStyles.keyItem}>
+            <span>视频时长</span>
+            <strong>{UPLOAD_CONSTRAINTS.minDurationSeconds}~{UPLOAD_CONSTRAINTS.maxDurationSeconds} 秒</strong>
+            <p>尽量完整覆盖准备、击球和收拍。</p>
+          </div>
+          <div className={pageStyles.keyItem}>
+            <span>建议机位</span>
+            <strong>{UPLOAD_CONSTRAINTS.recommendedAngles.join(' / ')}</strong>
+            <p>优先保证主体稳定、全身尽量完整入镜。</p>
+          </div>
+          <div className={pageStyles.keyItem}>
+            <span>文件限制</span>
+            <strong>{UPLOAD_CONSTRAINTS.supportedExtensions.join(' / ')}</strong>
+            <p>建议小于 {Math.round(UPLOAD_CONSTRAINTS.defaultMaxFileSizeBytes / 1024 / 1024)}MB。</p>
+          </div>
         </div>
+      </section>
 
+      <section className={pageStyles.card}>
+        <div className={pageStyles.sectionHeader}>
+          <h2>选择训练视频</h2>
+          <p className={pageStyles.muted}>上传准备页只负责文件选择和基础摘要，不在这里常驻展示候选片段工作台。</p>
+        </div>
         <label className={styles.uploadField}>
           <input
             type="file"
@@ -207,11 +194,23 @@ export function UploadPage() {
         ) : null}
 
         {currentVideoSummary ? (
-          <div className={pageStyles.infoList}>
-            <div className={pageStyles.listRow}>文件名：{currentVideoSummary.fileName}</div>
-            <div className={pageStyles.listRow}>大小：{formatFileSize(currentVideoSummary.fileSizeBytes)}</div>
-            <div className={pageStyles.listRow}>时长：{formatDuration(currentVideoSummary.durationSeconds)}</div>
-            <div className={pageStyles.listRow}>格式：{currentVideoSummary.mimeType || currentVideoSummary.extension || '未知格式'}</div>
+          <div className={styles.summaryGrid}>
+            <div className={pageStyles.keyItem}>
+              <span>文件名</span>
+              <strong>{currentVideoSummary.fileName}</strong>
+            </div>
+            <div className={pageStyles.keyItem}>
+              <span>大小</span>
+              <strong>{formatFileSize(currentVideoSummary.fileSizeBytes)}</strong>
+            </div>
+            <div className={pageStyles.keyItem}>
+              <span>时长</span>
+              <strong>{formatDuration(currentVideoSummary.durationSeconds)}</strong>
+            </div>
+            <div className={pageStyles.keyItem}>
+              <span>格式</span>
+              <strong>{currentVideoSummary.mimeType || currentVideoSummary.extension || '未知格式'}</strong>
+            </div>
           </div>
         ) : null}
 
@@ -241,12 +240,6 @@ export function UploadPage() {
           ))}
         </div>
 
-        <div className={pageStyles.infoList}>
-          <div className={pageStyles.listRow}>第 1 步会先上传完整视频，并只做粗粒度挥拍片段扫描。</div>
-          <div className={pageStyles.listRow}>第 2 步由你从候选片段里确认真正要分析的那一段，再进入最终结果分析。</div>
-          <div className={pageStyles.listRow}>如果服务端判断视频不适合分析，会返回明确失败原因、重拍建议和重新上传入口。</div>
-        </div>
-
         <label className={styles.confirmCheck}>
           <input
             checked={uploadChecklistConfirmed}
@@ -271,34 +264,9 @@ export function UploadPage() {
       </section>
 
       {hasSegmentChoices ? (
-        <section ref={segmentSelectionRef}>
-          <Notice tone="info" title="Step 2：确认真正要进入精分析的片段">
-            系统已经从整段视频里筛出 {segmentScan?.swingSegments.length ?? 0} 个疑似挥拍片段。
-            请先确认要分析的片段，再启动最终分析。
-          </Notice>
-
-          <SegmentSelectionCard
-            segments={segmentScan?.swingSegments ?? []}
-            recommendedSegmentId={segmentScan?.recommendedSegmentId}
-            selectedSegmentId={selectedSegmentId}
-            selectedWindow={selectedSegmentWindow}
-            onSelect={setSelectedSegmentId}
-            onAdjustWindow={setSelectedSegmentWindow}
-            onResetWindow={() => {
-              const activeSegment = (segmentScan?.swingSegments ?? []).find((segment) => segment.segmentId === selectedSegmentId)
-              if (!activeSegment) return
-
-              setSelectedSegmentWindow({
-                startTimeMs: activeSegment.startTimeMs,
-                endTimeMs: activeSegment.endTimeMs,
-                startFrame: activeSegment.startFrame,
-                endFrame: activeSegment.endFrame,
-              })
-            }}
-            previewUrl={previewUrl}
-            videoDurationMs={videoDurationMs}
-          />
-        </section>
+        <Notice tone="info" title="粗扫已经完成，下一步去确认分析片段">
+          系统已经筛出 {segmentScan?.swingSegments.length ?? 0} 个候选片段。下一步会进入独立的片段确认页，避免把选片和微调长期压在上传准备页里。
+        </Notice>
       ) : null}
 
       {submissionError ? (
@@ -308,11 +276,10 @@ export function UploadPage() {
       ) : null}
 
       <BottomCTA
-        sticky={false}
         primary={{
-          label: hasSegmentChoices ? '确认片段并开始分析' : '上传并粗扫片段',
-          onClick: () => void (hasSegmentChoices ? handleStartAnalysis() : handleScanVideo()),
-          disabled: hasSegmentChoices ? startAnalysisDisabled : scanDisabled,
+          label: hasSegmentChoices ? '进入片段确认' : '上传并粗扫片段',
+          onClick: () => void (hasSegmentChoices ? navigate(buildSegmentsRoute(taskId)) : handleScanVideo()),
+          disabled: hasSegmentChoices ? !taskId : scanDisabled,
           loading: isBusy,
         }}
         secondary={hasSegmentChoices

@@ -66,6 +66,14 @@ description: Use when writing or updating mobile-first Playwright coverage for t
    - fixture builder、mock helper 超过约 200 行应按页面或流程拆分
 9. 不要把 CSS 结构、类名、内部 state 当断言主目标，也不要把大段内联 JSON 当默认写法。
 
+## 截图 / 壳层回归补充规则
+
+- 页面重排后，除了流程断言，还要验证顶部栏、底部 Tab、主 CTA 是否在滚动时保持稳定。
+- 对移动端产品壳层，优先断言“主滚动发生在 `main`，而不是 `window`”。
+- 当页面进入空态、错误态或结果页时，也要检查是否仍然保留了错误的长文档流布局。
+- 如果任务明确要求产品化或截图 review，至少覆盖首页、上传准备、选片页、处理中、报告、历史、对比、错误其中的关键页面。
+- 当首屏观感是风险点时，补截图或视觉快照，而不是只断言链接和文案存在。
+
 ## 何时联动其他 skills
 
 - `mobile-ui-interaction-design`：需要把 Playwright 验证进一步用于截图 review、视觉层级复核和 UI polish 时
@@ -81,6 +89,7 @@ description: Use when writing or updating mobile-first Playwright coverage for t
 - `examples/homepage-to-upload.spec-example.md`：首页到上传准备路径变化时读
 - `examples/candidate-clip-selection.spec-example.md`：候选片段选择或推荐逻辑变化时读
 - `examples/report-page-rendering.spec-example.md`：报告页渲染与核心卡片断言变化时读
+- `examples/fixed-shell-scroll-assertions.md`：需要验证固定导航、独立滚动和 CTA 可见性时读
 
 ## 任务完成后的输出要求
 

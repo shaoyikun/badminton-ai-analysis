@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { TaskStage, TaskStatus, TaskStatusResponse } from '../../../../shared/contracts'
+import { FlowStepHeader } from '../../components/ui/FlowStepHeader'
 import { StepProgress } from '../../components/ui/StepProgress'
 import { StatusPill } from '../../components/ui/StatusPill'
 import { buildReportRoute, ROUTES } from '../../app/routes'
@@ -121,15 +122,20 @@ export function ProcessingPage() {
 
   return (
     <div className={pageStyles.pageStack}>
-      <section className={pageStyles.heroCard}>
-        <span className={pageStyles.badge}>处理中</span>
-        <h1>系统正在处理你确认过的挥拍片段</h1>
-        <p>{getLiveSummary(task?.stage ?? '', task?.status ?? '')}</p>
-      </section>
+      <FlowStepHeader
+        badge="分析中"
+        title="系统正在处理你确认过的挥拍片段"
+        description={getLiveSummary(task?.stage ?? '', task?.status ?? '')}
+        steps={[
+          { key: 'prepare', label: '上传准备', hint: '视频与基础条件已经确认', state: 'done' },
+          { key: 'segments', label: '确认片段', hint: '本次分析片段已经锁定', state: 'done' },
+          { key: 'processing', label: '生成结果', hint: '系统正在识别动作并整理报告', state: 'current' },
+        ]}
+      />
 
       <section className={pageStyles.card}>
         <div className={pageStyles.sectionHeader}>
-          <h2>当前任务：{task?.actionType === 'smash' ? '杀球' : selectedActionLabel}</h2>
+          <h2>当前任务摘要</h2>
         </div>
         <div className={pageStyles.keyGrid}>
           <div className={pageStyles.keyItem}>
@@ -154,8 +160,9 @@ export function ProcessingPage() {
             <strong>{selectedVideoSummary?.fileName ?? '已上传视频'}</strong>
           </div>
           <div className={pageStyles.keyItem}>
-            <span>Task ID</span>
-            <strong>{params.taskId}</strong>
+            <span>当前动作</span>
+            <strong>{task?.actionType === 'smash' ? '杀球' : selectedActionLabel}</strong>
+            <p>报告会沿用这一动作语境输出结论和复测建议。</p>
           </div>
         </div>
       </section>

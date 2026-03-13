@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import type { ReportResult, TaskHistoryItem } from '../../../../shared/contracts'
 import { fetchHistoryDetail, fetchHistoryList, fetchTaskComparison } from '../../app/analysis-session/api'
 import { buildComparisonRoute, ROUTES } from '../../app/routes'
 import { BottomSheet } from '../../components/ui/BottomSheet'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
+import { BottomCTA } from '../../components/ui/BottomCTA'
 import { getActionTypeLabel, getTrainingFocus, getValidBaselineItem } from '../../components/result-views/insights'
 import { formatTime } from '../../components/result-views/utils'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
@@ -137,7 +138,7 @@ export function HistoryPage() {
         <section className={pageStyles.heroCard}>
           <span className={pageStyles.badge}>History</span>
           <h1>{historyHeading}</h1>
-          <p>历史不只是归档，而是帮你判断当前训练方向有没有继续起作用的基线池。</p>
+          <p>历史页现在只负责样本回看和基线切换，不再把过多解释卡和操作面板长期堆在首屏。</p>
           <div className={styles.heroGrid}>
             <div className={pageStyles.keyItem}>
               <span>同动作样本</span>
@@ -154,22 +155,15 @@ export function HistoryPage() {
 
         <section className={pageStyles.card}>
           <div className={pageStyles.sectionHeader}>
-            <h2>当前历史范围</h2>
+            <h2>当前动作范围</h2>
+            <p className={pageStyles.muted}>先切换当前动作，再查看对应历史样本和可用基线。</p>
           </div>
           <ActionTypeSelector />
-          <p className={pageStyles.muted}>当前只展示 {getActionTypeLabel(actionType)} 的历史样本和同动作复测基线。</p>
-        </section>
-
-        <section className={pageStyles.card}>
-          <span className={pageStyles.eyebrow}>Retest Context</span>
-          <div className={pageStyles.sectionHeader}>
-            <h2>继续复测的意义</h2>
-          </div>
           <div className={styles.summaryGrid}>
             <div className={pageStyles.keyItem}>
-              <span>同动作历史</span>
-              <strong>已有 {history.length} 条可对比样本</strong>
-              <p>每次复测都不是重新开始，而是在验证当前训练方向有没有真的起作用。</p>
+              <span>展示范围</span>
+              <strong>{getActionTypeLabel(actionType)}</strong>
+              <p>当前只展示 {getActionTypeLabel(actionType)} 的历史样本和同动作复测基线。</p>
             </div>
             <div className={pageStyles.keyItem}>
               <span>最近趋势</span>
@@ -214,12 +208,14 @@ export function HistoryPage() {
           </div>
         </section>
 
-        <div className={pageStyles.actions}>
-          {canOpenCurrentComparison && latestCompletedTaskId ? (
-            <Link className={styles.primaryAction} to={buildComparisonRoute(latestCompletedTaskId)}>查看当前对比</Link>
-          ) : null}
-          <Link className={styles.secondaryAction} to={ROUTES.upload}>开始新的分析</Link>
-        </div>
+        <BottomCTA
+          primary={canOpenCurrentComparison && latestCompletedTaskId
+            ? { label: '查看当前对比', to: buildComparisonRoute(latestCompletedTaskId) }
+            : { label: '开始新的分析', to: ROUTES.upload }}
+          secondary={canOpenCurrentComparison && latestCompletedTaskId
+            ? { label: '开始新的分析', to: ROUTES.upload, tone: 'secondary' }
+            : undefined}
+        />
       </div>
 
       <BottomSheet open={detailOpen && Boolean(selectedHistoryReport)} onClose={() => setDetailOpen(false)} title="历史样本详情">

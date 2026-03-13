@@ -5,6 +5,7 @@ import { ROUTES } from './routes'
 const HomePage = lazy(() => import('../features/home/HomePage').then((module) => ({ default: module.HomePage })))
 const GuidePage = lazy(() => import('../features/guide/GuidePage').then((module) => ({ default: module.GuidePage })))
 const UploadPage = lazy(() => import('../features/upload/UploadPage').then((module) => ({ default: module.UploadPage })))
+const SegmentsPage = lazy(() => import('../features/upload/SegmentsPage').then((module) => ({ default: module.SegmentsPage })))
 const ProcessingPage = lazy(() => import('../features/processing/ProcessingPage').then((module) => ({ default: module.ProcessingPage })))
 const ReportPage = lazy(() => import('../features/report/ReportPage').then((module) => ({ default: module.ReportPage })))
 const HistoryPage = lazy(() => import('../features/history/HistoryPage').then((module) => ({ default: module.HistoryPage })))
@@ -27,6 +28,7 @@ export function AppRouter() {
         <Route path={ROUTES.home} element={<HomePage />} />
         <Route path={ROUTES.guide} element={<GuidePage />} />
         <Route path={ROUTES.upload} element={<UploadPage />} />
+        <Route path="/analyses/:taskId/segments" element={<SegmentsPage />} />
         <Route path="/analyses/:taskId/processing" element={<ProcessingPage />} />
         <Route path="/analyses/:taskId/report" element={<ReportPage />} />
         <Route path={ROUTES.history} element={<HistoryPage />} />

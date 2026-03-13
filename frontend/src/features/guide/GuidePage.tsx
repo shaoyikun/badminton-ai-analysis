@@ -1,5 +1,6 @@
 import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { BottomCTA } from '../../components/ui/BottomCTA'
+import { FlowStepHeader } from '../../components/ui/FlowStepHeader'
 import { Notice } from '../../components/ui/Notice'
 import { ROUTES } from '../../app/routes'
 import { useAnalysisTask } from '../../hooks/useAnalysisTask'
@@ -14,14 +15,16 @@ export function GuidePage() {
 
   return (
     <div className={pageStyles.pageStack}>
-      <section className={pageStyles.heroCard}>
-        <span className={pageStyles.badge}>上传前必看</span>
-        <h1>先把拍摄条件拉回到可分析范围，后面的结论才更可信</h1>
-        <p>
-          当前主链路会先粗扫候选挥拍片段，再对你确认的片段做最终分析。
-          所以第一步不是追求花哨，而是先保证整套动作被稳定拍清楚。
-        </p>
-      </section>
+      <FlowStepHeader
+        badge="上传前必看"
+        title="先把拍摄条件拉回到可分析范围"
+        description="当前主链路会先粗扫候选片段，再对你确认的那一段做正式分析，所以第一步是先把整套动作拍清楚。"
+        steps={[
+          { key: 'guide', label: '看拍摄指引', hint: '先把无效上传风险降下来', state: 'current' },
+          { key: 'upload', label: '上传准备', hint: '进入正式上传准备页', state: 'upcoming' },
+          { key: 'segments', label: '确认片段', hint: '粗扫后再决定分析哪一拍', state: 'upcoming' },
+        ]}
+      />
 
       <section className={pageStyles.card}>
         <span className={pageStyles.badge}>当前动作：{selectedActionLabel}</span>
@@ -93,7 +96,6 @@ export function GuidePage() {
       <BottomCTA
         primary={{ label: '我已了解，去上传', to: ROUTES.upload }}
         secondary={{ label: '返回首页', to: ROUTES.home, tone: 'secondary' }}
-        sticky={false}
       />
     </div>
   )
