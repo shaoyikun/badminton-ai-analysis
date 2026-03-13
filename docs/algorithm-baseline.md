@@ -8,8 +8,8 @@
 2. backend 用 `ffprobe` 读取视频元数据，再用 `ffmpeg` 按均匀时间点抽帧。
 3. backend 通过子进程调用 `analysis-service/app.py <preprocess-task-dir>`。
 4. Python `pose_estimator.py` 优先走 MediaPipe Tasks `VIDEO` mode，对抽帧序列做时序姿态估计与 EMA smoothing，生成 keypoints、per-frame metrics、summary。
-5. backend 读取 pose result，若 `summary.rejectionReasons` 非空则直接按首个拒绝原因失败。
-6. 若 pose 通过门槛，backend `reportScoringService.ts` 用规则分数生成 report 和 `scoringEvidence`。
+5. backend 读取 pose result，先把 `summary.rejectionReasons` 分成“硬拒绝”与“低置信提示”两类。
+6. 若命中硬拒绝，任务失败；若仅命中低置信提示，backend 仍生成 report，并把低置信原因写入 `confidenceScore`、`evidenceNotes` 和 `scoringEvidence`。
 
 ## 当前使用的指标
 
@@ -85,17 +85,33 @@
 
 ### Report 评分指标
 
-- `stability`
-  - `coverageRatio * 40 + medianStabilityScore * 60`
-- `turn`
-  - `20 + medianBodyTurnScore * 80`
-- `lift`
-  - `20 + medianRacketArmLiftScore * 80`
-- `repeatability`
-  - `usableRatio * 45 + max(0, 1 - scoreVariance / 0.04) * 55`
-  - backend 公式未改，但输入的 `scoreVariance` 已换成 final/smoothed 语义。
+当前 report 已拆成“动作质量”和“证据置信度”两条线：
+
 - `totalScore`
-  - `stability * 0.28 + turn * 0.28 + lift * 0.24 + repeatability * 0.2`
+  - 只表达动作质量，不直接惩罚机位。
+  - `body_preparation * 0.38 + racket_arm_preparation * 0.37 + swing_repeatability * 0.25`
+- `confidenceScore`
+  - 表达当前报告可信度。
+  - `evidence_quality * 0.55 + camera_suitability * 0.3 + observabilityScore * 0.15 - fallbackPenalty`
+
+当前四个公开维度：
+
+- `evidence_quality`
+  - `coverageRatio * 40 + medianStabilityScore * 35 + coreObservableCoverage * 25`
+  - 只表达“证据是否足够稳定可读”，不直接代表动作好坏。
+- `body_preparation`
+  - 优先使用 `sideOnReadinessScore + shoulderHipRotationScore + trunkCoilScore`
+  - 全部不可观测时 fallback 到 `medianBodyTurnScore`
+- `racket_arm_preparation`
+  - 优先使用 `hittingArmPreparationScore + wristAboveShoulderConfidence + racketSideElbowHeightScore + elbowExtensionScore`
+  - 全部不可观测时 fallback 到 `medianRacketArmLiftScore`
+- `swing_repeatability`
+  - `contactPreparationScore.median * 45 + contactPreparationScore.observableCoverage * 30 + usableRatio * 15 + varianceComponent * 10`
+  - 其中 `varianceComponent = max(0, 1 - scoreVariance / 0.04)`
+  - 当前仍把 `scoreVariance` 当作阶段稳定性的粗粒度代理，不再作为主导项
+- `camera_suitability`
+  - 由 `viewProfile`、`viewConfidence`、`viewStability`、`unknownViewRatio` 计算
+  - 只进入 `confidenceScore` 和 `evidenceNotes`，不进入 `totalScore`
 
 ## 当前阈值
 
@@ -108,7 +124,18 @@
 - `MIN_COVERAGE_RATIO = 0.6`
 - `MAX_SCORE_VARIANCE = 0.04`
 
-### rejectionReasons 触发条件
+### rejectionReasons 与 disposition
+
+当前 backend 会把 pose 输出分成三类结果：
+
+- `hard reject`
+  - 任务失败，继续沿用错误态
+- `low confidence`
+  - 任务完成，但报告标记 `analysisDisposition=low_confidence`
+- `analyzable`
+  - 正常完成
+
+#### 保留为硬拒绝的条件
 
 - `body_not_detected`
   - `detectedFrameCount == 0`
@@ -120,19 +147,34 @@
   - `usableFrameCount < 6`
   - 或 `coverageRatio < 0.6`
   - 或在覆盖率已达标时 `medianStabilityScore < 0.6`
-- `insufficient_action_evidence`
-  - 覆盖率达标后 `scoreVariance > 0.04`
-  - 且 `motionContinuity < 0.55`
+
+#### 降级为低置信完成的条件
+
 - `invalid_camera_angle`
-  - 覆盖率达标后 `unknownViewCount >= max(4, usableFrameCount - 1)`
-  - `unknownViewCount` 会把低 `viewConfidence` 与频繁视角跳变一并算入证据
+  - 正面、前斜、`unknown` 机位
+  - 或 `viewConfidence` 偏低
+  - 或 `unknownViewCount / usableFrameCount` 偏高
+- `insufficient_action_evidence`
+  - 覆盖率已过最低门槛，但 `scoreVariance` 仍偏高
+  - 当前更像“证据偏散”，不再直接作为硬失败
+
+#### confidenceScore 阈值
+
+- `confidenceScore < 70`
+  - `analysisDisposition=low_confidence`
+- `confidenceScore >= 70`
+  - `analysisDisposition=analyzable`
 
 ### 报告 issue 阈值
 
-- `turn < 72` 触发“侧身展开不足”
-- `lift < 72` 触发“挥拍臂上举不足”
-- `repeatability < 74` 触发“动作复现稳定性不足”
-- `stability < 76` 触发“样本可见性边缘，仅建议重拍”
+- `body_preparation < 72`
+  - 触发“身体准备不足”
+- `racket_arm_preparation < 72`
+  - 触发“挥拍臂准备不足”
+- `swing_repeatability < 74`
+  - 触发“挥拍复现稳定性不足”
+- `evidence_quality < 70` 或 `confidenceScore < 70`
+  - 触发“当前样本证据置信度偏低”
 
 ## 当前最容易误判的地方
 
@@ -142,12 +184,12 @@
   - 没有区分真实引拍、随意抬手、击球后残留姿态，也没有识别持拍手或拍面。
 - `viewProfile` 仍然是轻量几何推断
   - 现在有跨帧平滑和保守汇总，但还没有真正的时序视角分类器。
-- `invalid_camera_angle` 的证据更保守了
-  - 低置信度和跳变现在更容易累计到 `unknown`，但本质上仍是规则门控，不是完整机位识别。
+- `camera_suitability` 仍然是规则门控
+  - 现在它不会直接把动作判差，但本质上仍是轻量机位适配估计，不是完整视角分类器。
 - `repeatability` 仍未做动作阶段切分
   - 现在多了 `temporalConsistency` 和 `motionContinuity`，但还不知道准备、引拍、击球、随挥这些阶段。
-- 当前 report 只取 summary 中位数
-  - 不关心最佳帧前后关系，也不关心峰值出现在哪个动作阶段。
+- 当前 report 仍主要依赖 summary 聚合
+  - 虽然已经把动作问题和证据问题拆开，但仍然不关心最佳帧前后关系，也不关心峰值出现在哪个动作阶段。
 
 ## 当前缺少的时序与专项特征
 
@@ -164,7 +206,7 @@
 
 - 看 pose 原始结果时，先看 `summary.rejectionReasonDetails` 和 `summary.debugCounts`，确认是覆盖率、主体尺寸、稳定度还是视角问题。
 - 看单帧时，优先对比 `rawMetrics`、`smoothedMetrics`、`finalMetrics`，再看 `metrics.debug.statusReasons`、`subjectScaleSource`、`frameInference`。
-- 看 report 时，优先对比 `scoringEvidence.dimensionEvidence[].inputs` 和 `scoringEvidence.totalScoreBreakdown`，确认是原始输入变了，还是只是 issue 弱判断调整在生效。
+- 看 report 时，优先对比 `scoringEvidence.dimensionEvidence[].inputs`、`confidenceBreakdown` 和 `rejectionDecision`，确认是动作输入变了，还是只是证据置信度在下降。
 - 本地开发可直接运行：
 
 ```bash

@@ -19,53 +19,86 @@ function clampScore(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-function toPercent(value: number) {
-  return clampScore(value * 100);
+function clampUnit(value: number, min = 0, max = 1) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function roundDebugValue(value: number, digits = 4) {
   return Number(value.toFixed(digits));
 }
 
-type MetricKey = 'stability' | 'turn' | 'lift' | 'repeatability';
+type DimensionKey =
+  | 'evidence_quality'
+  | 'body_preparation'
+  | 'racket_arm_preparation'
+  | 'swing_repeatability'
+  | 'camera_suitability';
 
-type MetricScores = Record<MetricKey, number>;
+type PublicDimensionKey = Exclude<DimensionKey, 'camera_suitability'>;
+
+type DimensionScores = Record<DimensionKey, number>;
 type StructuredEvidenceValue = string | number | boolean | null;
 type StructuredEvidenceRecord = Record<string, StructuredEvidenceValue>;
 type DimensionEvidenceEntry = NonNullable<NonNullable<ReportResult['scoringEvidence']>['dimensionEvidence']>[number];
-
-type RankedIssue = ReportResult['issues'][number] & {
-  metricKey: MetricKey;
-  severity: number;
-  suggestion: SuggestionItem;
-};
 
 type PoseQualityFailure = {
   code: FlowErrorCode;
   message: string;
 };
 
-type IssueDefinition = {
-  metricKey: MetricKey;
-  threshold: number;
-  title: string;
-  description: string;
-  impact: string;
+type AnalysisDisposition = {
+  hardRejectReasons: FlowErrorCode[];
+  lowConfidenceReasons: FlowErrorCode[];
+  confidencePenaltyNotes: string[];
+};
+
+type RankedIssue = ReportResult['issues'][number] & {
+  key: PublicDimensionKey | 'confidence';
+  severity: number;
+  kind: 'action_gap' | 'evidence_gap';
   suggestion: SuggestionItem;
 };
 
-const METRIC_LABELS: Record<MetricKey, string> = {
-  stability: '主体稳定度',
-  turn: '侧身展开',
-  lift: '挥拍臂上举',
-  repeatability: '动作复现稳定性',
+type SpecializedSummaryItem = NonNullable<PoseAnalysisResult['summary']['specializedFeatureSummary']>[string];
+
+type WeightedFeature = {
+  key: string;
+  value: number | null;
+  weight: number;
 };
 
-const TOTAL_SCORE_WEIGHTS: Record<MetricKey, number> = {
-  stability: 0.28,
-  turn: 0.28,
-  lift: 0.24,
-  repeatability: 0.2,
+type FeatureGroupScore = {
+  score: number;
+  normalizedScore: number;
+  observableCoverage: number;
+  source: string;
+  formula: string;
+  inputs: StructuredEvidenceRecord;
+  fallbacks: string[];
+  usedFallback: boolean;
+};
+
+const SCORING_MODEL_VERSION = 'rule-v2-evidence-confidence';
+const LOW_CONFIDENCE_THRESHOLD = 70;
+
+const DIMENSION_LABELS: Record<DimensionKey, string> = {
+  evidence_quality: '证据质量',
+  body_preparation: '身体准备',
+  racket_arm_preparation: '挥拍臂准备',
+  swing_repeatability: '挥拍复现稳定性',
+  camera_suitability: '相机适配度',
+};
+
+const TOTAL_SCORE_WEIGHTS: Record<Exclude<DimensionKey, 'evidence_quality' | 'camera_suitability'>, number> = {
+  body_preparation: 0.38,
+  racket_arm_preparation: 0.37,
+  swing_repeatability: 0.25,
+};
+
+const CONFIDENCE_WEIGHTS = {
+  evidenceQuality: 0.55,
+  cameraSuitability: 0.3,
+  observability: 0.15,
 };
 
 const VIEW_PROFILE_LABELS: Record<ViewProfile, string> = {
@@ -86,60 +119,12 @@ const RACKET_SIDE_LABELS: Record<DominantRacketSide, string> = {
   unknown: '挥拍侧未确定',
 };
 
-const ISSUE_DEFINITIONS: IssueDefinition[] = [
-  {
-    metricKey: 'turn',
-    threshold: 72,
-    title: '侧身展开不足',
-    description: '从稳定识别到的高远球帧看，身体更常停留在较正的朝向，侧身打开还不够。',
-    impact: '这会让高远球的准备空间偏小，报告能看到的关键差异也会集中在转体展开不够。',
-    suggestion: {
-      title: '下次先盯侧身有没有更早打开',
-      description: '保持侧后方机位复测，优先看准备到出手前，身体是否比这次更早完成侧身展开。',
-    },
-  },
-  {
-    metricKey: 'lift',
-    threshold: 72,
-    title: '挥拍臂上举不足',
-    description: '稳定帧里能看到挥拍臂有上举，但高度和时机都还不够充分。',
-    impact: '这会压缩高远球的击球准备空间，让报告更容易持续提示上举不足这一项。',
-    suggestion: {
-      title: '下次先看上举空间有没有继续抬高',
-      description: '保持同机位复测，重点观察挥拍臂是不是更早、更高地进入准备位置。',
-    },
-  },
-  {
-    metricKey: 'repeatability',
-    threshold: 74,
-    title: '动作复现稳定性不足',
-    description: '虽然能识别到人体，但不同帧之间的动作质量波动仍然偏大，说明这次样本复现得不够稳。',
-    impact: '动作波动大时，单次看起来做到了的细节不一定能连续复现，复测对比也更容易飘。',
-    suggestion: {
-      title: '下次先把同一套节奏稳定复现出来',
-      description: '优先保证准备、击球、收拍这条线更连贯，不要先追求单次最好效果。',
-    },
-  },
-  {
-    metricKey: 'stability',
-    threshold: 76,
-    title: '样本可见性边缘，仅建议重拍',
-    description: '这次样本已经勉强达到报告门槛，但可见性和稳定度还处在边缘区间。',
-    impact: '如果继续用这类样本做对比，报告可信度会下降，也更像在看演示数据而不是稳定证据。',
-    suggestion: {
-      title: '下次优先提升样本清晰度和主体完整度',
-      description: '尽量让全身完整入镜，减少遮挡和抖动，再做同机位高远球复测。',
-    },
-  },
-];
-
-const STANDARD_REFERENCE = {
-  title: '正手高远球标准参考帧',
-  cue: '当前只围绕可稳定观测的侧身展开、挥拍臂上举和动作稳定性来做差异对比。',
-  imageLabel: '标准高远球真人参考帧',
-  imagePath: '/standard-references/clear-reference-real.jpg',
-  sourceType: 'real-sample' as const,
-};
+const HARD_REJECT_REASONS = new Set<FlowErrorCode>([
+  'body_not_detected',
+  'subject_too_small_or_cropped',
+  'poor_lighting_or_occlusion',
+  'insufficient_pose_coverage',
+]);
 
 const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
   invalid_action_type: 'actionType is invalid',
@@ -166,7 +151,7 @@ const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
   internal_error: 'internal server error',
 };
 
-const WEAK_TURN_VIEW_PROFILES = new Set<ViewProfile>(['front', 'front_left_oblique', 'front_right_oblique']);
+const FRONT_VIEW_PROFILES = new Set<ViewProfile>(['front', 'front_left_oblique', 'front_right_oblique']);
 
 function getViewLabel(viewProfile?: ViewProfile) {
   return VIEW_PROFILE_LABELS[viewProfile ?? 'unknown'] ?? VIEW_PROFILE_LABELS.unknown;
@@ -180,46 +165,20 @@ function getViewReferenceCue(viewProfile?: ViewProfile) {
   switch (viewProfile) {
     case 'left_side':
     case 'right_side':
-      return '当前识别为侧面视角，参考图主要帮助你对齐挥拍侧准备和击球前身体线条。';
+      return '当前识别为侧面视角，系统会把更多置信度留给挥拍臂准备，身体准备判断相对保守。';
     case 'front':
-      return '当前识别为正面视角，系统更适合参考挥拍臂准备和整体稳定度，转体展开只做弱判断。';
+      return '当前识别为正面视角，系统仍可参考挥拍臂准备和证据稳定性，但不会把视角局限直接当作动作差。';
     case 'front_left_oblique':
     case 'front_right_oblique':
-      return '当前识别为前斜视角，这次更适合参考挥拍臂准备；转体展开会保留为弱判断。';
+      return '当前识别为前斜视角，报告会保留动作结论，但会单独降低证据置信度。';
     case 'rear_left_oblique':
     case 'rear_right_oblique':
-      return '当前识别为后斜视角，这次对转体展开和挥拍臂准备都能给出相对完整的参考判断。';
+      return '当前识别为后斜视角，这次对身体准备和挥拍臂准备都能给出较完整的可解释证据。';
     case 'rear':
-      return '当前识别为后方视角，这次的转体展开和挥拍臂准备判断会相对更稳。';
+      return '当前识别为后方视角，这次的动作准备判断和证据稳定度相对更稳。';
     default:
-      return '当前只围绕可稳定观测的侧身展开、挥拍臂上举和动作稳定性来做差异对比。';
+      return '当前报告会同时区分动作问题和证据质量问题，避免把机位局限直接写成动作差。';
   }
-}
-
-function getMetricViewNote(metricKey: MetricKey, viewProfile?: ViewProfile) {
-  if (metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(viewProfile ?? 'unknown')) {
-    return `基于当前${getViewLabel(viewProfile)}视角，这一项只做弱判断，更适合作为复测时的辅助参考。`;
-  }
-  if (metricKey === 'lift' && (viewProfile === 'front' || viewProfile === 'front_left_oblique' || viewProfile === 'front_right_oblique')) {
-    return `基于当前${getViewLabel(viewProfile)}视角，这一项的证据相对直接。`;
-  }
-  if (metricKey === 'repeatability') {
-    return `这一项主要看当前${getViewLabel(viewProfile)}视角下动作在多帧里是否稳定复现。`;
-  }
-  return `这项判断结合了当前${getViewLabel(viewProfile)}视角下最稳定的关键帧证据。`;
-}
-
-function getMetricConfidence(metricKey: MetricKey, viewProfile?: ViewProfile) {
-  if (metricKey === 'turn' && WEAK_TURN_VIEW_PROFILES.has(viewProfile ?? 'unknown')) {
-    return 0.52;
-  }
-  if (metricKey === 'lift' && (viewProfile === 'front' || viewProfile === 'front_left_oblique' || viewProfile === 'front_right_oblique')) {
-    return 0.84;
-  }
-  if (viewProfile === 'unknown') {
-    return 0.48;
-  }
-  return 0.78;
 }
 
 function buildRecognitionContext(summary: PoseAnalysisResult['summary'], engine: string): RecognitionContext {
@@ -239,7 +198,7 @@ function buildVisualEvidence(task: AnalysisTaskRecord, poseResult: PoseAnalysisR
   const frameMap = new Map(poseResult.frames.map((frame) => [frame.frameIndex, frame]));
   const bestFrameIndex = poseResult.summary.bestFrameIndex ?? sampledFrames[0]?.index ?? null;
   const bestRawFrame = sampledFrames.find((item) => item.index === bestFrameIndex) ?? sampledFrames[0];
-  const bestPoseFrame = bestFrameIndex ? frameMap.get(bestFrameIndex) : undefined;
+  const bestPoseFrame = bestFrameIndex !== null && bestFrameIndex !== undefined ? frameMap.get(bestFrameIndex) : undefined;
 
   return {
     bestFrameIndex,
@@ -258,228 +217,600 @@ function buildVisualEvidence(task: AnalysisTaskRecord, poseResult: PoseAnalysisR
   };
 }
 
-function buildMetricScores(summary: PoseAnalysisResult['summary'], frameCount: number): MetricScores {
-  const usableRatio = frameCount > 0 ? summary.usableFrameCount / frameCount : 0;
-  const stability = clampScore(summary.coverageRatio * 40 + summary.medianStabilityScore * 60);
-  const turn = clampScore(20 + summary.medianBodyTurnScore * 80);
-  const lift = clampScore(20 + summary.medianRacketArmLiftScore * 80);
-  const repeatability = clampScore(usableRatio * 45 + Math.max(0, 1 - (summary.scoreVariance / 0.04)) * 55);
-
-  return { stability, turn, lift, repeatability };
+function uniqueReasons(reasons: FlowErrorCode[]) {
+  return [...new Set(reasons)];
 }
 
-function isWeakTurnView(viewProfile?: ViewProfile) {
-  return WEAK_TURN_VIEW_PROFILES.has(viewProfile ?? 'unknown');
+function addLowConfidenceReason(
+  reasons: FlowErrorCode[],
+  notes: string[],
+  code: FlowErrorCode,
+  note: string,
+) {
+  reasons.push(code);
+  notes.push(note);
 }
 
-function buildDimensionEvidence(
-  metricKey: MetricKey,
-  metricScores: MetricScores,
+function getAnalysisDisposition(poseResult: PoseAnalysisResult): AnalysisDisposition {
+  const hardRejectReasons = uniqueReasons(
+    poseResult.summary.rejectionReasons.filter((reason) => HARD_REJECT_REASONS.has(reason)),
+  );
+  const lowConfidenceReasons = [...poseResult.summary.rejectionReasons.filter((reason) => !HARD_REJECT_REASONS.has(reason))];
+  const confidencePenaltyNotes: string[] = [];
+
+  const viewProfile = poseResult.summary.viewProfile ?? 'unknown';
+  const unknownViewCount = poseResult.summary.debugCounts?.unknownViewCount ?? 0;
+  const usableFrameCount = Math.max(1, poseResult.summary.usableFrameCount);
+  const unknownViewRatio = unknownViewCount / usableFrameCount;
+  const weakViewConfidence = (poseResult.summary.viewConfidence ?? 0) < 0.62;
+  const frontOrUnknownView = FRONT_VIEW_PROFILES.has(viewProfile) || viewProfile === 'unknown';
+
+  if (frontOrUnknownView || weakViewConfidence || unknownViewRatio >= 0.45) {
+    addLowConfidenceReason(
+      lowConfidenceReasons,
+      confidencePenaltyNotes,
+      'invalid_camera_angle',
+      '当前机位降低了置信度，但不直接代表动作更差。',
+    );
+  }
+
+  if (poseResult.summary.scoreVariance >= 0.03 && poseResult.summary.coverageRatio >= 0.6) {
+    addLowConfidenceReason(
+      lowConfidenceReasons,
+      confidencePenaltyNotes,
+      'insufficient_action_evidence',
+      '当前样本复现证据偏散，建议同机位再录一条确认动作是否稳定。',
+    );
+  }
+
+  return {
+    hardRejectReasons,
+    lowConfidenceReasons: uniqueReasons(lowConfidenceReasons),
+    confidencePenaltyNotes: [...new Set(confidencePenaltyNotes)],
+  };
+}
+
+function getFeatureSummary(
   summary: PoseAnalysisResult['summary'],
-  frameCount: number,
-): DimensionEvidenceEntry {
-  const usableRatio = frameCount > 0 ? summary.usableFrameCount / frameCount : 0;
-  const weakTurnAdjustmentApplied = metricKey === 'turn' && isWeakTurnView(summary.viewProfile);
+  key: string,
+): SpecializedSummaryItem | undefined {
+  return summary.specializedFeatureSummary?.[key];
+}
 
-  switch (metricKey) {
-    case 'stability': {
-      const inputs: StructuredEvidenceRecord = {
-        coverageRatio: summary.coverageRatio,
-        medianStabilityScore: summary.medianStabilityScore,
-      };
-      const adjustments: StructuredEvidenceRecord = {
-        weakViewAdjustmentApplied: false,
-      };
-      return {
-        key: metricKey,
-        label: METRIC_LABELS[metricKey],
-        score: metricScores[metricKey],
-        available: true,
-        confidence: getMetricConfidence(metricKey, summary.viewProfile),
-        source: `coverageRatio=${summary.coverageRatio}, medianStability=${summary.medianStabilityScore}`,
-        inputs,
-        formula: 'clamp(round(coverageRatio * 40 + medianStabilityScore * 60))',
-        adjustments,
-      };
-    }
-    case 'turn': {
-      const inputs: StructuredEvidenceRecord = {
-        medianBodyTurnScore: summary.medianBodyTurnScore,
-        viewProfile: summary.viewProfile ?? 'unknown',
-      };
-      const adjustments: StructuredEvidenceRecord = {
-        weakViewAdjustmentApplied: weakTurnAdjustmentApplied,
-        issueSeverityMultiplier: weakTurnAdjustmentApplied ? 0.55 : 1,
-      };
-      return {
-        key: metricKey,
-        label: METRIC_LABELS[metricKey],
-        score: metricScores[metricKey],
-        available: true,
-        confidence: getMetricConfidence(metricKey, summary.viewProfile),
-        source: `medianBodyTurnScore=${summary.medianBodyTurnScore}`,
-        inputs,
-        formula: 'clamp(round(20 + medianBodyTurnScore * 80))',
-        adjustments,
-      };
-    }
-    case 'lift': {
-      const inputs: StructuredEvidenceRecord = {
-        medianRacketArmLiftScore: summary.medianRacketArmLiftScore,
-        viewProfile: summary.viewProfile ?? 'unknown',
-      };
-      const adjustments: StructuredEvidenceRecord = {
-        frontViewEvidenceBoost: summary.viewProfile === 'front' || summary.viewProfile === 'front_left_oblique' || summary.viewProfile === 'front_right_oblique',
-      };
-      return {
-        key: metricKey,
-        label: METRIC_LABELS[metricKey],
-        score: metricScores[metricKey],
-        available: true,
-        confidence: getMetricConfidence(metricKey, summary.viewProfile),
-        source: `medianRacketArmLiftScore=${summary.medianRacketArmLiftScore}`,
-        inputs,
-        formula: 'clamp(round(20 + medianRacketArmLiftScore * 80))',
-        adjustments,
-      };
-    }
-    case 'repeatability': {
-      const inputs: StructuredEvidenceRecord = {
-        usableFrameCount: summary.usableFrameCount,
-        frameCount,
-        usableRatio: roundDebugValue(usableRatio),
-        scoreVariance: summary.scoreVariance,
-      };
-      const adjustments: StructuredEvidenceRecord = {
-        varianceThreshold: 0.04,
-      };
-      return {
-        key: metricKey,
-        label: METRIC_LABELS[metricKey],
-        score: metricScores[metricKey],
-        available: true,
-        confidence: getMetricConfidence(metricKey, summary.viewProfile),
-        source: `usableFrameCount=${summary.usableFrameCount}, scoreVariance=${summary.scoreVariance}`,
-        inputs,
-        formula: 'clamp(round(usableRatio * 45 + max(0, 1 - scoreVariance / 0.04) * 55))',
-        adjustments,
-      };
-    }
+function buildFeatureGroupScore(
+  summary: PoseAnalysisResult['summary'],
+  features: WeightedFeature[],
+  fallbackScore: number,
+  fallbackLabel: string,
+  scoreFormula: string,
+  fallbackFormula: string,
+): FeatureGroupScore {
+  const available = features.filter((feature) => typeof feature.value === 'number');
+  if (available.length === 0) {
+    return {
+      score: fallbackScore,
+      normalizedScore: clampUnit((fallbackScore - 20) / 80),
+      observableCoverage: 0,
+      source: `${fallbackLabel}=${roundDebugValue((fallbackScore - 20) / 80)}`,
+      formula: fallbackFormula,
+      inputs: {
+        [fallbackLabel]: roundDebugValue((fallbackScore - 20) / 80),
+      },
+      fallbacks: [`${fallbackLabel}_fallback`],
+      usedFallback: true,
+    };
+  }
+
+  const totalWeight = available.reduce((sum, feature) => sum + feature.weight, 0);
+  const normalizedScore = totalWeight > 0
+    ? available.reduce((sum, feature) => sum + (feature.value ?? 0) * feature.weight, 0) / totalWeight
+    : 0;
+  const observableCoverage = features.length > 0 ? available.length / features.length : 0;
+  const inputs = Object.fromEntries(features.map((feature) => [feature.key, feature.value === null ? null : roundDebugValue(feature.value)]));
+
+  return {
+    score: clampScore(25 + normalizedScore * 75),
+    normalizedScore,
+    observableCoverage,
+    source: available.map((feature) => `${feature.key}=${roundDebugValue(feature.value ?? 0)}`).join(', '),
+    formula: scoreFormula,
+    inputs,
+    fallbacks: [],
+    usedFallback: false,
+  };
+}
+
+function buildDimensionScores(summary: PoseAnalysisResult['summary'], frameCount: number) {
+  const usableRatio = frameCount > 0 ? summary.usableFrameCount / frameCount : 0;
+  const trunkCoil = getFeatureSummary(summary, 'trunkCoilScore');
+  const sideOnReadiness = getFeatureSummary(summary, 'sideOnReadinessScore');
+  const shoulderHipRotation = getFeatureSummary(summary, 'shoulderHipRotationScore');
+  const hittingArmPreparation = getFeatureSummary(summary, 'hittingArmPreparationScore');
+  const wristAboveShoulder = getFeatureSummary(summary, 'wristAboveShoulderConfidence');
+  const racketSideElbowHeight = getFeatureSummary(summary, 'racketSideElbowHeightScore');
+  const elbowExtension = getFeatureSummary(summary, 'elbowExtensionScore');
+  const contactPreparation = getFeatureSummary(summary, 'contactPreparationScore');
+
+  const coreObservableCoverages = [
+    trunkCoil?.observableCoverage,
+    hittingArmPreparation?.observableCoverage,
+    contactPreparation?.observableCoverage,
+  ].filter((value): value is number => typeof value === 'number');
+  const coreObservableCoverage = coreObservableCoverages.length > 0
+    ? coreObservableCoverages.reduce((sum, value) => sum + value, 0) / coreObservableCoverages.length
+    : 0;
+
+  const evidenceQuality = clampScore(
+    summary.coverageRatio * 40 + summary.medianStabilityScore * 35 + coreObservableCoverage * 25,
+  );
+
+  const bodyPreparationGroup = buildFeatureGroupScore(
+    summary,
+    [
+      { key: 'sideOnReadinessScore', value: sideOnReadiness?.median ?? null, weight: 0.35 },
+      { key: 'shoulderHipRotationScore', value: shoulderHipRotation?.median ?? null, weight: 0.3 },
+      { key: 'trunkCoilScore', value: trunkCoil?.median ?? null, weight: 0.35 },
+    ],
+    clampScore(20 + summary.medianBodyTurnScore * 80),
+    'medianBodyTurnScore',
+    'clamp(round(25 + weighted(sideOnReadinessScore, shoulderHipRotationScore, trunkCoilScore) * 75))',
+    'clamp(round(20 + medianBodyTurnScore * 80))',
+  );
+
+  const racketArmPreparationGroup = buildFeatureGroupScore(
+    summary,
+    [
+      { key: 'hittingArmPreparationScore', value: hittingArmPreparation?.median ?? null, weight: 0.4 },
+      { key: 'wristAboveShoulderConfidence', value: wristAboveShoulder?.median ?? null, weight: 0.2 },
+      { key: 'racketSideElbowHeightScore', value: racketSideElbowHeight?.median ?? null, weight: 0.2 },
+      { key: 'elbowExtensionScore', value: elbowExtension?.median ?? null, weight: 0.2 },
+    ],
+    clampScore(20 + summary.medianRacketArmLiftScore * 80),
+    'medianRacketArmLiftScore',
+    'clamp(round(25 + weighted(hittingArmPreparationScore, wristAboveShoulderConfidence, racketSideElbowHeightScore, elbowExtensionScore) * 75))',
+    'clamp(round(20 + medianRacketArmLiftScore * 80))',
+  );
+
+  const contactPreparationMedian = contactPreparation?.median ?? null;
+  const contactPreparationCoverage = contactPreparation?.observableCoverage ?? 0;
+  const varianceComponent = Math.max(0, 1 - (summary.scoreVariance / 0.04));
+  const swingRepeatabilityFallback = clampScore(usableRatio * 50 + varianceComponent * 50);
+  const swingRepeatability = contactPreparationMedian === null
+    ? swingRepeatabilityFallback
+    : clampScore(contactPreparationMedian * 45 + contactPreparationCoverage * 30 + usableRatio * 15 + varianceComponent * 10);
+
+  const viewFactorByProfile: Record<ViewProfile, number> = {
+    rear: 1,
+    rear_left_oblique: 0.95,
+    rear_right_oblique: 0.95,
+    left_side: 0.88,
+    right_side: 0.88,
+    front_left_oblique: 0.72,
+    front_right_oblique: 0.72,
+    front: 0.58,
+    unknown: 0.4,
+  };
+  const unknownViewCount = summary.debugCounts?.unknownViewCount ?? 0;
+  const unknownViewRatio = summary.usableFrameCount > 0 ? unknownViewCount / summary.usableFrameCount : 1;
+  const cameraSuitability = clampScore(
+    viewFactorByProfile[summary.viewProfile ?? 'unknown'] * 45
+      + (summary.viewConfidence ?? 0.45) * 30
+      + (summary.viewStability ?? summary.viewConfidence ?? 0.45) * 15
+      + Math.max(0, 1 - unknownViewRatio) * 10,
+  );
+
+  const dimensionScores: DimensionScores = {
+    evidence_quality: evidenceQuality,
+    body_preparation: bodyPreparationGroup.score,
+    racket_arm_preparation: racketArmPreparationGroup.score,
+    swing_repeatability: swingRepeatability,
+    camera_suitability: cameraSuitability,
+  };
+
+  return {
+    dimensionScores,
+    coreObservableCoverage,
+    bodyPreparationGroup,
+    racketArmPreparationGroup,
+    swingRepeatabilityFallbackUsed: contactPreparationMedian === null,
+    swingRepeatabilityInputs: {
+      contactPreparationMedian: contactPreparationMedian === null ? null : roundDebugValue(contactPreparationMedian),
+      contactPreparationObservableCoverage: roundDebugValue(contactPreparationCoverage),
+      usableRatio: roundDebugValue(usableRatio),
+      scoreVariance: roundDebugValue(summary.scoreVariance),
+    } satisfies StructuredEvidenceRecord,
+    cameraInputs: {
+      viewProfile: summary.viewProfile ?? 'unknown',
+      viewConfidence: summary.viewConfidence ?? null,
+      viewStability: summary.viewStability ?? null,
+      unknownViewCount,
+      usableFrameCount: summary.usableFrameCount,
+      unknownViewRatio: roundDebugValue(unknownViewRatio),
+    } satisfies StructuredEvidenceRecord,
+  };
+}
+
+function getDimensionConfidence(key: PublicDimensionKey, scores: DimensionScores, bodyCoverage: number, racketCoverage: number, swingFallbackUsed: boolean) {
+  switch (key) {
+    case 'evidence_quality':
+      return 0.92;
+    case 'body_preparation':
+      return clampUnit(0.45 + bodyCoverage * 0.35 + scores.camera_suitability / 100 * 0.2);
+    case 'racket_arm_preparation':
+      return clampUnit(0.45 + racketCoverage * 0.35 + scores.camera_suitability / 100 * 0.2);
+    case 'swing_repeatability':
+      return clampUnit(0.5 + scores.evidence_quality / 100 * 0.2 + (swingFallbackUsed ? 0 : 0.2));
   }
 }
 
-function buildTotalScoreBreakdown(metricScores: MetricScores) {
-  const contributions = (Object.keys(METRIC_LABELS) as MetricKey[]).map((key) => ({
-    key,
-    label: METRIC_LABELS[key],
-    score: metricScores[key],
-    weight: TOTAL_SCORE_WEIGHTS[key],
-    weightedScore: roundDebugValue(metricScores[key] * TOTAL_SCORE_WEIGHTS[key]),
-  }));
-  const rawWeightedTotal = roundDebugValue(
-    contributions.reduce((total, item) => total + item.weightedScore, 0),
-  );
-  const finalTotalScore = clampScore(rawWeightedTotal);
+function buildDimensionEvidence(
+  key: DimensionKey,
+  scores: DimensionScores,
+  summary: PoseAnalysisResult['summary'],
+  frameCount: number,
+  computed: ReturnType<typeof buildDimensionScores>,
+): DimensionEvidenceEntry {
+  const usableRatio = frameCount > 0 ? summary.usableFrameCount / frameCount : 0;
 
+  switch (key) {
+    case 'evidence_quality':
+      return {
+        key,
+        label: DIMENSION_LABELS[key],
+        score: scores[key],
+        available: true,
+        confidence: 0.92,
+        source: `coverageRatio=${summary.coverageRatio}, medianStabilityScore=${summary.medianStabilityScore}, coreObservableCoverage=${roundDebugValue(computed.coreObservableCoverage)}`,
+        inputs: {
+          coverageRatio: roundDebugValue(summary.coverageRatio),
+          medianStabilityScore: roundDebugValue(summary.medianStabilityScore),
+          coreObservableCoverage: roundDebugValue(computed.coreObservableCoverage),
+        },
+        formula: 'clamp(round(coverageRatio * 40 + medianStabilityScore * 35 + coreObservableCoverage * 25))',
+        adjustments: {
+          viewPenaltyApplied: false,
+        },
+        fallbacks: [],
+      };
+    case 'body_preparation':
+      return {
+        key,
+        label: DIMENSION_LABELS[key],
+        score: scores[key],
+        available: true,
+        confidence: getDimensionConfidence(key, scores, computed.bodyPreparationGroup.observableCoverage, computed.racketArmPreparationGroup.observableCoverage, computed.swingRepeatabilityFallbackUsed),
+        source: computed.bodyPreparationGroup.source,
+        inputs: computed.bodyPreparationGroup.inputs,
+        formula: computed.bodyPreparationGroup.formula,
+        adjustments: {
+          observableCoverage: roundDebugValue(computed.bodyPreparationGroup.observableCoverage),
+          usedFallback: computed.bodyPreparationGroup.usedFallback,
+        },
+        fallbacks: computed.bodyPreparationGroup.fallbacks,
+      };
+    case 'racket_arm_preparation':
+      return {
+        key,
+        label: DIMENSION_LABELS[key],
+        score: scores[key],
+        available: true,
+        confidence: getDimensionConfidence(key, scores, computed.bodyPreparationGroup.observableCoverage, computed.racketArmPreparationGroup.observableCoverage, computed.swingRepeatabilityFallbackUsed),
+        source: computed.racketArmPreparationGroup.source,
+        inputs: computed.racketArmPreparationGroup.inputs,
+        formula: computed.racketArmPreparationGroup.formula,
+        adjustments: {
+          observableCoverage: roundDebugValue(computed.racketArmPreparationGroup.observableCoverage),
+          usedFallback: computed.racketArmPreparationGroup.usedFallback,
+        },
+        fallbacks: computed.racketArmPreparationGroup.fallbacks,
+      };
+    case 'swing_repeatability':
+      return {
+        key,
+        label: DIMENSION_LABELS[key],
+        score: scores[key],
+        available: true,
+        confidence: getDimensionConfidence(key, scores, computed.bodyPreparationGroup.observableCoverage, computed.racketArmPreparationGroup.observableCoverage, computed.swingRepeatabilityFallbackUsed),
+        source: `usableRatio=${roundDebugValue(usableRatio)}, scoreVariance=${roundDebugValue(summary.scoreVariance)}, contactPreparationMedian=${computed.swingRepeatabilityInputs.contactPreparationMedian ?? 'null'}`,
+        inputs: computed.swingRepeatabilityInputs,
+        formula: computed.swingRepeatabilityFallbackUsed
+          ? 'clamp(round(usableRatio * 50 + max(0, 1 - scoreVariance / 0.04) * 50))'
+          : 'clamp(round(contactPreparationMedian * 45 + contactPreparationObservableCoverage * 30 + usableRatio * 15 + max(0, 1 - scoreVariance / 0.04) * 10))',
+        adjustments: {
+          scoreVarianceRole: 'phase_proxy',
+          usedFallback: computed.swingRepeatabilityFallbackUsed,
+        },
+        fallbacks: computed.swingRepeatabilityFallbackUsed ? ['contactPreparationScore_fallback'] : [],
+      };
+    case 'camera_suitability':
+      return {
+        key,
+        label: DIMENSION_LABELS[key],
+        score: scores[key],
+        available: true,
+        confidence: 0.85,
+        source: `viewProfile=${summary.viewProfile ?? 'unknown'}, viewConfidence=${summary.viewConfidence ?? 'null'}, viewStability=${summary.viewStability ?? 'null'}`,
+        inputs: computed.cameraInputs,
+        formula: 'clamp(round(viewProfileFactor * 45 + viewConfidence * 30 + viewStability * 15 + max(0, 1 - unknownViewRatio) * 10))',
+        adjustments: {
+          impactsTotalScore: false,
+        },
+        fallbacks: [],
+      };
+  }
+}
+
+function buildTotalScoreBreakdown(scores: DimensionScores) {
+  const contributions = (Object.keys(TOTAL_SCORE_WEIGHTS) as Array<keyof typeof TOTAL_SCORE_WEIGHTS>).map((key) => ({
+    key,
+    label: DIMENSION_LABELS[key],
+    score: scores[key],
+    weight: TOTAL_SCORE_WEIGHTS[key],
+    weightedScore: roundDebugValue(scores[key] * TOTAL_SCORE_WEIGHTS[key]),
+  }));
+  const rawWeightedTotal = roundDebugValue(contributions.reduce((sum, item) => sum + item.weightedScore, 0));
   return {
     rawWeightedTotal,
-    finalTotalScore,
+    finalTotalScore: clampScore(rawWeightedTotal),
     contributions,
   };
 }
 
-function buildSummaryText(metricScores: MetricScores, poseSummary: PoseAnalysisResult['summary'], frameCount: number) {
-  const weakestMetric = Object.entries(metricScores).sort((a, b) => a[1] - b[1])[0] as [MetricKey, number];
-  const evidence = `本次基于 ${poseSummary.usableFrameCount}/${frameCount} 帧稳定识别结果生成。`;
-  const viewLead = `当前识别为${getViewLabel(poseSummary.viewProfile)}，${getRacketSideLabel(poseSummary.dominantRacketSide)}。`;
+function buildConfidenceBreakdown(
+  scores: DimensionScores,
+  computed: ReturnType<typeof buildDimensionScores>,
+  disposition: AnalysisDisposition,
+) {
+  const observabilityScore = clampScore(
+    ((computed.bodyPreparationGroup.observableCoverage + computed.racketArmPreparationGroup.observableCoverage + (computed.swingRepeatabilityFallbackUsed ? 0 : 1)) / 3) * 100,
+  );
+  const contributions = [
+    {
+      key: 'evidence_quality',
+      label: DIMENSION_LABELS.evidence_quality,
+      score: scores.evidence_quality,
+      weight: CONFIDENCE_WEIGHTS.evidenceQuality,
+      weightedScore: roundDebugValue(scores.evidence_quality * CONFIDENCE_WEIGHTS.evidenceQuality),
+    },
+    {
+      key: 'camera_suitability',
+      label: DIMENSION_LABELS.camera_suitability,
+      score: scores.camera_suitability,
+      weight: CONFIDENCE_WEIGHTS.cameraSuitability,
+      weightedScore: roundDebugValue(scores.camera_suitability * CONFIDENCE_WEIGHTS.cameraSuitability),
+    },
+    {
+      key: 'observability',
+      label: '专项特征完整度',
+      score: observabilityScore,
+      weight: CONFIDENCE_WEIGHTS.observability,
+      weightedScore: roundDebugValue(observabilityScore * CONFIDENCE_WEIGHTS.observability),
+    },
+  ];
 
-  if (weakestMetric[1] >= 80) {
-    return `${evidence} ${viewLead} 当前这条高远球的可观测框架比较稳定，下一步更适合继续验证动作能否连续复现。`;
+  const penalties = [
+    computed.bodyPreparationGroup.usedFallback
+      ? { key: 'body_preparation_fallback', label: '身体准备回退', amount: 8, reason: '本次身体准备主要由旧 turn 特征补足。' }
+      : null,
+    computed.racketArmPreparationGroup.usedFallback
+      ? { key: 'racket_arm_preparation_fallback', label: '挥拍臂准备回退', amount: 8, reason: '本次挥拍臂准备主要由旧 lift 特征补足。' }
+      : null,
+    computed.swingRepeatabilityFallbackUsed
+      ? { key: 'swing_repeatability_fallback', label: '挥拍复现回退', amount: 6, reason: '本次复现稳定性缺少 contactPreparation 主证据。' }
+      : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const rawConfidenceScore = roundDebugValue(contributions.reduce((sum, item) => sum + item.weightedScore, 0));
+  const totalPenalty = penalties.reduce((sum, item) => sum + item.amount, 0);
+  const finalConfidenceScore = clampScore(rawConfidenceScore - totalPenalty);
+
+  return {
+    observabilityScore,
+    rawConfidenceScore,
+    finalConfidenceScore,
+    contributions,
+    penalties,
+    confidencePenaltyNotes: disposition.confidencePenaltyNotes,
+  };
+}
+
+function buildEvidenceNotes(
+  scores: DimensionScores,
+  confidenceScore: number,
+  disposition: AnalysisDisposition,
+  computed: ReturnType<typeof buildDimensionScores>,
+) {
+  const notes = [...disposition.confidencePenaltyNotes];
+  if (scores.camera_suitability < 70 && !notes.some((note) => note.includes('机位'))) {
+    notes.push('当前机位降低了置信度，但不直接代表动作更差。');
+  }
+  if (scores.swing_repeatability < 65 && !notes.some((note) => note.includes('复现证据偏散'))) {
+    notes.push('当前样本复现证据偏散，建议同机位再录一条确认动作是否稳定。');
+  }
+  if (computed.bodyPreparationGroup.usedFallback || computed.racketArmPreparationGroup.usedFallback || computed.swingRepeatabilityFallbackUsed) {
+    notes.push('本次部分维度由兼容特征补足，解释性弱于完整专项证据。');
+  }
+  if (confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
+    notes.push('当前报告可分析，但建议把证据质量先稳住后再解读动作差异。');
+  }
+  return [...new Set(notes)];
+}
+
+function buildSummaryText(
+  publicScores: Record<PublicDimensionKey, number>,
+  confidenceScore: number,
+  summary: PoseAnalysisResult['summary'],
+  frameCount: number,
+) {
+  const weakestDimension = (Object.entries(publicScores) as Array<[PublicDimensionKey, number]>).sort((left, right) => left[1] - right[1])[0];
+  const evidenceLead = `本次基于 ${summary.usableFrameCount}/${frameCount} 帧稳定识别结果生成。`;
+  const recognitionLead = `当前识别为${getViewLabel(summary.viewProfile)}，${getRacketSideLabel(summary.dominantRacketSide)}。`;
+
+  if (confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
+    return `${evidenceLead} ${recognitionLead} 当前报告能看出动作大方向，但证据置信度偏低，建议先把机位和样本稳定性收住，再放大解读动作细节。`;
   }
 
-  return `${evidence} ${viewLead} 当前最值得先改的是${METRIC_LABELS[weakestMetric[0]]}，这也是这次报告里证据最明确的短板。`;
+  if (weakestDimension[1] >= 80) {
+    return `${evidenceLead} ${recognitionLead} 当前这条高远球的可观测动作框架比较完整，下一步更适合继续验证能否稳定复现。`;
+  }
+
+  return `${evidenceLead} ${recognitionLead} 当前最值得先改的是${DIMENSION_LABELS[weakestDimension[0]]}，这也是这次动作证据最明确的短板。`;
 }
 
-function buildRankedIssues(metricScores: MetricScores, poseSummary: PoseAnalysisResult['summary']): RankedIssue[] {
-  return ISSUE_DEFINITIONS
-    .map((definition) => {
-      const metricScore = metricScores[definition.metricKey];
-      const rawGap = definition.threshold - metricScore;
-      const gap = definition.metricKey === 'turn' && isWeakTurnView(poseSummary.viewProfile)
-        ? rawGap * 0.55
-        : rawGap;
-      if (gap <= 0) return null;
+function buildRankedIssues(
+  publicScores: Record<PublicDimensionKey, number>,
+  confidenceScore: number,
+  evidenceNotes: string[],
+): RankedIssue[] {
+  const issues: RankedIssue[] = [];
 
-      return {
-        title: definition.title,
-        description: `${definition.description}（${METRIC_LABELS[definition.metricKey]} ${metricScore} 分）${getMetricViewNote(definition.metricKey, poseSummary.viewProfile)}`,
-        impact: `${definition.impact}${definition.metricKey === 'turn' && isWeakTurnView(poseSummary.viewProfile) ? ' 当前视角下，这一项会建议你在下次尽量保持同机位复测确认。' : ''}`,
-        metricKey: definition.metricKey,
-        severity: gap,
-        suggestion: definition.suggestion,
-      } satisfies RankedIssue;
-    })
-    .filter((item): item is RankedIssue => Boolean(item))
-    .sort((a, b) => b.severity - a.severity);
+  if (publicScores.body_preparation < 72) {
+    const severity = 72 - publicScores.body_preparation;
+    issues.push({
+      key: 'body_preparation',
+      kind: 'action_gap',
+      severity,
+      title: '身体准备不足',
+      description: `当前身体准备分为 ${publicScores.body_preparation} 分，说明侧身进入和躯干蓄力还不够稳定。`,
+      impact: '这会压缩击球前的准备空间，让后续出手更依赖临时补动作。',
+      suggestion: {
+        title: '下次先盯身体准备能不能更早完成',
+        description: '保持同机位复测，优先确认准备到出手前，身体是否更早完成侧身和躯干打开。',
+      },
+    });
+  }
+
+  if (publicScores.racket_arm_preparation < 72) {
+    const severity = 72 - publicScores.racket_arm_preparation;
+    issues.push({
+      key: 'racket_arm_preparation',
+      kind: 'action_gap',
+      severity,
+      title: '挥拍臂准备不足',
+      description: `当前挥拍臂准备分为 ${publicScores.racket_arm_preparation} 分，说明抬肘、伸展和准备高度还不够完整。`,
+      impact: '这会让击球前的准备空间不足，动作容易只靠最后一下补手臂。',
+      suggestion: {
+        title: '下次先看挥拍臂是不是更早到位',
+        description: '优先确认挥拍肘和手腕是不是更早进入准备位置，而不是临近出手才临时抬起。',
+      },
+    });
+  }
+
+  if (publicScores.swing_repeatability < 74) {
+    const severity = 74 - publicScores.swing_repeatability;
+    issues.push({
+      key: 'swing_repeatability',
+      kind: 'action_gap',
+      severity,
+      title: '挥拍复现稳定性不足',
+      description: `当前挥拍复现稳定性为 ${publicScores.swing_repeatability} 分，说明动作质量在多帧之间还不够一致。`,
+      impact: '动作波动大时，单次看起来做到了的细节不一定能连续复现。',
+      suggestion: {
+        title: '下次先把同一套挥拍节奏连续做稳',
+        description: '优先保证准备、出手和收拍的节奏一致，再看单次最好效果。',
+      },
+    });
+  }
+
+  if (confidenceScore < LOW_CONFIDENCE_THRESHOLD || publicScores.evidence_quality < 70) {
+    const severity = Math.max(LOW_CONFIDENCE_THRESHOLD - confidenceScore, 70 - publicScores.evidence_quality);
+    issues.push({
+      key: 'confidence',
+      kind: 'evidence_gap',
+      severity,
+      title: '当前样本证据置信度偏低',
+      description: `当前证据质量为 ${publicScores.evidence_quality} 分，置信度为 ${confidenceScore} 分。${evidenceNotes[0] ?? '这不直接代表动作更差，而是说明当前视频对动作判断的支持力度有限。'}`,
+      impact: '这次更适合作为方向性参考，不建议把细小分差直接当成动作退步或进步。',
+      suggestion: {
+        title: '下次优先把拍摄证据先稳住',
+        description: '先保持同机位、减少抖动、让主体完整入镜，再看动作细节的分差会更可靠。',
+      },
+    });
+  }
+
+  return issues.sort((left, right) => right.severity - left.severity);
 }
 
-function buildStandardComparison(rankedIssues: RankedIssue[], poseSummary: PoseAnalysisResult['summary']): StandardComparison {
-  const viewLabel = getViewLabel(poseSummary.viewProfile);
-  const differences = rankedIssues.length > 0
-    ? rankedIssues.slice(0, 3).map((issue) => {
-      switch (issue.metricKey) {
-        case 'turn':
-          return WEAK_TURN_VIEW_PROFILES.has(poseSummary.viewProfile ?? 'unknown')
-            ? `基于当前${viewLabel}视角，系统看到转体展开还有提升空间，但这一项会保留为弱判断。`
-            : `基于当前${viewLabel}视角，系统看到身体更常停留在较正朝向，和参考动作相比，侧身展开还不够明确。`;
-        case 'lift':
-          return `基于当前${viewLabel}视角，挥拍臂准备空间还没完全撑开，和参考动作相比，上举幅度偏保守。`;
-        case 'repeatability':
-          return `基于当前${viewLabel}视角，当前样本不同帧之间波动偏大，动作复现稳定性还不够。`;
-        case 'stability':
-          return `当前样本虽然可分析，但在${viewLabel}视角下的主体稳定度仍偏边缘，画面条件还需要先稳住。`;
+function buildStandardComparison(rankedIssues: RankedIssue[], summary: PoseAnalysisResult['summary']): StandardComparison {
+  const viewLabel = getViewLabel(summary.viewProfile);
+  const topIssues = rankedIssues.slice(0, 3);
+  const differences = topIssues.length > 0
+    ? topIssues.map((issue) => {
+      switch (issue.key) {
+        case 'body_preparation':
+          return `基于当前${viewLabel}视角，系统看到身体准备还不够早，侧身进入和躯干打开空间仍偏小。`;
+        case 'racket_arm_preparation':
+          return `基于当前${viewLabel}视角，挥拍臂准备还没完全撑开，抬肘和准备高度偏保守。`;
+        case 'swing_repeatability':
+          return `基于当前${viewLabel}视角，当前样本在多帧里的挥拍节奏还不够一致，复现稳定性不足。`;
+        case 'confidence':
+          return `这次更明显的问题在证据质量而不是动作结论本身，当前${viewLabel}视角下的机位或样本稳定性降低了判断置信度。`;
       }
-    })
-    : [`基于当前${viewLabel}视角，当前样本和参考动作之间的可观测差异已经不大，下一步更适合继续验证稳定复现。`];
+    }).filter((item): item is string => Boolean(item))
+    : [`基于当前${viewLabel}视角，当前样本和参考动作之间的关键准备维度已经比较接近。`];
 
   return {
     sectionTitle: '当前视角动作参考对照',
-    summaryText: rankedIssues.length > 0
-      ? `当前识别为${viewLabel}视角，和参考动作相比，最明确的差异集中在${rankedIssues.slice(0, 3).map((item) => METRIC_LABELS[item.metricKey]).join('、')}。`
-      : `当前识别为${viewLabel}视角，和参考动作相比，可稳定观测的关键维度已经比较接近。`,
+    summaryText: topIssues.length > 0
+      ? `当前识别为${viewLabel}视角，这次最明确的差异集中在${topIssues.map((item) => item.kind === 'evidence_gap' ? '证据质量' : DIMENSION_LABELS[item.key as PublicDimensionKey]).join('、')}。`
+      : `当前识别为${viewLabel}视角，这次可稳定观测的动作准备维度已经比较接近参考动作。`,
     currentFrameLabel: '当前样本最佳稳定帧',
-    standardFrameLabel: STANDARD_REFERENCE.imageLabel,
-    viewProfile: poseSummary.viewProfile,
+    standardFrameLabel: '标准高远球真人参考帧',
+    viewProfile: summary.viewProfile,
     standardReference: {
-      ...STANDARD_REFERENCE,
-      cue: getViewReferenceCue(poseSummary.viewProfile),
+      title: '正手高远球标准参考帧',
+      cue: getViewReferenceCue(summary.viewProfile),
+      imageLabel: '标准高远球真人参考帧',
+      imagePath: '/standard-references/clear-reference-real.jpg',
+      sourceType: 'real-sample',
     },
     phaseFrames: [
       {
         phase: '准备',
         title: '高远球准备阶段',
         imagePath: '/standard-references/clear-phase-prep.jpg',
-        cue: '先保证站位和身体朝向给侧身展开留出空间。',
+        cue: '优先观察身体准备是否更早完成，而不是只看击球瞬间。',
       },
       {
-        phase: '上举',
-        title: '高远球上举阶段',
+        phase: '挥拍臂',
+        title: '高远球挥拍臂准备',
         imagePath: '/standard-references/clear-phase-contact.jpg',
-        cue: '当前 MVP 重点看挥拍臂是否抬高，以及身体有没有继续打开。',
+        cue: '看挥拍肘、手腕高度和伸展是否一起撑开。',
       },
       {
         phase: '复现',
         title: '高远球动作复现',
         imagePath: '/standard-references/clear-phase-follow.jpg',
-        cue: '关注这套动作能否在多帧里保持相近质量，而不只是偶尔做对。',
+        cue: '确认这套动作能否在多帧里稳定出现，而不是只偶尔做对。',
       },
     ],
     differences,
   };
 }
 
+function buildCompareSummary(recognitionContext: RecognitionContext, confidenceScore: number) {
+  const confidenceClause = confidenceScore < LOW_CONFIDENCE_THRESHOLD
+    ? '这次报告会把机位和样本稳定性作为低置信提示单独输出。'
+    : '这次报告里的动作分数和证据分数已经分开处理。';
+  return `当前报告围绕${recognitionContext.viewLabel}视角下的身体准备、挥拍臂准备、挥拍复现稳定性和证据质量生成。${confidenceClause}`;
+}
+
+function buildRetestAdvice(recognitionContext: RecognitionContext, confidenceScore: number, rankedIssues: RankedIssue[]) {
+  if (confidenceScore < LOW_CONFIDENCE_THRESHOLD) {
+    return `建议 3~7 天后保持同一机位复测，下次先把${recognitionContext.viewLabel}视角下的机位稳定性和主体完整度收住，再看动作分差。`;
+  }
+
+  const topActionIssue = rankedIssues.find((issue) => issue.kind === 'action_gap');
+  if (!topActionIssue) {
+    return `建议 3~7 天后保持同一机位复测，继续确认${recognitionContext.viewLabel}视角下这套动作能否稳定复现。`;
+  }
+
+  return `建议 3~7 天后保持同一机位复测，下次优先看${recognitionContext.viewLabel}视角下的${DIMENSION_LABELS[topActionIssue.key as PublicDimensionKey]}是否继续变稳。`;
+}
+
 export function getPoseQualityFailure(poseResult: PoseAnalysisResult): PoseQualityFailure | null {
-  const primaryReason = poseResult.summary.rejectionReasons[0];
+  const disposition = getAnalysisDisposition(poseResult);
+  const primaryReason = disposition.hardRejectReasons[0];
   if (!primaryReason) return null;
 
   return {
@@ -489,61 +820,86 @@ export function getPoseQualityFailure(poseResult: PoseAnalysisResult): PoseQuali
 }
 
 export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseAnalysisResult): ReportResult {
-  const metricScores = buildMetricScores(poseResult.summary, poseResult.frameCount);
-  const dimensionScores = (Object.keys(METRIC_LABELS) as MetricKey[]).map((key) => ({
-    name: METRIC_LABELS[key],
-    score: metricScores[key],
-    available: true,
-    confidence: getMetricConfidence(key, poseResult.summary.viewProfile),
-    note: getMetricViewNote(key, poseResult.summary.viewProfile),
-  }));
-  const totalScoreBreakdown = buildTotalScoreBreakdown(metricScores);
-  const totalScore = totalScoreBreakdown.finalTotalScore;
-  const rankedIssues = buildRankedIssues(metricScores, poseResult.summary);
+  const disposition = getAnalysisDisposition(poseResult);
+  const computed = buildDimensionScores(poseResult.summary, poseResult.frameCount);
+  const scores = computed.dimensionScores;
+  const publicScores: Record<PublicDimensionKey, number> = {
+    evidence_quality: scores.evidence_quality,
+    body_preparation: scores.body_preparation,
+    racket_arm_preparation: scores.racket_arm_preparation,
+    swing_repeatability: scores.swing_repeatability,
+  };
+  const totalScoreBreakdown = buildTotalScoreBreakdown(scores);
+  const confidenceBreakdown = buildConfidenceBreakdown(scores, computed, disposition);
+  const confidenceScore = confidenceBreakdown.finalConfidenceScore;
+  const analysisDisposition = disposition.hardRejectReasons.length > 0
+    ? 'rejected'
+    : confidenceScore < LOW_CONFIDENCE_THRESHOLD
+      ? 'low_confidence'
+      : 'analyzable';
+  const evidenceNotes = buildEvidenceNotes(scores, confidenceScore, disposition, computed);
+  const rankedIssues = buildRankedIssues(publicScores, confidenceScore, evidenceNotes);
   const recognitionContext = buildRecognitionContext(poseResult.summary, poseResult.engine);
   const visualEvidence = buildVisualEvidence(task, poseResult);
-  const dimensionEvidence = (Object.keys(METRIC_LABELS) as MetricKey[]).map((key) => (
-    buildDimensionEvidence(key, metricScores, poseResult.summary, poseResult.frameCount)
+  const dimensionEvidence = (Object.keys(DIMENSION_LABELS) as DimensionKey[]).map((key) => (
+    buildDimensionEvidence(key, scores, poseResult.summary, poseResult.frameCount, computed)
   ));
+  const dimensionScores = (Object.keys(publicScores) as PublicDimensionKey[]).map((key) => ({
+    name: DIMENSION_LABELS[key],
+    score: publicScores[key],
+    available: true,
+    confidence: buildDimensionEvidence(key, scores, poseResult.summary, poseResult.frameCount, computed).confidence,
+    note: key === 'evidence_quality'
+      ? '这项只表达证据是否足够稳定可读，不直接代表动作好坏。'
+      : confidenceScore < LOW_CONFIDENCE_THRESHOLD
+        ? '这项动作分可作为方向参考，但请结合当前证据置信度一起解读。'
+        : '这项分数更偏向动作质量判断，不会因为机位问题被直接写差。',
+  }));
 
   const issues = rankedIssues.length > 0
-    ? rankedIssues.slice(0, 3).map(({ title, description, impact }) => ({
-      title,
-      description,
-      impact,
-    }))
+    ? rankedIssues.slice(0, 3).map(({ title, description, impact }) => ({ title, description, impact }))
     : [{
-      title: '当前高远球可观测框架较稳定',
-      description: `当前识别为${recognitionContext.viewLabel}视角，系统能稳定看到主体稳定度、侧身展开、挥拍臂准备和动作复现都没有明显拖后腿的短板。`,
+      title: '当前动作框架和证据质量都比较稳定',
+      description: `当前识别为${recognitionContext.viewLabel}视角，系统能稳定看到身体准备、挥拍臂准备和挥拍复现都没有明显短板。`,
       impact: '接下来更值得继续验证的是，能不能在同机位下把这套动作持续复现出来。',
     }];
 
   const suggestions = rankedIssues.length > 0
-    ? rankedIssues.map((item) => ({
+    ? rankedIssues.slice(0, 3).map((item) => ({
       ...item.suggestion,
       description: `${item.suggestion.description} 当前识别为${recognitionContext.viewLabel}视角。`,
-    })).slice(0, 3)
+    }))
     : [{
       title: '下次继续验证动作能否稳定复现',
       description: `保持同一机位再录一条高远球视频，优先确认这次在${recognitionContext.viewLabel}视角下看到的较稳动作不是偶尔出现。`,
     }];
 
+  const fallbacksUsed = [
+    ...computed.bodyPreparationGroup.fallbacks,
+    ...computed.racketArmPreparationGroup.fallbacks,
+    ...(computed.swingRepeatabilityFallbackUsed ? ['contactPreparationScore_fallback'] : []),
+  ].filter((item): item is string => Boolean(item));
+
   return {
     taskId: task.taskId,
     actionType: task.actionType,
-    totalScore,
-    summaryText: buildSummaryText(metricScores, poseResult.summary, poseResult.frameCount),
+    totalScore: totalScoreBreakdown.finalTotalScore,
+    confidenceScore,
+    summaryText: buildSummaryText(publicScores, confidenceScore, poseResult.summary, poseResult.frameCount),
     dimensionScores,
     issues,
     suggestions,
-    compareSummary: `当前报告只围绕${recognitionContext.viewLabel}视角下可稳定观测的侧身展开、挥拍臂上举、主体稳定度和动作复现稳定性生成。`,
-    retestAdvice: `建议 3~7 天后保持同一机位复测，下次优先看${recognitionContext.viewLabel}视角下的侧身展开、挥拍臂上举和动作复现稳定性是否一起变稳。`,
+    compareSummary: buildCompareSummary(recognitionContext, confidenceScore),
+    retestAdvice: buildRetestAdvice(recognitionContext, confidenceScore, rankedIssues),
+    evidenceNotes,
     createdAt: now(),
     poseBased: true,
     recognitionContext,
     visualEvidence,
     standardComparison: buildStandardComparison(rankedIssues, poseResult.summary),
     scoringEvidence: {
+      scoringModelVersion: SCORING_MODEL_VERSION,
+      analysisDisposition,
       frameCount: poseResult.frameCount,
       detectedFrameCount: poseResult.detectedFrameCount,
       usableFrameCount: poseResult.summary.usableFrameCount,
@@ -554,7 +910,27 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
       scoreVariance: poseResult.summary.scoreVariance,
       bestFrameIndex: poseResult.summary.bestFrameIndex,
       rejectionReasons: poseResult.summary.rejectionReasons,
-      metricScores,
+      dimensionScoresByKey: publicScores,
+      cameraSuitability: scores.camera_suitability,
+      fallbacksUsed,
+      confidenceBreakdown: {
+        rawConfidenceScore: confidenceBreakdown.rawConfidenceScore,
+        finalConfidenceScore: confidenceBreakdown.finalConfidenceScore,
+        evidenceQuality: scores.evidence_quality,
+        cameraSuitability: scores.camera_suitability,
+        observabilityScore: confidenceBreakdown.observabilityScore,
+        contributions: confidenceBreakdown.contributions,
+        penalties: confidenceBreakdown.penalties,
+      },
+      rejectionDecision: {
+        hardRejectReasons: disposition.hardRejectReasons,
+        lowConfidenceReasons: disposition.lowConfidenceReasons,
+        confidencePenaltyNotes: evidenceNotes,
+      },
+      metricScores: {
+        ...publicScores,
+        camera_suitability: scores.camera_suitability,
+      },
       totalScoreBreakdown,
       dimensionEvidence,
       humanSummary: poseResult.summary.humanSummary,

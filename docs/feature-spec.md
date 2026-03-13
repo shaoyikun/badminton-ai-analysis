@@ -74,14 +74,30 @@
 
 ## 与当前 report 的关系
 
-本阶段新特征只进入：
+当前 backend report 已开始消费这些专项特征，并把旧特征降级为 fallback：
 
-- per-frame `rawMetrics / smoothedMetrics / finalMetrics`
-- `summary.specializedFeatureSummary`
-- debug markdown / pose result
+- `body_preparation`
+  - 主输入：`sideOnReadinessScore + shoulderHipRotationScore + trunkCoilScore`
+  - fallback：`medianBodyTurnScore`
+- `racket_arm_preparation`
+  - 主输入：`hittingArmPreparationScore + wristAboveShoulderConfidence + racketSideElbowHeightScore + elbowExtensionScore`
+  - fallback：`medianRacketArmLiftScore`
+- `swing_repeatability`
+  - 主输入：`contactPreparationScore.median + contactPreparationScore.observableCoverage`
+  - 辅助输入：`usableRatio + scoreVariance`
 
-本阶段不替换当前 report 主评分输入。后续评分层建议：
+当前 report 还会额外输出：
 
-- 用 `sideOnReadinessScore + shoulderHipRotationScore + trunkCoilScore` 逐步替代 `bodyTurnScore`
-- 用 `wristAboveShoulderConfidence + racketSideElbowHeightScore + elbowExtensionScore + hittingArmPreparationScore` 逐步替代 `racketArmLiftScore`
-- 在完成阶段切分后，让 `repeatability` 从全局 `scoreVariance` 升级为“分阶段稳定性”
+- `confidenceScore`
+  - 表达当前报告的证据可信度，而不是动作质量
+- `evidenceNotes`
+  - 用于解释“当前问题更像动作问题还是证据质量问题”
+- `scoringEvidence.fallbacksUsed`
+  - 用于标明哪些维度仍由旧特征补足
+
+当前仍保留的阶段性限制：
+
+- `bodyTurnScore` 与 `racketArmLiftScore` 还没有完全删除
+  - 目前只作为兼容 fallback 和 debug 诊断输入
+- `repeatability` 还没有完成真正的动作阶段切分
+  - `scoreVariance` 现在只被当作“阶段稳定性粗代理”，已明显降权

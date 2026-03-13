@@ -432,18 +432,22 @@ export interface ReportResult {
   taskId: string;
   actionType: ActionType;
   totalScore: number;
+  confidenceScore?: number;
   summaryText?: string;
   dimensionScores: DimensionScore[];
   issues: IssueItem[];
   suggestions: SuggestionItem[];
   compareSummary?: string;
   retestAdvice: string;
+  evidenceNotes?: string[];
   createdAt?: string;
   poseBased?: boolean;
   recognitionContext?: RecognitionContext;
   visualEvidence?: VisualEvidence;
   standardComparison?: StandardComparison;
   scoringEvidence?: {
+    scoringModelVersion?: string;
+    analysisDisposition?: 'rejected' | 'low_confidence' | 'analyzable';
     frameCount?: number;
     detectedFrameCount?: number;
     usableFrameCount?: number;
@@ -454,6 +458,34 @@ export interface ReportResult {
     scoreVariance?: number;
     bestFrameIndex?: number | null;
     rejectionReasons?: FlowErrorCode[];
+    dimensionScoresByKey?: Record<string, number>;
+    cameraSuitability?: number;
+    fallbacksUsed?: string[];
+    confidenceBreakdown?: {
+      rawConfidenceScore?: number;
+      finalConfidenceScore?: number;
+      evidenceQuality?: number;
+      cameraSuitability?: number;
+      observabilityScore?: number;
+      contributions?: Array<{
+        key: string;
+        label: string;
+        score: number;
+        weight: number;
+        weightedScore: number;
+      }>;
+      penalties?: Array<{
+        key: string;
+        label: string;
+        amount: number;
+        reason: string;
+      }>;
+    };
+    rejectionDecision?: {
+      hardRejectReasons?: FlowErrorCode[];
+      lowConfidenceReasons?: FlowErrorCode[];
+      confidencePenaltyNotes?: string[];
+    };
     metricScores?: Record<string, number>;
     totalScoreBreakdown?: {
       rawWeightedTotal?: number;
@@ -476,6 +508,7 @@ export interface ReportResult {
       inputs?: Record<string, number | string | boolean | null>;
       formula?: string;
       adjustments?: Record<string, number | string | boolean | null>;
+      fallbacks?: string[];
     }>;
     humanSummary?: string;
   };

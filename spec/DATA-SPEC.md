@@ -5,12 +5,14 @@
 - taskId
 - actionType
 - totalScore
+- confidenceScore（可选）
 - summaryText（可选）
 - dimensionScores
 - issues
 - suggestions（短期语义收口为复测关注点 / 后续观察建议）
 - compareSummary（可选）
 - retestAdvice
+- evidenceNotes（可选）
 - createdAt（可选）
 - poseBased（可选）
 - recognitionContext（可选，识别出的拍摄视角 / 挥拍侧等上下文）
@@ -26,6 +28,8 @@
 - `issues` 已替代旧文档中的 `top_issues`
 - `history`、`comparison` 会在结果读取和复测对比场景中按需补充，不保证每次都有
 - `totalScore` 只作为辅助摘要信息，不作为产品主叙事
+- `confidenceScore` 用于表达“当前报告有多可信”，不直接代表动作质量
+- `dimensionScores` 当前展示的是 `证据质量 / 身体准备 / 挥拍臂准备 / 挥拍复现稳定性`
 
 ## 2. 任务状态与错误信息
 ### task summary
@@ -95,6 +99,10 @@
 - currentScore
 - delta
 
+说明：
+- 只有双方使用同一 `scoringModelVersion` 时，`improvedDimensions / declinedDimensions / unchangedDimensions` 才保证可比
+- 跨模型时服务端只保留 `totalScoreDelta`，维度 delta 数组允许为空
+
 ## 5. 标准动作对比结构
 ### standardComparison
 - sectionTitle
@@ -143,6 +151,8 @@
 
 ## 6. 评分与预处理补充结构
 ### scoringEvidence
+- scoringModelVersion（可选）
+- analysisDisposition（可选：`rejected` / `low_confidence` / `analyzable`）
 - detectedFrameCount（可选）
 - frameCount（可选）
 - coverageRatio（可选）
@@ -152,6 +162,21 @@
 - scoreVariance（可选）
 - bestFrameIndex（可选）
 - rejectionReasons（可选）
+- dimensionScoresByKey（可选）
+- cameraSuitability（可选）
+- fallbacksUsed（可选）
+- confidenceBreakdown（可选）
+  - rawConfidenceScore
+  - finalConfidenceScore
+  - evidenceQuality
+  - cameraSuitability
+  - observabilityScore
+  - contributions
+  - penalties
+- rejectionDecision（可选）
+  - hardRejectReasons
+  - lowConfidenceReasons
+  - confidencePenaltyNotes
 - dimensionEvidence（可选）
   - key
   - label
@@ -159,7 +184,16 @@
   - available（可选）
   - confidence（可选）
   - source
+  - inputs（可选）
+  - formula（可选）
+  - adjustments（可选）
+  - fallbacks（可选）
 - humanSummary（可选）
+
+说明：
+- `analysisDisposition` 用于区分“硬拒绝”“低置信完成”“正常可分析”
+- `cameraSuitability` 只参与置信度，不直接进入 `totalScore`
+- `fallbacksUsed` 用于标记哪些维度仍由旧 turn/lift 或全局稳定性代理补足
 
 ### preprocess
 - metadata（可选）

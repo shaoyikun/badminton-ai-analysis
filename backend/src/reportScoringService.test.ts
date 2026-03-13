@@ -48,7 +48,78 @@ function buildTask(): AnalysisTaskRecord {
   };
 }
 
+function buildSpecializedSummary(
+  overrides?: Partial<NonNullable<PoseAnalysisResult['summary']['specializedFeatureSummary']>>,
+): NonNullable<PoseAnalysisResult['summary']['specializedFeatureSummary']> {
+  return {
+    sideOnReadinessScore: {
+      median: 0.64,
+      peak: 0.82,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    shoulderHipRotationScore: {
+      median: 0.6,
+      peak: 0.78,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    trunkCoilScore: {
+      median: 0.65,
+      peak: 0.8,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    hittingArmPreparationScore: {
+      median: 0.66,
+      peak: 0.83,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    wristAboveShoulderConfidence: {
+      median: 0.62,
+      peak: 0.78,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    racketSideElbowHeightScore: {
+      median: 0.61,
+      peak: 0.76,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    elbowExtensionScore: {
+      median: 0.59,
+      peak: 0.74,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    contactPreparationScore: {
+      median: 0.63,
+      peak: 0.81,
+      observableFrameCount: 8,
+      observableCoverage: 1,
+      peakFrameIndex: 6,
+    },
+    ...overrides,
+  };
+}
+
 function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary']>): PoseAnalysisResult {
+  const specializedFeatureSummary = summaryOverrides?.specializedFeatureSummary === undefined
+    ? buildSpecializedSummary()
+    : {
+      ...buildSpecializedSummary(),
+      ...summaryOverrides.specializedFeatureSummary,
+    };
+
   return {
     engine: 'mediapipe-pose',
     frameCount: 12,
@@ -70,15 +141,7 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       dominantRacketSide: 'right',
       racketSideConfidence: 0.71,
       bestPreparationFrameIndex: 6,
-      specializedFeatureSummary: {
-        contactPreparationScore: {
-          median: 0.63,
-          peak: 0.81,
-          observableFrameCount: 8,
-          observableCoverage: 1,
-          peakFrameIndex: 6,
-        },
-      },
+      specializedFeatureSummary,
       bestFrameOverlayRelativePath: 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg',
       overlayFrameCount: 1,
       debugCounts: {
@@ -114,9 +177,9 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
   };
 }
 
-test('getPoseQualityFailure returns the first rejection reason', () => {
+test('getPoseQualityFailure returns the first hard rejection reason only', () => {
   const result = buildPoseResult({
-    rejectionReasons: ['insufficient_pose_coverage', 'invalid_camera_angle'],
+    rejectionReasons: ['invalid_camera_angle', 'insufficient_pose_coverage'],
     usableFrameCount: 4,
     coverageRatio: 0.3333,
   });
@@ -142,62 +205,160 @@ test('buildPoseSummary keeps specialized summary fields for downstream consumers
   });
 });
 
-test('buildRuleBasedResult maps report fields from pose evidence only', () => {
+test('buildRuleBasedResult produces high-confidence report for a high-quality sample', () => {
   const report = buildRuleBasedResult(buildTask(), buildPoseResult());
 
-  assert.equal(report.poseBased, true);
-  assert.equal(report.actionType, 'clear');
-  assert.match(report.summaryText ?? '', /本次基于 8\/12 帧稳定识别结果生成/);
-  assert.equal(report.dimensionScores.length, 4);
-  assert.equal(report.scoringEvidence?.dimensionEvidence?.length, 4);
-  assert.equal(report.scoringEvidence?.usableFrameCount, 8);
-  assert.equal(report.scoringEvidence?.rejectionReasons?.length, 0);
-  assert.deepEqual(report.scoringEvidence?.metricScores, {
-    stability: 73,
-    turn: 62,
-    lift: 58,
-    repeatability: 70,
+  assert.equal(report.totalScore, 73);
+  assert.equal(report.confidenceScore, 85);
+  assert.equal(report.scoringEvidence?.analysisDisposition, 'analyzable');
+  assert.deepEqual(report.dimensionScores.map((item) => item.name), [
+    '证据质量',
+    '身体准备',
+    '挥拍臂准备',
+    '挥拍复现稳定性',
+  ]);
+  assert.deepEqual(report.scoringEvidence?.dimensionScoresByKey, {
+    evidence_quality: 79,
+    body_preparation: 72,
+    racket_arm_preparation: 72,
+    swing_repeatability: 76,
   });
-  assert.equal(report.scoringEvidence?.totalScoreBreakdown?.finalTotalScore, 66);
-  assert.equal(report.scoringEvidence?.totalScoreBreakdown?.contributions?.length, 4);
-  assert.equal(report.scoringEvidence?.dimensionEvidence?.[0]?.formula, 'clamp(round(coverageRatio * 40 + medianStabilityScore * 60))');
-  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[0]?.inputs, {
-    coverageRatio: 0.6667,
-    medianStabilityScore: 0.78,
-  });
-  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[1]?.adjustments, {
-    weakViewAdjustmentApplied: false,
-    issueSeverityMultiplier: 1,
-  });
-  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[3]?.inputs, {
-    usableFrameCount: 8,
-    frameCount: 12,
-    usableRatio: 0.6667,
-    scoreVariance: 0.011,
-  });
-  assert.equal(report.recognitionContext?.viewLabel, '左后斜');
-  assert.equal(report.recognitionContext?.dominantRacketSideLabel, '右手挥拍侧');
+  assert.equal(report.scoringEvidence?.cameraSuitability, 89);
+  assert.equal(report.scoringEvidence?.confidenceBreakdown?.finalConfidenceScore, 85);
+  assert.deepEqual(report.evidenceNotes, []);
+  assert.equal(report.scoringEvidence?.fallbacksUsed?.length, 0);
   assert.equal(report.visualEvidence?.bestFrameImagePath, 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg');
   assert.equal(report.visualEvidence?.bestFrameOverlayPath, 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg');
-  assert.equal(report.visualEvidence?.overlayFrames.length, 2);
 });
 
-test('buildRuleBasedResult exposes weak turn view adjustments inside scoring evidence', () => {
-  const report = buildRuleBasedResult(buildTask(), buildPoseResult({
+test('buildRuleBasedResult treats poor camera angle as low confidence instead of hard rejection when still analyzable', () => {
+  const poseResult = buildPoseResult({
     viewProfile: 'front',
-  }));
-
-  assert.deepEqual(report.scoringEvidence?.dimensionEvidence?.[1]?.adjustments, {
-    weakViewAdjustmentApplied: true,
-    issueSeverityMultiplier: 0.55,
+    viewConfidence: 0.6,
+    viewStability: 0.58,
+    rejectionReasons: ['invalid_camera_angle'],
+    debugCounts: {
+      tooSmallCount: 0,
+      lowStabilityCount: 0,
+      unknownViewCount: 4,
+      usableFrameCount: 8,
+      detectedFrameCount: 10,
+    },
   });
+
+  const report = buildRuleBasedResult(buildTask(), poseResult);
+
+  assert.equal(getPoseQualityFailure(poseResult), null);
+  assert.equal(report.totalScore, 73);
+  assert.equal(report.confidenceScore, 76);
+  assert.equal(report.scoringEvidence?.analysisDisposition, 'analyzable');
+  assert.equal(report.scoringEvidence?.cameraSuitability, 58);
+  assert.match(report.evidenceNotes?.[0] ?? '', /机位降低了置信度/);
 });
 
-test('buildRuleBasedResult keeps visual evidence usable when overlay is missing', () => {
+test('buildRuleBasedResult keeps jitter-heavy sample analyzable but lowers repeatability confidence', () => {
+  const poseResult = buildPoseResult({
+    scoreVariance: 0.031,
+    coverageRatio: 0.75,
+    specializedFeatureSummary: buildSpecializedSummary({
+      contactPreparationScore: {
+        median: 0.56,
+        peak: 0.74,
+        observableFrameCount: 7,
+        observableCoverage: 0.875,
+        peakFrameIndex: 6,
+      },
+    }),
+  });
+
+  const report = buildRuleBasedResult(buildTask(), poseResult);
+
+  assert.equal(getPoseQualityFailure(poseResult), null);
+  assert.ok((report.scoringEvidence?.dimensionScoresByKey?.swing_repeatability ?? 0) < 70);
+  assert.ok((report.confidenceScore ?? 0) >= 70);
+  assert.ok(report.evidenceNotes?.some((note) => note.includes('复现证据偏散')));
+});
+
+test('buildRuleBasedResult records fallback usage when new specialized features are unavailable', () => {
   const report = buildRuleBasedResult(buildTask(), buildPoseResult({
-    bestFrameOverlayRelativePath: undefined,
+    specializedFeatureSummary: {
+      sideOnReadinessScore: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+      shoulderHipRotationScore: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+      trunkCoilScore: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+      hittingArmPreparationScore: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+      wristAboveShoulderConfidence: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+      racketSideElbowHeightScore: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+      elbowExtensionScore: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+      contactPreparationScore: {
+        median: null,
+        peak: null,
+        observableFrameCount: 0,
+        observableCoverage: 0,
+        peakFrameIndex: null,
+      },
+    },
   }));
 
-  assert.equal(report.visualEvidence?.bestFrameImagePath, 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg');
-  assert.equal(report.visualEvidence?.bestFrameOverlayPath, 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg');
+  assert.deepEqual(report.scoringEvidence?.fallbacksUsed, [
+    'medianBodyTurnScore_fallback',
+    'medianRacketArmLiftScore_fallback',
+    'contactPreparationScore_fallback',
+  ]);
+  assert.ok((report.confidenceScore ?? 0) < 70);
+  assert.equal(report.scoringEvidence?.analysisDisposition, 'low_confidence');
+});
+
+test('hard rejection sample remains not analyzable', () => {
+  const poseResult = buildPoseResult({
+    rejectionReasons: ['body_not_detected'],
+  });
+
+  const failure = getPoseQualityFailure(poseResult);
+
+  assert.deepEqual(failure, {
+    code: 'body_not_detected',
+    message: 'body was not detected reliably enough to generate a report',
+  });
 });
