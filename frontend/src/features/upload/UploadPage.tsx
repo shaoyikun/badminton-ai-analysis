@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { SwingSegmentCandidate } from '../../../../shared/contracts'
 import { formatFileSize } from '../../components/result-views/utils'
 import { ActionTypeSelector } from '../../components/ui/ActionTypeSelector'
 import { BottomCTA } from '../../components/ui/BottomCTA'
@@ -18,6 +19,128 @@ function formatDuration(seconds?: number) {
   return `${Math.round(seconds)} 秒`
 }
 
+function formatSegmentTimestamp(timeMs: number) {
+  return `${(timeMs / 1000).toFixed(2)}s`
+}
+
+function formatSegmentDuration(durationMs: number) {
+  return `${(durationMs / 1000).toFixed(2)}s`
+}
+
+function formatQualityFlag(flag: string) {
+  switch (flag) {
+    case 'motion_too_weak':
+      return '运动偏弱'
+    case 'too_short':
+      return '时长偏短'
+    case 'too_long':
+      return '时长偏长'
+    case 'edge_clipped_start':
+      return '起始可能截断'
+    case 'edge_clipped_end':
+      return '结尾可能截断'
+    case 'subject_maybe_small':
+      return '主体可能偏小'
+    case 'motion_maybe_occluded':
+      return '疑似遮挡'
+    default:
+      return flag
+  }
+}
+
+function SegmentSelectionCard({
+  segments,
+  recommendedSegmentId,
+  selectedSegmentId,
+  onSelect,
+}: {
+  segments: SwingSegmentCandidate[]
+  recommendedSegmentId?: string
+  selectedSegmentId: string
+  onSelect: (segmentId: string) => void
+}) {
+  const activeSegment =
+    segments.find((segment) => segment.segmentId === selectedSegmentId) ??
+    segments.find((segment) => segment.segmentId === recommendedSegmentId) ??
+    segments[0]
+
+  return (
+    <section className="surface-card swing-segments-card">
+      <div className="section-head">
+        <div>
+          <h2>选择要分析的挥拍片段</h2>
+          <p className="muted-copy">系统已经先对整段视频做了粗扫。现在请从候选片段里选出这次真正要进入精分析的一段。</p>
+        </div>
+      </div>
+
+      <div className="segment-summary-strip">
+        <div className="segment-summary-item">
+          <span>候选片段</span>
+          <strong>{segments.length}</strong>
+        </div>
+        <div className="segment-summary-item">
+          <span>推荐片段</span>
+          <strong>{recommendedSegmentId ?? '—'}</strong>
+        </div>
+        <div className="segment-summary-item">
+          <span>当前选择</span>
+          <strong>{activeSegment?.segmentId ?? '—'}</strong>
+        </div>
+      </div>
+
+      <div className="segment-chip-row">
+        {segments.map((segment) => {
+          const isActive = segment.segmentId === activeSegment?.segmentId
+          return (
+            <button
+              key={segment.segmentId}
+              className={`segment-chip ${isActive ? 'active' : ''}`}
+              onClick={() => onSelect(segment.segmentId)}
+              type="button"
+            >
+              <strong>{segment.segmentId}</strong>
+              <span>{formatSegmentTimestamp(segment.startTimeMs)} - {formatSegmentTimestamp(segment.endTimeMs)}</span>
+              {segment.segmentId === recommendedSegmentId ? <em>推荐</em> : null}
+              {segment.segmentId === selectedSegmentId ? <em>已选中</em> : null}
+            </button>
+          )
+        })}
+      </div>
+
+      {activeSegment ? (
+        <div className="segment-detail-card">
+          <div className="segment-detail-head">
+            <div>
+              <strong>{activeSegment.segmentId}</strong>
+              <p>{formatSegmentTimestamp(activeSegment.startTimeMs)} - {formatSegmentTimestamp(activeSegment.endTimeMs)}，时长 {formatSegmentDuration(activeSegment.durationMs)}</p>
+            </div>
+            <div className="segment-badge-row">
+              {activeSegment.segmentId === recommendedSegmentId ? <span className="status-pill brand">系统推荐</span> : null}
+              {activeSegment.segmentId === selectedSegmentId ? <span className="status-pill success">待进入精分析</span> : null}
+            </div>
+          </div>
+
+          <div className="score-grid three-up">
+            <div className="score-tile"><span>运动强度</span><strong>{activeSegment.motionScore.toFixed(2)}</strong></div>
+            <div className="score-tile"><span>推荐置信度</span><strong>{Math.round(activeSegment.confidence * 100)}%</strong></div>
+            <div className="score-tile"><span>排序分</span><strong>{activeSegment.rankingScore.toFixed(2)}</strong></div>
+          </div>
+
+          <div className="segment-quality-flags">
+            {activeSegment.coarseQualityFlags.length > 0 ? (
+              activeSegment.coarseQualityFlags.map((flag) => (
+                <span key={flag} className="segment-flag">{formatQualityFlag(flag)}</span>
+              ))
+            ) : (
+              <span className="segment-flag positive">当前没有明显粗粒度风险标记</span>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 export function UploadPage() {
   const navigate = useNavigate()
   const {
@@ -28,6 +151,9 @@ export function UploadPage() {
     setFile,
     selectedVideoSummary,
     setSelectedVideoSummary,
+    segmentScan,
+    selectedSegmentId,
+    setSelectedSegmentId,
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
     isBusy,
@@ -37,9 +163,11 @@ export function UploadPage() {
     clearErrorState,
     prepareFreshUpload,
     selectedActionLabel,
-    startAnalysisFlow,
+    scanVideoFlow,
+    startSelectedSegmentFlow,
   } = useAnalysisTask()
   const [submissionError, setSubmissionError] = useState('')
+  const segmentSelectionRef = useRef<HTMLElement | null>(null)
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file])
 
   const currentVideoSummary = file ? selectedVideoSummary : null
@@ -51,7 +179,9 @@ export function UploadPage() {
     () => getUploadBlockingReasons(readinessItems, uploadChecklistConfirmed),
     [readinessItems, uploadChecklistConfirmed],
   )
-  const submissionDisabled = isBusy || blockingReasons.length > 0
+  const scanDisabled = isBusy || blockingReasons.length > 0
+  const hasSegmentChoices = Boolean(segmentScan?.swingSegments?.length)
+  const startAnalysisDisabled = isBusy || !hasSegmentChoices || !selectedSegmentId
 
   useEffect(() => {
     const isCompletedCarryover = Boolean(taskId) && taskId === latestCompletedTaskId
@@ -78,15 +208,41 @@ export function UploadPage() {
     }
   }, [file, previewUrl, setSelectedVideoSummary])
 
-  async function handleStartAnalysis() {
+  useEffect(() => {
+    if (!hasSegmentChoices || !segmentSelectionRef.current) return
+    segmentSelectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [hasSegmentChoices])
+
+  async function handleScanVideo() {
     setSubmissionError('')
 
-    if (submissionDisabled) {
-      setSubmissionError('请先完成当前页面的检查项，再开始分析。')
+    if (scanDisabled) {
+      setSubmissionError('请先完成当前页面的检查项，再上传并粗扫片段。')
       return
     }
 
-    const result = await startAnalysisFlow()
+    const result = await scanVideoFlow()
+    if (result.ok) {
+      return
+    }
+
+    if (result.reason === 'server') {
+      navigate('/error')
+      return
+    }
+
+    setSubmissionError(result.message ?? '上传或粗扫失败，请稍后再试。')
+  }
+
+  async function handleStartAnalysis() {
+    setSubmissionError('')
+
+    if (startAnalysisDisabled) {
+      setSubmissionError('请先从粗扫结果里选好一个要精分析的片段。')
+      return
+    }
+
+    const result = await startSelectedSegmentFlow()
     if (result.ok) {
       navigate('/processing')
       return
@@ -119,6 +275,20 @@ export function UploadPage() {
         <p className="muted-copy">当前上传、分析和报告都会按 {selectedActionLabel} 的正式口径执行。</p>
       </section>
 
+      {hasSegmentChoices ? (
+        <section ref={segmentSelectionRef}>
+          <Notice tone="info" title="粗扫完成">
+            系统已经从整段视频里筛出 {segmentScan?.swingSegments.length ?? 0} 个疑似挥拍片段。请先确认要分析的片段，再启动最终分析。
+          </Notice>
+          <SegmentSelectionCard
+            segments={segmentScan?.swingSegments ?? []}
+            recommendedSegmentId={segmentScan?.recommendedSegmentId}
+            selectedSegmentId={selectedSegmentId}
+            onSelect={setSelectedSegmentId}
+          />
+        </section>
+      ) : null}
+
       <section className="surface-card">
         <div className="section-head">
           <h2>上传约束提示</h2>
@@ -145,6 +315,7 @@ export function UploadPage() {
               const nextFile = event.target.files?.[0] ?? null
               setSubmissionError('')
               clearErrorState()
+              prepareFreshUpload()
               setUploadChecklistConfirmed(false)
               setFile(nextFile)
               setSelectedVideoSummary(nextFile ? buildLocalVideoSummary(nextFile) : null)
@@ -206,11 +377,12 @@ export function UploadPage() {
         <div className="section-head">
           <h2>上传前确认</h2>
         </div>
-        <div className="info-list compact">
-          <div className="list-row">动作：{selectedActionLabel}</div>
-          <div className="list-row">提交后会自动创建任务、上传视频，并进入分步骤分析流程</div>
-          <div className="list-row">如果服务端判断视频不适合分析，会返回明确失败原因、重拍建议和重新上传入口</div>
-        </div>
+          <div className="info-list compact">
+            <div className="list-row">动作：{selectedActionLabel}</div>
+            <div className="list-row">第 1 步会先上传完整视频，并只做粗粒度挥拍片段扫描</div>
+            <div className="list-row">第 2 步由你从候选片段里确认真正要分析的那一段，再进入最终结果分析</div>
+            <div className="list-row">如果服务端判断视频不适合分析，会返回明确失败原因、重拍建议和重新上传入口</div>
+          </div>
 
         <label className="confirm-check">
           <input
@@ -244,12 +416,14 @@ export function UploadPage() {
       <BottomCTA
         sticky={false}
         primary={{
-          label: '确认并开始分析',
-          onClick: () => void handleStartAnalysis(),
-          disabled: submissionDisabled,
+          label: hasSegmentChoices ? '确认片段并开始分析' : '上传并粗扫片段',
+          onClick: () => void (hasSegmentChoices ? handleStartAnalysis() : handleScanVideo()),
+          disabled: hasSegmentChoices ? startAnalysisDisabled : scanDisabled,
           loading: isBusy,
         }}
-        secondary={{ label: '查看拍摄规范', to: '/guide', tone: 'secondary' }}
+        secondary={hasSegmentChoices
+          ? { label: '重新选择视频', onClick: prepareFreshUpload, tone: 'secondary' }
+          : { label: '查看拍摄规范', to: '/guide', tone: 'secondary' }}
       />
     </div>
   )

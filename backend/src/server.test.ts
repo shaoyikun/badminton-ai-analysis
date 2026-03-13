@@ -7,7 +7,7 @@ import { buildServer } from './server';
 import { getTask, saveReport, saveTask } from './services/taskRepository';
 import { buildErrorSnapshot } from './services/errorCatalog';
 import { failTask } from './domain/analysisTask';
-import { setAnalysisWorkerForTests } from './services/taskService';
+import { setAnalysisWorkerForTests, setUploadPreparationWorkerForTests } from './services/taskService';
 import { writePoseResult } from './services/artifactStore';
 import type { PoseAnalysisResult, ReportResult } from './types/task';
 
@@ -36,6 +36,7 @@ async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
     await run(workspace);
   } finally {
     setAnalysisWorkerForTests();
+    setUploadPreparationWorkerForTests();
     process.chdir(originalCwd);
     fs.rmSync(workspace, { recursive: true, force: true });
   }
@@ -60,6 +61,64 @@ test('health endpoint returns ok', async (t) => {
 
 test('task lifecycle endpoints expose new task resource shape', async (t) => {
   await withTempWorkspace(async (workspace) => {
+    setUploadPreparationWorkerForTests(async (taskId) => {
+      const task = getTask(taskId)!;
+      const updated = {
+        ...task,
+        artifacts: {
+          ...task.artifacts,
+          preprocess: {
+            status: 'queued' as const,
+            metadata: {
+              ...task.artifacts.upload!,
+              durationSeconds: 8,
+              estimatedFrames: 80,
+              width: 720,
+              height: 1280,
+              frameRate: 10,
+              metadataSource: 'manual' as const,
+            },
+            segmentScan: {
+              status: 'completed' as const,
+              segmentDetectionVersion: 'coarse_motion_scan_v1',
+              recommendedSegmentId: 'segment-02',
+              selectedSegmentId: 'segment-02',
+              segmentSelectionMode: 'auto_recommended' as const,
+              swingSegments: [
+                {
+                  segmentId: 'segment-01',
+                  startTimeMs: 1200,
+                  endTimeMs: 2100,
+                  startFrame: 10,
+                  endFrame: 18,
+                  durationMs: 900,
+                  motionScore: 0.54,
+                  confidence: 0.71,
+                  rankingScore: 0.61,
+                  coarseQualityFlags: ['too_short'],
+                  detectionSource: 'coarse_motion_scan_v1',
+                },
+                {
+                  segmentId: 'segment-02',
+                  startTimeMs: 6300,
+                  endTimeMs: 8100,
+                  startFrame: 48,
+                  endFrame: 62,
+                  durationMs: 1800,
+                  motionScore: 0.84,
+                  confidence: 0.88,
+                  rankingScore: 0.83,
+                  coarseQualityFlags: [],
+                  detectionSource: 'coarse_motion_scan_v1',
+                },
+              ],
+            },
+          },
+        },
+      } satisfies typeof task;
+      return saveTask(updated);
+    });
+
     const app = await buildServer();
     t.after(async () => {
       await app.close();
@@ -88,10 +147,17 @@ test('task lifecycle endpoints expose new task resource shape', async (t) => {
     });
 
     assert.equal(uploadResponse.statusCode, 200);
-    const uploadPayload = uploadResponse.json() as { status: string; stage: string; fileName?: string };
+    const uploadPayload = uploadResponse.json() as {
+      status: string;
+      stage: string;
+      fileName?: string;
+      segmentScan?: { recommendedSegmentId?: string; swingSegments?: Array<{ segmentId: string }> };
+    };
     assert.equal(uploadPayload.status, 'uploaded');
     assert.equal(uploadPayload.stage, 'uploaded');
     assert.equal(uploadPayload.fileName, 'clip.mp4');
+    assert.equal(uploadPayload.segmentScan?.recommendedSegmentId, 'segment-02');
+    assert.equal(uploadPayload.segmentScan?.swingSegments?.length, 2);
 
     const storedTask = getTask(created.taskId);
     assert.ok(storedTask?.artifacts.sourceFilePath);
@@ -142,6 +208,49 @@ test('create task rejects unknown action type as invalid', async (t) => {
 
 test('start endpoint triggers worker and task status exposes unified error object', async (t) => {
   await withTempWorkspace(async () => {
+    setUploadPreparationWorkerForTests(async (taskId) => {
+      const task = getTask(taskId)!;
+      const updated = {
+        ...task,
+        artifacts: {
+          ...task.artifacts,
+          preprocess: {
+            status: 'queued',
+            metadata: {
+              ...task.artifacts.upload!,
+              durationSeconds: 8,
+              estimatedFrames: 80,
+              width: 720,
+              height: 1280,
+              frameRate: 10,
+              metadataSource: 'manual',
+            },
+            segmentScan: {
+              status: 'completed',
+              segmentDetectionVersion: 'coarse_motion_scan_v1',
+              recommendedSegmentId: 'segment-01',
+              selectedSegmentId: 'segment-01',
+              segmentSelectionMode: 'auto_recommended',
+              swingSegments: [{
+                segmentId: 'segment-01',
+                startTimeMs: 1200,
+                endTimeMs: 2100,
+                startFrame: 10,
+                endFrame: 18,
+                durationMs: 900,
+                motionScore: 0.54,
+                confidence: 0.71,
+                rankingScore: 0.61,
+                coarseQualityFlags: [],
+                detectionSource: 'coarse_motion_scan_v1',
+              }],
+            },
+          },
+        },
+      } satisfies typeof task;
+      return saveTask(updated);
+    });
+
     const app = await buildServer();
     t.after(async () => {
       await app.close();
@@ -192,6 +301,102 @@ test('start endpoint triggers worker and task status exposes unified error objec
     assert.equal(statusPayload.stage, 'failed');
     assert.equal(statusPayload.error?.code, 'invalid_duration');
     assert.equal(statusPayload.error?.category, 'media_validation');
+  });
+});
+
+test('start endpoint persists the user-selected segment before analysis starts', async (t) => {
+  await withTempWorkspace(async () => {
+    setUploadPreparationWorkerForTests(async (taskId) => {
+      const task = getTask(taskId)!;
+      const updated = {
+        ...task,
+        artifacts: {
+          ...task.artifacts,
+          preprocess: {
+            status: 'queued',
+            metadata: {
+              ...task.artifacts.upload!,
+              durationSeconds: 8,
+              estimatedFrames: 80,
+              width: 720,
+              height: 1280,
+              frameRate: 10,
+              metadataSource: 'manual',
+            },
+            segmentScan: {
+              status: 'completed',
+              segmentDetectionVersion: 'coarse_motion_scan_v1',
+              recommendedSegmentId: 'segment-02',
+              selectedSegmentId: 'segment-02',
+              segmentSelectionMode: 'auto_recommended',
+              swingSegments: [
+                {
+                  segmentId: 'segment-01',
+                  startTimeMs: 1100,
+                  endTimeMs: 2100,
+                  startFrame: 8,
+                  endFrame: 16,
+                  durationMs: 1000,
+                  motionScore: 0.52,
+                  confidence: 0.68,
+                  rankingScore: 0.58,
+                  coarseQualityFlags: ['too_short'],
+                  detectionSource: 'coarse_motion_scan_v1',
+                },
+                {
+                  segmentId: 'segment-02',
+                  startTimeMs: 6000,
+                  endTimeMs: 7900,
+                  startFrame: 44,
+                  endFrame: 60,
+                  durationMs: 1900,
+                  motionScore: 0.84,
+                  confidence: 0.88,
+                  rankingScore: 0.82,
+                  coarseQualityFlags: [],
+                  detectionSource: 'coarse_motion_scan_v1',
+                },
+              ],
+            },
+          },
+        },
+      } satisfies typeof task;
+      return saveTask(updated);
+    });
+
+    setAnalysisWorkerForTests(async () => {});
+
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'clear' },
+    });
+    const created = createResponse.json() as { taskId: string };
+    const multipart = buildMultipartPayload('clip.mp4', 'video-content');
+    await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${created.taskId}/upload`,
+      headers: {
+        'content-type': `multipart/form-data; boundary=${multipart.boundary}`,
+      },
+      payload: multipart.payload,
+    });
+
+    const startResponse = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${created.taskId}/start`,
+      payload: { selectedSegmentId: 'segment-01' },
+    });
+
+    assert.equal(startResponse.statusCode, 200);
+    const started = startResponse.json() as { segmentScan?: { selectedSegmentId?: string } };
+    assert.equal(started.segmentScan?.selectedSegmentId, 'segment-01');
+    assert.equal(getTask(created.taskId)?.artifacts.preprocess?.segmentScan?.selectedSegmentId, 'segment-01');
   });
 });
 
@@ -269,6 +474,25 @@ test('history detail and comparison endpoints read from dedicated projections', 
       retestAdvice: 'retry',
       createdAt: now,
       poseBased: false,
+      swingSegments: [
+        {
+          segmentId: 'segment-01',
+          startTimeMs: 1200,
+          endTimeMs: 2300,
+          startFrame: 11,
+          endFrame: 20,
+          durationMs: 1100,
+          motionScore: 0.74,
+          confidence: 0.83,
+          rankingScore: 0.8,
+          coarseQualityFlags: [],
+          detectionSource: 'coarse_motion_scan_v1',
+        },
+      ],
+      recommendedSegmentId: 'segment-01',
+      segmentDetectionVersion: 'coarse_motion_scan_v1',
+      segmentSelectionMode: 'auto_recommended',
+      selectedSegmentId: 'segment-01',
       phaseBreakdown: [
         { phaseKey: 'preparation', label: '准备', status: 'ok', summary: '准备阶段稳定' },
         { phaseKey: 'backswing', label: '引拍', status: 'ok', summary: '引拍阶段稳定' },
@@ -295,9 +519,34 @@ test('history detail and comparison endpoints read from dedicated projections', 
       url: `/api/history/${secondTaskId}`,
     });
     assert.equal(detailResponse.statusCode, 200);
-    const detailPayload = detailResponse.json() as { task: { taskId: string }; report: { summaryText?: string } };
+    const detailPayload = detailResponse.json() as {
+      task: { taskId: string };
+      report: {
+        summaryText?: string;
+        recommendedSegmentId?: string;
+        selectedSegmentId?: string;
+        swingSegments?: Array<{ segmentId: string }>;
+      };
+    };
     assert.equal(detailPayload.task.taskId, secondTaskId);
     assert.equal(detailPayload.report.summaryText, 'second');
+    assert.equal(detailPayload.report.recommendedSegmentId, 'segment-01');
+    assert.equal(detailPayload.report.selectedSegmentId, 'segment-01');
+    assert.equal(detailPayload.report.swingSegments?.[0]?.segmentId, 'segment-01');
+
+    const resultResponse = await app.inject({
+      method: 'GET',
+      url: `/api/tasks/${secondTaskId}/result`,
+    });
+    assert.equal(resultResponse.statusCode, 200);
+    const resultPayload = resultResponse.json() as {
+      recommendedSegmentId?: string;
+      segmentSelectionMode?: string;
+      swingSegments?: Array<{ segmentId: string }>;
+    };
+    assert.equal(resultPayload.recommendedSegmentId, 'segment-01');
+    assert.equal(resultPayload.segmentSelectionMode, 'auto_recommended');
+    assert.equal(resultPayload.swingSegments?.length, 1);
 
     const comparisonResponse = await app.inject({
       method: 'GET',

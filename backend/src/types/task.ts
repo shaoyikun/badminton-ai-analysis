@@ -39,9 +39,15 @@ export type {
   RetestCoachReview,
   RetestComparison,
   RetestDeltaItem,
+  SegmentSelectionMode,
+  SegmentScanSummary,
+  SegmentSelectionWindow,
+  StartTaskRequest,
   StandardComparison,
   StandardPhaseFrame,
   StandardReferenceFrame,
+  SwingSegmentCandidate,
+  SwingSegmentQualityFlag,
   SuggestionItem,
   TaskHistoryItem,
   TaskResource,
@@ -143,6 +149,7 @@ export function toTaskResource(task: AnalysisTaskRecord): TaskResource {
     updatedAt: task.updatedAt,
     startedAt: task.startedAt,
     completedAt: task.completedAt,
+    segmentScan: task.artifacts.preprocess?.segmentScan,
   };
 
   if (task.error) {

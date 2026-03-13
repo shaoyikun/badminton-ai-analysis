@@ -6,6 +6,7 @@ import {
   PoseOverlayGalleryCard,
   RecognitionContextCard,
   ReportHeroCard,
+  SwingSegmentsCard,
   StandardComparisonCard,
   TrainingFocusCard,
   TrainingKickoffCard,
@@ -22,6 +23,7 @@ export function ReportView({
     <>
       <ReportHeroCard report={report} comparison={comparison} />
       <RecognitionContextCard report={report} />
+      <SwingSegmentsCard report={report} />
       <PhaseBreakdownCard report={report} />
       <PoseOverlayGalleryCard report={report} />
       <TrainingFocusCard report={report} />

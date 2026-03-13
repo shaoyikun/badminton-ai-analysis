@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import type { PoseResult, TaskHistoryItem, RetestComparison, ReportResult } from '../../hooks/useAnalysisTask'
 import { ScoreBadge } from '../ui/ScoreBadge'
@@ -17,6 +17,37 @@ import { buildAssetUrl, buildReferenceUrl, formatScore, formatTime } from './uti
 function formatConfidence(value?: number | null) {
   if (value === null || value === undefined) return '—'
   return `${Math.round(value * 100)}%`
+}
+
+function formatSegmentTimestamp(timeMs?: number | null) {
+  if (timeMs === null || timeMs === undefined) return '—'
+  return `${(timeMs / 1000).toFixed(2)}s`
+}
+
+function formatDurationMs(durationMs?: number | null) {
+  if (durationMs === null || durationMs === undefined) return '—'
+  return `${(durationMs / 1000).toFixed(2)}s`
+}
+
+function formatSegmentQualityFlag(flag: string) {
+  switch (flag) {
+    case 'motion_too_weak':
+      return '运动偏弱'
+    case 'too_short':
+      return '时长偏短'
+    case 'too_long':
+      return '时长偏长'
+    case 'edge_clipped_start':
+      return '起始可能截断'
+    case 'edge_clipped_end':
+      return '结尾可能截断'
+    case 'subject_maybe_small':
+      return '主体可能偏小'
+    case 'motion_maybe_occluded':
+      return '疑似遮挡'
+    default:
+      return flag
+  }
 }
 
 function getRecognitionLead(report: ReportResult) {
@@ -108,6 +139,106 @@ export function RecognitionContextCard({ report }: { report: ReportResult }) {
           <strong>{report.recognitionContext.engine ?? '—'}</strong>
           <p>后续叠加图会直接基于这次关键点识别结果生成。</p>
         </div>
+      </div>
+    </section>
+  )
+}
+
+export function SwingSegmentsCard({ report }: { report: ReportResult }) {
+  const segments = report.swingSegments
+  const defaultSelectedId = report.selectedSegmentId ?? report.recommendedSegmentId ?? segments?.[0]?.segmentId ?? ''
+  const [activeSegmentId, setActiveSegmentId] = useState(defaultSelectedId)
+
+  useEffect(() => {
+    setActiveSegmentId(defaultSelectedId)
+  }, [defaultSelectedId])
+
+  if (!segments?.length) return null
+
+  const activeSegment = segments.find((segment) => segment.segmentId === activeSegmentId) ?? segments[0]
+  const isRecommended = activeSegment.segmentId === report.recommendedSegmentId
+  const isSelected = activeSegment.segmentId === report.selectedSegmentId
+
+  return (
+    <section className="surface-card swing-segments-card">
+      <div className="section-head">
+        <div>
+          <h2>疑似挥拍片段</h2>
+          <p className="muted-copy">系统先在整段视频里粗扫出多个候选，再默认挑一段进入当前报告分析。</p>
+        </div>
+      </div>
+
+      <div className="segment-summary-strip">
+        <div className="segment-summary-item">
+          <span>候选片段</span>
+          <strong>{segments.length}</strong>
+        </div>
+        <div className="segment-summary-item">
+          <span>默认推荐</span>
+          <strong>{report.recommendedSegmentId ?? '—'}</strong>
+        </div>
+        <div className="segment-summary-item">
+          <span>当前分析</span>
+          <strong>{report.selectedSegmentId ?? report.recommendedSegmentId ?? '—'}</strong>
+        </div>
+      </div>
+
+      <div className="segment-chip-row">
+        {segments.map((segment) => {
+          const isActive = segment.segmentId === activeSegment.segmentId
+          return (
+            <button
+              key={segment.segmentId}
+              className={`segment-chip ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveSegmentId(segment.segmentId)}
+              type="button"
+            >
+              <strong>{segment.segmentId}</strong>
+              <span>{formatSegmentTimestamp(segment.startTimeMs)} - {formatSegmentTimestamp(segment.endTimeMs)}</span>
+              {segment.segmentId === report.selectedSegmentId ? <em>当前分析</em> : null}
+              {segment.segmentId === report.recommendedSegmentId && segment.segmentId !== report.selectedSegmentId ? <em>推荐</em> : null}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="segment-detail-card">
+        <div className="segment-detail-head">
+          <div>
+            <strong>{activeSegment.segmentId}</strong>
+            <p>{formatSegmentTimestamp(activeSegment.startTimeMs)} - {formatSegmentTimestamp(activeSegment.endTimeMs)}，时长 {formatDurationMs(activeSegment.durationMs)}</p>
+          </div>
+          <div className="segment-badge-row">
+            {isRecommended ? <span className="status-pill brand">推荐片段</span> : null}
+            {isSelected ? <span className="status-pill success">当前报告已分析</span> : <span className="status-pill neutral">当前未精分析</span>}
+          </div>
+        </div>
+
+        <div className="score-grid three-up">
+          <div className="score-tile"><span>运动强度</span><strong>{formatScore(activeSegment.motionScore)}</strong></div>
+          <div className="score-tile"><span>推荐置信度</span><strong>{formatConfidence(activeSegment.confidence)}</strong></div>
+          <div className="score-tile"><span>排序分</span><strong>{formatScore(activeSegment.rankingScore)}</strong></div>
+        </div>
+
+        <div className="segment-quality-flags">
+          {activeSegment.coarseQualityFlags.length > 0 ? (
+            activeSegment.coarseQualityFlags.map((flag) => (
+              <span key={flag} className="segment-flag">{formatSegmentQualityFlag(flag)}</span>
+            ))
+          ) : (
+            <span className="segment-flag positive">当前没有明显粗粒度风险标记</span>
+          )}
+        </div>
+
+        {!isSelected ? (
+          <p className="muted-copy">
+            这段目前只完成了粗粒度检测和质量标记，当前报告的骨架识别图、分数和建议仍对应 {report.selectedSegmentId ?? report.recommendedSegmentId ?? '默认分析片段'}。
+          </p>
+        ) : (
+          <p className="muted-copy">
+            当前这份报告的抽帧、姿态识别和动作建议都基于这个片段生成。
+          </p>
+        )}
       </div>
     </section>
   )

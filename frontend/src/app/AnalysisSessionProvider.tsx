@@ -22,6 +22,7 @@ import type {
   PreprocessStatus,
   ReportResult,
   RetestComparison,
+  SegmentScanSummary,
   TaskHistoryItem,
   TaskStage,
   TaskStatus,
@@ -92,6 +93,8 @@ type SessionSnapshot = {
   selectedCompareTaskIds: ActionTaskStateMap
   selectedVideoSummary: LocalVideoSummary | null
   uploadChecklistConfirmed: boolean
+  segmentScan: SegmentScanSummary | null
+  selectedSegmentId: string
   errorState: ErrorState
   debugEnabled: boolean
 }
@@ -126,6 +129,9 @@ type AnalysisSessionContextValue = {
   file: File | null
   selectedVideoSummary: LocalVideoSummary | null
   setSelectedVideoSummary: (value: LocalVideoSummary | null) => void
+  segmentScan: SegmentScanSummary | null
+  selectedSegmentId: string
+  setSelectedSegmentId: (value: string) => void
   uploadChecklistConfirmed: boolean
   setUploadChecklistConfirmed: (value: boolean) => void
   resetUploadDraft: () => void
@@ -144,7 +150,9 @@ type AnalysisSessionContextValue = {
   canOpenReportTab: boolean
   createTask: () => Promise<string | null>
   uploadVideo: (targetTaskId?: string) => Promise<boolean>
-  analyze: (targetTaskId?: string) => Promise<boolean>
+  analyze: (targetTaskId?: string, selectedSegmentId?: string) => Promise<boolean>
+  scanVideoFlow: () => Promise<FlowResult>
+  startSelectedSegmentFlow: () => Promise<FlowResult>
   startAnalysisFlow: () => Promise<FlowResult>
   refreshStatus: (options?: { silent?: boolean; targetTaskId?: string }) => Promise<TaskStatus | null>
   fetchResult: (targetTaskId?: string, showSuccessLog?: boolean) => Promise<ReportResult | null>
@@ -170,6 +178,8 @@ function readSessionSnapshot(): SessionSnapshot {
       selectedCompareTaskIds: {},
       selectedVideoSummary: null,
       uploadChecklistConfirmed: false,
+      segmentScan: null,
+      selectedSegmentId: '',
       errorState: null,
       debugEnabled: false,
     }
@@ -196,6 +206,8 @@ function readSessionSnapshot(): SessionSnapshot {
       selectedCompareTaskIds,
       selectedVideoSummary: parsed.selectedVideoSummary ?? null,
       uploadChecklistConfirmed: Boolean(parsed.uploadChecklistConfirmed),
+      segmentScan: parsed.segmentScan ?? null,
+      selectedSegmentId: parsed.selectedSegmentId ?? '',
       errorState: parsed.errorState ?? null,
       debugEnabled: Boolean(parsed.debugEnabled),
     }
@@ -207,6 +219,8 @@ function readSessionSnapshot(): SessionSnapshot {
       selectedCompareTaskIds: {},
       selectedVideoSummary: null,
       uploadChecklistConfirmed: false,
+      segmentScan: null,
+      selectedSegmentId: '',
       errorState: null,
       debugEnabled: false,
     }
@@ -326,6 +340,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const [selectedHistoryReport, setSelectedHistoryReport] = useState<ReportResult | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [selectedVideoSummary, setSelectedVideoSummary] = useState<LocalVideoSummary | null>(initialSession.selectedVideoSummary)
+  const [segmentScan, setSegmentScan] = useState<SegmentScanSummary | null>(initialSession.segmentScan)
+  const [selectedSegmentId, setSelectedSegmentId] = useState(initialSession.selectedSegmentId)
   const [uploadChecklistConfirmed, setUploadChecklistConfirmed] = useState(initialSession.uploadChecklistConfirmed)
   const [log, setLog] = useState<string[]>([])
   const [isBusy, setIsBusy] = useState(false)
@@ -350,6 +366,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const resetUploadDraft = useCallback(() => {
     setFile(null)
     setUploadChecklistConfirmed(false)
+    setSegmentScan(null)
+    setSelectedSegmentId('')
   }, [])
 
   const stopPolling = useCallback(() => {
@@ -376,6 +394,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     setFile(null)
     setSelectedVideoSummary(null)
     setUploadChecklistConfirmed(false)
+    setSegmentScan(null)
+    setSelectedSegmentId('')
     setErrorState(null)
   }, [stopPolling])
 
@@ -411,6 +431,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     })
     setStage(snapshot.stage)
     setProgressPercent(snapshot.progressPercent ?? 0)
+    setSegmentScan(snapshot.segmentScan ?? null)
+    setSelectedSegmentId(snapshot.segmentScan?.selectedSegmentId ?? snapshot.segmentScan?.recommendedSegmentId ?? '')
     const derivedStatuses = deriveStageStatuses(snapshot.stage, snapshot.status, snapshot.error?.code)
     setPreprocessStatus(derivedStatuses.preprocessStatus)
     setPoseStatus(derivedStatuses.poseStatus)
@@ -569,6 +591,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       setComparison(null)
       setComparisonUnavailableReason(null)
       setSelectedHistoryReport(null)
+      setSegmentScan(null)
+      setSelectedSegmentId('')
       setSelectedCompareTaskIds((prev) => ({
         ...prev,
         [actionType]: '',
@@ -623,6 +647,9 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       }
 
       applyTaskSnapshot(data as TaskStatusResponse, true)
+      const uploadedPayload = data as UploadTaskResponse
+      setSegmentScan(uploadedPayload.segmentScan ?? null)
+      setSelectedSegmentId(uploadedPayload.segmentScan?.selectedSegmentId ?? uploadedPayload.segmentScan?.recommendedSegmentId ?? '')
       appendLog(`上传完成：${(data as UploadTaskResponse).fileName ?? file.name}`)
       return true
     } catch (error) {
@@ -634,7 +661,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [appendLog, applyTaskSnapshot, file, setFriendlyError, taskId])
 
-  const analyze = useCallback(async (targetTaskId?: string) => {
+  const analyze = useCallback(async (targetTaskId?: string, nextSelectedSegmentId?: string) => {
     const activeTaskId = targetTaskId ?? taskId
     if (!activeTaskId) return false
 
@@ -642,7 +669,12 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       lastFailureReasonRef.current = null
       setIsBusy(true)
       setErrorState(null)
-      const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/start`, { method: 'POST' })
+      const selectedSegmentIdForRequest = (nextSelectedSegmentId ?? selectedSegmentId) || undefined
+      const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedSegmentId: selectedSegmentIdForRequest }),
+      })
       const data = await readApiPayload<TaskStatusResponse>(response)
 
       if (!response.ok) {
@@ -664,9 +696,9 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, applyTaskSnapshot, setFriendlyError, startPolling, taskId])
+  }, [appendLog, applyTaskSnapshot, selectedSegmentId, setFriendlyError, startPolling, taskId])
 
-  const startAnalysisFlow = useCallback(async (): Promise<FlowResult> => {
+  const scanVideoFlow = useCallback(async (): Promise<FlowResult> => {
     if (!file) {
       return { ok: false, reason: 'validation', message: '请先选择视频文件。' }
     }
@@ -685,11 +717,27 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       return {
         ok: false,
         reason: lastFailureReasonRef.current === 'server' ? 'server' : 'network',
-        message: '上传失败，请稍后再试。',
+        message: '上传或粗扫失败，请稍后再试。',
       }
     }
 
-    const started = await analyze(createdTaskId)
+    return { ok: true }
+  }, [createTask, file, uploadVideo])
+
+  const startSelectedSegmentFlow = useCallback(async (): Promise<FlowResult> => {
+    if (!taskId) {
+      return { ok: false, reason: 'validation', message: '请先完成视频上传和粗扫。' }
+    }
+
+    if (!segmentScan?.swingSegments?.length) {
+      return { ok: false, reason: 'validation', message: '当前还没有可供选择的挥拍片段。' }
+    }
+
+    if (!selectedSegmentId) {
+      return { ok: false, reason: 'validation', message: '请先选择一个要分析的片段。' }
+    }
+
+    const started = await analyze(taskId, selectedSegmentId)
     if (!started) {
       return {
         ok: false,
@@ -699,7 +747,15 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     }
 
     return { ok: true }
-  }, [analyze, createTask, file, uploadVideo])
+  }, [analyze, segmentScan?.swingSegments, selectedSegmentId, taskId])
+
+  const startAnalysisFlow = useCallback(async (): Promise<FlowResult> => {
+    const scanResult = await scanVideoFlow()
+    if (!scanResult.ok) {
+      return scanResult
+    }
+    return startSelectedSegmentFlow()
+  }, [scanVideoFlow, startSelectedSegmentFlow])
 
   const fetchHistoryReport = useCallback(async (targetTaskId: string) => {
     const response = await fetch(`${API_BASE}/api/history/${targetTaskId}`)
@@ -765,6 +821,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       selectedCompareTaskIds,
       selectedVideoSummary,
       uploadChecklistConfirmed,
+      segmentScan,
+      selectedSegmentId,
       errorState,
       debugEnabled,
     } satisfies SessionSnapshot))
@@ -775,6 +833,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     latestCompletedTaskIds,
     selectedCompareTaskIds,
     selectedVideoSummary,
+    segmentScan,
+    selectedSegmentId,
     taskId,
     uploadChecklistConfirmed,
   ])
@@ -828,6 +888,9 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     file,
     selectedVideoSummary,
     setSelectedVideoSummary,
+    segmentScan,
+    selectedSegmentId,
+    setSelectedSegmentId,
     uploadChecklistConfirmed,
     setUploadChecklistConfirmed,
     resetUploadDraft,
@@ -847,6 +910,8 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     createTask,
     uploadVideo,
     analyze,
+    scanVideoFlow,
+    startSelectedSegmentFlow,
     startAnalysisFlow,
     refreshStatus,
     fetchResult,

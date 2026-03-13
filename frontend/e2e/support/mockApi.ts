@@ -19,6 +19,7 @@ import {
   processingLifecycle,
   reportResponse,
   reportTaskStatus,
+  uploadTaskResponse,
 } from './data'
 
 type MockApiOptions = {
@@ -133,10 +134,7 @@ export async function mockApi(page: Page, options: MockApiOptions = {}) {
     }
 
     if (method === 'POST' && pathname.endsWith('/upload')) {
-      return json(route, options.uploadTaskResponse ?? {
-        ...processingLifecycle.uploaded,
-        fileName: 'valid-clear.mp4',
-      })
+      return json(route, options.uploadTaskResponse ?? uploadTaskResponse)
     }
 
     if (method === 'POST' && pathname.endsWith('/start')) {

@@ -6,7 +6,16 @@ import test from 'node:test';
 import type { PoseAnalysisResult, ReportResult } from './types/task';
 import { writePoseResult } from './services/artifactStore';
 import { getReportRow, getTask, saveReport, saveTask } from './services/taskRepository';
-import { createTask, getActiveAnalysisTaskForTests, getRetestComparison, runAnalysisPipelineForTests, saveUpload, setAnalysisWorkerForTests, startMockAnalysis } from './services/taskService';
+import {
+  createTask,
+  getActiveAnalysisTaskForTests,
+  getRetestComparison,
+  runAnalysisPipelineForTests,
+  saveUpload,
+  setAnalysisWorkerForTests,
+  setUploadPreparationWorkerForTests,
+  startMockAnalysis,
+} from './services/taskService';
 
 async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
   const originalCwd = process.cwd();
@@ -19,6 +28,7 @@ async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
     await run(workspace);
   } finally {
     setAnalysisWorkerForTests();
+    setUploadPreparationWorkerForTests();
     process.chdir(originalCwd);
     fs.rmSync(workspace, { recursive: true, force: true });
   }
@@ -57,6 +67,35 @@ test('startMockAnalysis returns before background worker finishes', async () => 
     const stagedUploadPath = path.join(workspace, 'clip.mp4');
     fs.writeFileSync(stagedUploadPath, 'demo');
     saveUpload(task.taskId, 'clip.mp4', stagedUploadPath, 'video/mp4');
+    saveTask({
+      ...getTask(task.taskId)!,
+      artifacts: {
+        ...getTask(task.taskId)!.artifacts,
+        preprocess: {
+          status: 'queued',
+          segmentScan: {
+            status: 'completed',
+            segmentDetectionVersion: 'coarse_motion_scan_v1',
+            recommendedSegmentId: 'segment-01',
+            selectedSegmentId: 'segment-01',
+            segmentSelectionMode: 'auto_recommended',
+            swingSegments: [{
+              segmentId: 'segment-01',
+              startTimeMs: 1000,
+              endTimeMs: 2000,
+              startFrame: 10,
+              endFrame: 20,
+              durationMs: 1000,
+              motionScore: 0.7,
+              confidence: 0.8,
+              rankingScore: 0.78,
+              coarseQualityFlags: [],
+              detectionSource: 'coarse_motion_scan_v1',
+            }],
+          },
+        },
+      },
+    });
 
     let resolveWorker: (() => void) | undefined;
     const workerDone = new Promise<void>((resolve) => {
@@ -429,6 +468,66 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
         artifacts: {
           ...task.artifacts,
           poseResultPath: stored.absolutePath,
+          preprocess: {
+            status: 'completed',
+            artifacts: {
+              normalizedFileName: 'clip.mp4',
+              metadataExtractedAt: '2026-03-13T10:00:00.000Z',
+              artifactsDir: 'artifacts/tasks/task_low_confidence/preprocess',
+              manifestPath: 'artifacts/tasks/task_low_confidence/preprocess/manifest.json',
+              segmentDetectionVersion: 'coarse_motion_scan_v1',
+              recommendedSegmentId: 'segment-02',
+              selectedSegmentId: 'segment-02',
+              segmentSelectionMode: 'auto_recommended',
+              swingSegments: [
+                {
+                  segmentId: 'segment-01',
+                  startTimeMs: 120,
+                  endTimeMs: 820,
+                  startFrame: 2,
+                  endFrame: 8,
+                  durationMs: 700,
+                  motionScore: 0.33,
+                  confidence: 0.5,
+                  rankingScore: 0.42,
+                  coarseQualityFlags: ['too_short'],
+                  detectionSource: 'coarse_motion_scan_v1',
+                },
+                {
+                  segmentId: 'segment-02',
+                  startTimeMs: 1200,
+                  endTimeMs: 2360,
+                  startFrame: 13,
+                  endFrame: 24,
+                  durationMs: 1160,
+                  motionScore: 0.71,
+                  confidence: 0.84,
+                  rankingScore: 0.8,
+                  coarseQualityFlags: [],
+                  detectionSource: 'coarse_motion_scan_v1',
+                },
+              ],
+              framePlan: {
+                strategy: 'segment-aware-uniform-sampling-ffmpeg-v1',
+                targetFrameCount: 6,
+                sampleTimestamps: [1.35, 1.52, 1.69, 1.86, 2.03, 2.2],
+                sourceWindow: {
+                  startTimeMs: 1200,
+                  endTimeMs: 2360,
+                  startFrame: 13,
+                  endFrame: 24,
+                },
+              },
+              sampledFrames: [
+                {
+                  index: 1,
+                  timestampSeconds: 1.35,
+                  fileName: 'frame-01.jpg',
+                  relativePath: 'artifacts/tasks/task_low_confidence/preprocess/frame-01.jpg',
+                },
+              ],
+            },
+          },
         },
       });
 
@@ -443,6 +542,10 @@ test('runAnalysisPipeline completes low-confidence sample and still stores a rep
       assert.ok(reportRow);
       assert.equal(report?.scoringEvidence?.analysisDisposition, 'low_confidence');
       assert.ok((report?.confidenceScore ?? 100) < 70);
+      assert.equal(report?.recommendedSegmentId, 'segment-02');
+      assert.equal(report?.selectedSegmentId, 'segment-02');
+      assert.equal(report?.segmentSelectionMode, 'auto_recommended');
+      assert.equal(report?.swingSegments?.length, 2);
     } finally {
       if (originalDelay === undefined) {
         delete process.env.MOCK_ANALYSIS_DELAY_MS;

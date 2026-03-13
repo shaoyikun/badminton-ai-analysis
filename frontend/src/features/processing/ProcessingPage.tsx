@@ -50,7 +50,7 @@ function getLiveSummary(stage: string, status: string) {
 
 export function ProcessingPage() {
   const navigate = useNavigate()
-  const { taskId, status, stage, progressPercent, errorState, selectedActionLabel, selectedVideoSummary } = useAnalysisTask()
+  const { taskId, status, stage, progressPercent, errorState, selectedActionLabel, selectedVideoSummary, selectedSegmentId } = useAnalysisTask()
 
   useEffect(() => {
     if (!taskId) {
@@ -87,6 +87,10 @@ export function ProcessingPage() {
           <div className="list-row">
             <span>当前阶段</span>
             <strong>{stage || '准备中'} · {progressPercent}%</strong>
+          </div>
+          <div className="list-row">
+            <span>分析片段</span>
+            <strong>{selectedSegmentId || '系统默认片段'}</strong>
           </div>
         </div>
         <p className="muted-copy">{getLiveSummary(stage, status)}</p>

@@ -12,6 +12,8 @@ import type {
   ReportResult,
   RetestComparison,
   RetestCoachReview,
+  SegmentScanSummary,
+  StartTaskRequest,
   TaskHistoryItem,
   TaskResource,
 } from '../types/task';
@@ -19,7 +21,7 @@ import { createTaskRecord, enterStage, failTask, markTaskStarted, markTaskUpload
 import { fileExists, prepareTaskArtifactsDir, readJsonFile, storeUploadedVideo, writePoseResult, writePreprocessManifest, writeReportFile } from './artifactStore';
 import { buildRuleBasedResult, getPoseQualityFailure } from './reportScoringService';
 import { buildShadowRuleBasedResult } from './shadowReportScoringService';
-import { getMaxFileSizeBytes, extractFrames, probeVideo, validateUploadedVideo } from './preprocessService';
+import { getMaxFileSizeBytes, extractFrames, probeVideo, scanVideoSegments, validateUploadedVideo } from './preprocessService';
 import { buildPoseSummary, readPoseResult, runPoseAnalysis } from './poseService';
 import { buildErrorSnapshot } from './errorCatalog';
 import { createTask as createTaskEntry, findLatestCompletedTask, getReportRow, getTask, listCompletedHistory, listProcessingTasks, saveReport, saveTask } from './taskRepository';
@@ -96,6 +98,7 @@ function buildPhaseDeltas(previous: ReportResult, current: ReportResult): Retest
 const activeAnalysisTasks = new Map<string, Promise<void>>();
 
 type AnalysisWorker = (taskId: string) => Promise<void>;
+type UploadPreparationWorker = (taskId: string) => Promise<AnalysisTaskRecord>;
 
 function buildCoachReview(actionType: ActionType, comparison: Omit<RetestComparison, 'coachReview'>): RetestCoachReview {
   const actionLabel = getActionLabel(actionType);
@@ -324,6 +327,16 @@ export function saveUpload(taskId: string, fileName: string, stagedUploadPath: s
   return saveTask(updated);
 }
 
+async function prepareUploadedTaskForSelectionInternal(taskId: string) {
+  const task = getTask(taskId);
+  if (!task) {
+    throw buildErrorSnapshot('task_not_found', 'task not found after upload');
+  }
+
+  const validated = saveTask(await executeValidatingStage(task));
+  return saveTask(await executeSegmentScanStage(validated));
+}
+
 async function executeValidatingStage(task: AnalysisTaskRecord) {
   const sourcePath = task.artifacts.sourceFilePath;
   const upload = task.artifacts.upload;
@@ -347,10 +360,35 @@ async function executeValidatingStage(task: AnalysisTaskRecord) {
   return mergeArtifacts(task, {
     upload: metadata,
     preprocess: {
-      status: 'completed',
+      status: task.artifacts.preprocess?.status ?? 'queued',
       startedAt: task.startedAt,
-      completedAt: new Date().toISOString(),
+      completedAt: task.artifacts.preprocess?.completedAt,
       metadata,
+      segmentScan: task.artifacts.preprocess?.segmentScan,
+    },
+  });
+}
+
+async function executeSegmentScanStage(task: AnalysisTaskRecord) {
+  const sourcePath = task.artifacts.sourceFilePath;
+  const metadata = task.artifacts.preprocess?.metadata ?? task.artifacts.upload;
+  if (!sourcePath || !metadata || !fileExists(sourcePath)) {
+    throw buildErrorSnapshot('preprocess_failed', 'source file missing before segment scan');
+  }
+
+  if (task.artifacts.preprocess?.segmentScan?.swingSegments?.length) {
+    return task;
+  }
+
+  const segmentScan = await scanVideoSegments(sourcePath, metadata);
+  return mergeArtifacts(task, {
+    preprocess: {
+      status: 'queued',
+      startedAt: task.startedAt,
+      completedAt: task.artifacts.preprocess?.completedAt,
+      metadata,
+      segmentScan,
+      artifacts: task.artifacts.preprocess?.artifacts,
     },
   });
 }
@@ -366,7 +404,12 @@ async function executePreprocessStage(task: AnalysisTaskRecord) {
     return task;
   }
 
-  const artifacts = await extractFrames(task.taskId, sourcePath, metadata);
+  const segmentScan = task.artifacts.preprocess?.segmentScan;
+  if (!segmentScan) {
+    throw buildErrorSnapshot('preprocess_failed', 'segment scan not found before preprocess');
+  }
+
+  const artifacts = await extractFrames(task.taskId, sourcePath, metadata, segmentScan);
   const manifest = writePreprocessManifest(task.taskId, artifacts);
   return mergeArtifacts(task, {
     preprocessManifestPath: manifest.absolutePath,
@@ -375,6 +418,11 @@ async function executePreprocessStage(task: AnalysisTaskRecord) {
       startedAt: task.startedAt,
       completedAt: new Date().toISOString(),
       metadata,
+      segmentScan: {
+        ...segmentScan,
+        selectedSegmentId: artifacts.selectedSegmentId ?? segmentScan.selectedSegmentId,
+        segmentSelectionMode: artifacts.segmentSelectionMode ?? segmentScan.segmentSelectionMode,
+      },
       artifacts,
     },
   });
@@ -475,6 +523,7 @@ function isErrorSnapshot(value: unknown): value is ReturnType<typeof buildErrorS
 }
 
 let analysisWorker: AnalysisWorker = runAnalysisPipeline;
+let uploadPreparationWorker: UploadPreparationWorker = prepareUploadedTaskForSelectionInternal;
 
 function queueAnalysisTask(taskId: string) {
   if (activeAnalysisTasks.has(taskId)) return;
@@ -487,16 +536,51 @@ function queueAnalysisTask(taskId: string) {
 }
 
 export async function startAnalysis(taskId: string) {
+  return startAnalysisWithSelection(taskId);
+}
+
+export const startMockAnalysis = startAnalysis;
+
+function ensureSelectedSegment(task: AnalysisTaskRecord, selectedSegmentId?: string) {
+  const segmentScan = task.artifacts.preprocess?.segmentScan;
+  if (!segmentScan?.swingSegments?.length) {
+    throw buildErrorSnapshot('invalid_task_state', 'segment scan is not ready');
+  }
+
+  const nextSelectedSegmentId = selectedSegmentId ?? segmentScan.selectedSegmentId ?? segmentScan.recommendedSegmentId;
+  const matched = segmentScan.swingSegments.find((segment) => segment.segmentId === nextSelectedSegmentId);
+  if (!matched) {
+    throw buildErrorSnapshot('invalid_task_state', `selected segment ${nextSelectedSegmentId ?? 'unknown'} is unavailable`);
+  }
+
+  return mergeArtifacts(task, {
+    preprocess: {
+      ...task.artifacts.preprocess,
+      status: task.artifacts.preprocess?.status ?? 'queued',
+      metadata: task.artifacts.preprocess?.metadata,
+      segmentScan: {
+        ...segmentScan,
+        selectedSegmentId: matched.segmentId,
+      },
+      artifacts: task.artifacts.preprocess?.artifacts,
+    },
+  });
+}
+
+export async function prepareUploadedTaskForSelection(taskId: string) {
+  return uploadPreparationWorker(taskId);
+}
+
+export async function startAnalysisWithSelection(taskId: string, request?: StartTaskRequest) {
   const task = getTask(taskId);
   if (!task) return undefined;
   if (task.status === 'processing') return task;
 
-  const started = saveTask(markTaskStarted(task));
+  const prepared = saveTask(ensureSelectedSegment(task, request?.selectedSegmentId));
+  const started = saveTask(markTaskStarted(prepared));
   queueAnalysisTask(taskId);
   return started;
 }
-
-export const startMockAnalysis = startAnalysis;
 
 export function recoverStaleTasks() {
   const staleTasks = listProcessingTasks();
@@ -570,6 +654,10 @@ export async function migrateLegacyStoreIfNeeded() {
 
 export function setAnalysisWorkerForTests(worker?: AnalysisWorker) {
   analysisWorker = worker ?? runAnalysisPipeline;
+}
+
+export function setUploadPreparationWorkerForTests(worker?: UploadPreparationWorker) {
+  uploadPreparationWorker = worker ?? prepareUploadedTaskForSelectionInternal;
 }
 
 export function getActiveAnalysisTaskForTests(taskId: string) {

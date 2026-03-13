@@ -24,7 +24,7 @@ test('上传页默认禁用态', async ({ page }) => {
 
   await page.goto('/upload')
 
-  await expect(page.getByRole('button', { name: '确认并开始分析' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '上传并粗扫片段' })).toBeDisabled()
   await expect(page.getByRole('heading', { name: '当前就绪检查' })).toBeVisible()
   await expect(page.getByText('当前还不能提交')).toBeVisible()
   await expect(page.getByRole('link', { name: '查看拍摄规范' })).toHaveAttribute('href', '/guide')
@@ -42,7 +42,7 @@ test('上传页无效文件阻塞提交', async ({ page }) => {
   await expect(blockingReasons.getByText('文件过小，通常说明内容不完整或文件异常。')).toBeVisible()
 
   await page.getByRole('checkbox', { name: '我已确认这段视频只包含当前动作，主体清晰、完整，且基本符合拍摄要求。' }).check()
-  await expect(page.getByRole('button', { name: '确认并开始分析' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '上传并粗扫片段' })).toBeDisabled()
 })
 
 test('上传页合规文件解锁提交', async ({ page }) => {
@@ -54,30 +54,41 @@ test('上传页合规文件解锁提交', async ({ page }) => {
   await expect(page.getByText('文件名：valid-clear.mp4')).toBeVisible()
   await expect(page.getByText('时长：8 秒')).toBeVisible()
   await expect(page.getByText('时长符合当前 MVP 分析窗口。')).toBeVisible()
-  await expect(page.getByRole('button', { name: '确认并开始分析' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '上传并粗扫片段' })).toBeDisabled()
 
   await page.getByRole('checkbox', { name: '我已确认这段视频只包含当前动作，主体清晰、完整，且基本符合拍摄要求。' }).check()
-  await expect(page.getByRole('button', { name: '确认并开始分析' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '上传并粗扫片段' })).toBeEnabled()
 })
 
-test('提交后进入处理中页', async ({ page }) => {
+test('粗扫后可选片段并进入处理中页', async ({ page }) => {
   await mockApi(page)
 
   await page.goto('/upload')
   await page.setInputFiles('input[type="file"]', validVideoPath)
   await page.getByRole('checkbox', { name: '我已确认这段视频只包含当前动作，主体清晰、完整，且基本符合拍摄要求。' }).check()
-  await page.getByRole('button', { name: '确认并开始分析' }).click()
+  await page.getByRole('button', { name: '上传并粗扫片段' }).click()
+
+  await expect(page.getByRole('heading', { name: '选择要分析的挥拍片段' })).toBeVisible()
+  await expect(page.getByText('系统推荐')).toBeVisible()
+  await expect(page.getByRole('button', { name: '确认片段并开始分析' })).toBeEnabled()
+  await page.getByRole('button', { name: '确认片段并开始分析' }).click()
 
   await expect(page).toHaveURL(/\/processing$/)
   await expect(page.getByRole('heading', { name: '当前任务：正手高远球' })).toBeVisible()
   await expect(page.getByText('当前文件')).toBeVisible()
   await expect(page.getByText('valid-clear.mp4')).toBeVisible()
+  await expect(page.getByText('分析片段')).toBeVisible()
+  await expect(page.getByText('segment-02')).toBeVisible()
   await expect(page.getByRole('heading', { name: '分步骤反馈' })).toBeVisible()
-  await expect(page.getByText('视频已上传')).toBeVisible()
+  await expect(page.getByText('正在校验与抽帧')).toBeVisible()
 })
 
 test('首页切换到杀球后可进入对应上传与处理中链路', async ({ page }) => {
-  await mockApi(page, buildActionScenario('smash'))
+  const smashScenario = buildActionScenario('smash')
+  await mockApi(page, {
+    ...smashScenario,
+    currentTaskStatus: smashScenario.startTaskResponse,
+  })
 
   await page.goto('/')
 
@@ -95,9 +106,11 @@ test('首页切换到杀球后可进入对应上传与处理中链路', async ({
 
   await page.setInputFiles('input[type="file"]', validVideoPath)
   await page.getByRole('checkbox', { name: '我已确认这段视频只包含当前动作，主体清晰、完整，且基本符合拍摄要求。' }).check()
-  await expect(page.getByRole('button', { name: '确认并开始分析' })).toBeEnabled()
-  await page.getByRole('button', { name: '确认并开始分析' }).click()
+  await expect(page.getByRole('button', { name: '上传并粗扫片段' })).toBeEnabled()
+  await page.getByRole('button', { name: '上传并粗扫片段' }).click()
+  await expect(page.getByRole('button', { name: '确认片段并开始分析' })).toBeEnabled()
+  await page.getByRole('button', { name: '确认片段并开始分析' }).click()
 
   await expect(page).toHaveURL(/\/(processing|report)$/)
-  await expect(page.getByText('杀球', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: '当前任务：杀球' })).toBeVisible()
 })

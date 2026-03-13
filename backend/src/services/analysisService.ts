@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { PoseAnalysisResult } from '../types/task';
+import { PoseAnalysisResult, SegmentSelectionMode, SwingSegmentCandidate } from '../types/task';
 
 const execFileAsync = promisify(execFile);
 
@@ -36,4 +36,27 @@ export async function estimatePoseForTaskDir(taskDir: string): Promise<PoseAnaly
 
 export async function estimatePoseForArtifacts(relativeArtifactsDir: string): Promise<PoseAnalysisResult> {
   return estimatePoseForTaskDir(relativeArtifactsDir);
+}
+
+export interface SwingSegmentDetectionResult {
+  segmentDetectionVersion: string;
+  segmentSelectionMode: SegmentSelectionMode;
+  recommendedSegmentId: string;
+  swingSegments: SwingSegmentCandidate[];
+}
+
+export async function detectSwingSegmentsForVideo(videoPath: string): Promise<SwingSegmentDetectionResult> {
+  const pythonBin = process.env.PYTHON_BIN || 'python3';
+  const analysisEntry = getAnalysisServiceEntry();
+  const { stdout } = await execFileAsync(pythonBin, [analysisEntry, 'detect-segments', videoPath], {
+    encoding: 'utf8',
+  });
+  const output = stdout.trim();
+  const parsed = JSON.parse(output) as { result?: SwingSegmentDetectionResult };
+
+  if (!parsed.result?.recommendedSegmentId || !Array.isArray(parsed.result.swingSegments)) {
+    throw new Error('analysis-service returned no swing segment detection result');
+  }
+
+  return parsed.result;
 }

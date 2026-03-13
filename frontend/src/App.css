@@ -1174,6 +1174,7 @@ img {
 
 .standard-summary-note,
 .recognition-context-card,
+.swing-segments-card,
 .pose-overlay-card,
 .training-kickoff-card,
 .report-cta-shell {
@@ -1182,6 +1183,9 @@ img {
 
 .recognition-lead-card,
 .recognition-metadata-item,
+.segment-summary-item,
+.segment-detail-card,
+.segment-chip,
 .pose-overlay-media,
 .pose-overlay-copy,
 .pose-overlay-frame-card {
@@ -1197,6 +1201,8 @@ img {
 }
 
 .recognition-metadata-grid,
+.segment-summary-strip,
+.segment-chip-row,
 .phase-breakdown-grid,
 .pose-overlay-hero,
 .pose-overlay-grid {
@@ -1211,6 +1217,102 @@ img {
 
 .recognition-metadata-item {
   padding: 14px;
+}
+
+.swing-segments-card {
+  padding: 18px;
+}
+
+.segment-summary-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.segment-summary-item {
+  padding: 14px;
+}
+
+.segment-summary-item span,
+.segment-chip span,
+.segment-chip em {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.segment-summary-item strong,
+.segment-chip strong,
+.segment-detail-head strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.segment-chip-row {
+  margin-top: 2px;
+}
+
+.segment-chip {
+  width: 100%;
+  padding: 14px;
+  text-align: left;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.segment-chip.active {
+  border-color: rgba(47, 107, 255, 0.42);
+  background: linear-gradient(180deg, rgba(234, 240, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 100%);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
+.segment-chip em {
+  margin-top: 6px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.segment-detail-card {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.segment-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.segment-detail-head p {
+  margin: 6px 0 0;
+}
+
+.segment-badge-row,
+.segment-quality-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.segment-flag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.segment-flag.positive {
+  color: var(--success);
+  border-color: rgba(30, 158, 104, 0.16);
+  background: var(--success-soft);
 }
 
 .phase-breakdown-card {

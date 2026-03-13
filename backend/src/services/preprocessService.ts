@@ -2,12 +2,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { FlowErrorCode, PreprocessArtifacts, PreprocessFrameItem, VideoMetadata } from '../types/task';
+import type {
+  FlowErrorCode,
+  PreprocessArtifacts,
+  PreprocessFrameItem,
+  SegmentSelectionMode,
+  SegmentScanSummary,
+  SegmentSelectionWindow,
+  SwingSegmentCandidate,
+  VideoMetadata,
+} from '../types/task';
 import { uploadConstraints } from './uploadFlowConfig';
 import { getPreprocessDir } from './artifactStore';
+import { detectSwingSegmentsForVideo, type SwingSegmentDetectionResult } from './analysisService';
 
 const DEFAULT_FRAME_RATE = 25;
+const FULL_VIDEO_FALLBACK_SEGMENT_VERSION = 'coarse_motion_scan_v1';
 const execFileAsync = promisify(execFile);
+type SwingSegmentDetector = (sourcePath: string) => Promise<SwingSegmentDetectionResult>;
+let swingSegmentDetector: SwingSegmentDetector = detectSwingSegmentsForVideo;
 
 function now() {
   return new Date().toISOString();
@@ -30,11 +43,152 @@ function clearDir(target: string) {
   fs.mkdirSync(target, { recursive: true });
 }
 
-function buildSampleTimestamps(durationSeconds: number, targetFrameCount: number) {
-  if (durationSeconds <= 0 || targetFrameCount <= 0) return [];
-  if (targetFrameCount === 1) return [Number((durationSeconds / 2).toFixed(2))];
-  const step = durationSeconds / (targetFrameCount + 1);
-  return Array.from({ length: targetFrameCount }, (_, index) => Number((step * (index + 1)).toFixed(2)));
+function roundSeconds(value: number) {
+  return Number(value.toFixed(3));
+}
+
+function buildSampleTimestampsInWindow(startSeconds: number, endSeconds: number, targetFrameCount: number) {
+  const normalizedStart = Math.max(0, startSeconds);
+  const normalizedEnd = Math.max(normalizedStart, endSeconds);
+  const windowDuration = normalizedEnd - normalizedStart;
+
+  if (windowDuration <= 0 || targetFrameCount <= 0) return [];
+  if (targetFrameCount === 1) return [roundSeconds(normalizedStart + (windowDuration / 2))];
+
+  const step = windowDuration / (targetFrameCount + 1);
+  return Array.from({ length: targetFrameCount }, (_, index) => roundSeconds(normalizedStart + (step * (index + 1))));
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getVideoDurationMs(metadata: VideoMetadata) {
+  return Math.max(1, Math.round((metadata.durationSeconds ?? 0) * 1000));
+}
+
+function buildFallbackSegment(metadata: VideoMetadata): SwingSegmentCandidate {
+  const durationMs = getVideoDurationMs(metadata);
+  return {
+    segmentId: 'segment-01',
+    startTimeMs: 0,
+    endTimeMs: durationMs,
+    startFrame: 1,
+    endFrame: Math.max(1, metadata.estimatedFrames ?? Math.round((metadata.durationSeconds ?? 0) * (metadata.frameRate ?? DEFAULT_FRAME_RATE))),
+    durationMs,
+    motionScore: 0,
+    confidence: 0.2,
+    rankingScore: 0.2,
+    coarseQualityFlags: ['motion_too_weak'],
+    detectionSource: 'coarse_motion_scan_v1',
+  };
+}
+
+function sanitizeSegments(segments: SwingSegmentCandidate[] | undefined, metadata: VideoMetadata) {
+  const durationMs = getVideoDurationMs(metadata);
+  if (!segments?.length) {
+    return [buildFallbackSegment(metadata)];
+  }
+
+  return segments.map((segment, index) => {
+    const startTimeMs = clamp(Math.round(segment.startTimeMs), 0, durationMs);
+    const endTimeMs = clamp(Math.max(startTimeMs + 1, Math.round(segment.endTimeMs)), startTimeMs + 1, durationMs);
+    return {
+      ...segment,
+      segmentId: segment.segmentId || `segment-${String(index + 1).padStart(2, '0')}`,
+      startTimeMs,
+      endTimeMs,
+      durationMs: Math.max(1, endTimeMs - startTimeMs),
+      startFrame: segment.startFrame,
+      endFrame: segment.endFrame,
+      motionScore: Number((segment.motionScore ?? 0).toFixed(4)),
+      confidence: Number((segment.confidence ?? 0).toFixed(4)),
+      rankingScore: Number((segment.rankingScore ?? 0).toFixed(4)),
+      coarseQualityFlags: [...new Set(segment.coarseQualityFlags ?? [])],
+      detectionSource: segment.detectionSource ?? 'coarse_motion_scan_v1',
+    };
+  });
+}
+
+function resolveSelectedSegment(
+  metadata: VideoMetadata,
+  segments: SwingSegmentCandidate[],
+  preferredSegmentId?: string,
+  fallbackSegmentId?: string,
+): {
+  selectedSegment: SwingSegmentCandidate;
+  recommendedSegmentId: string;
+  segmentSelectionMode: SegmentSelectionMode;
+} {
+  const recommended = segments.find((segment) => segment.segmentId === fallbackSegmentId) ?? segments[0] ?? buildFallbackSegment(metadata);
+  const selectedSegment = segments.find((segment) => segment.segmentId === preferredSegmentId) ?? recommended;
+  const isFullVideoFallback = selectedSegment.startTimeMs <= 0 && selectedSegment.endTimeMs >= getVideoDurationMs(metadata);
+
+  return {
+    selectedSegment,
+    recommendedSegmentId: recommended.segmentId,
+    segmentSelectionMode: isFullVideoFallback ? 'full_video_fallback' : 'auto_recommended',
+  };
+}
+
+async function detectSegments(sourcePath: string, metadata: VideoMetadata) {
+  try {
+    const result = await swingSegmentDetector(sourcePath);
+    const swingSegments = sanitizeSegments(result.swingSegments, metadata);
+    const selection = resolveSelectedSegment(metadata, swingSegments, result.recommendedSegmentId, result.recommendedSegmentId);
+    return {
+      segmentDetectionVersion: result.segmentDetectionVersion || FULL_VIDEO_FALLBACK_SEGMENT_VERSION,
+      swingSegments,
+      ...selection,
+    };
+  } catch {
+    const fallbackSegment = buildFallbackSegment(metadata);
+    return {
+      segmentDetectionVersion: FULL_VIDEO_FALLBACK_SEGMENT_VERSION,
+      swingSegments: [fallbackSegment],
+      selectedSegment: fallbackSegment,
+      recommendedSegmentId: fallbackSegment.segmentId,
+      segmentSelectionMode: 'full_video_fallback' as const,
+    };
+  }
+}
+
+export function setSwingSegmentDetectorForTests(detector?: SwingSegmentDetector) {
+  swingSegmentDetector = detector ?? detectSwingSegmentsForVideo;
+}
+
+export async function scanVideoSegments(sourcePath: string, metadata: VideoMetadata): Promise<SegmentScanSummary> {
+  const { segmentDetectionVersion, swingSegments, recommendedSegmentId, selectedSegment, segmentSelectionMode } = await detectSegments(sourcePath, metadata);
+  return {
+    status: 'completed',
+    segmentDetectionVersion,
+    swingSegments,
+    recommendedSegmentId,
+    selectedSegmentId: selectedSegment.segmentId,
+    segmentSelectionMode,
+  };
+}
+
+function resolveSelectedSegmentFromScan(metadata: VideoMetadata, segmentScan: SegmentScanSummary, preferredSegmentId?: string) {
+  return resolveSelectedSegment(
+    metadata,
+    sanitizeSegments(segmentScan.swingSegments, metadata),
+    preferredSegmentId ?? segmentScan.selectedSegmentId ?? segmentScan.recommendedSegmentId,
+    segmentScan.recommendedSegmentId,
+  );
+}
+
+function buildSourceWindow(selectedSegment: SwingSegmentCandidate): SegmentSelectionWindow {
+  return {
+    startTimeMs: selectedSegment.startTimeMs,
+    endTimeMs: selectedSegment.endTimeMs,
+    startFrame: selectedSegment.startFrame,
+    endFrame: selectedSegment.endFrame,
+  };
+}
+
+function getTargetFrameCount(durationSeconds: number) {
+  return Math.min(12, Math.max(6, Math.round(durationSeconds / 0.18)));
 }
 
 async function runCommand(command: string, args: string[]) {
@@ -137,9 +291,25 @@ export function validateUploadedVideo(metadata: VideoMetadata): { errorCode: Flo
   return null;
 }
 
-export async function extractFrames(taskId: string, sourcePath: string, metadata: VideoMetadata): Promise<PreprocessArtifacts> {
-  const targetFrameCount = Math.min(12, Math.max(6, Math.round((metadata.durationSeconds ?? 6) / 1.2)));
-  const sampleTimestamps = buildSampleTimestamps(metadata.durationSeconds ?? 6, targetFrameCount);
+export async function extractFrames(
+  taskId: string,
+  sourcePath: string,
+  metadata: VideoMetadata,
+  segmentScan?: SegmentScanSummary,
+): Promise<PreprocessArtifacts> {
+  const scan = segmentScan ?? await scanVideoSegments(sourcePath, metadata);
+  const {
+    selectedSegment,
+    recommendedSegmentId,
+    segmentSelectionMode,
+  } = resolveSelectedSegmentFromScan(metadata, scan, scan.selectedSegmentId);
+  const selectedDurationSeconds = Math.max(0.3, selectedSegment.durationMs / 1000);
+  const targetFrameCount = getTargetFrameCount(selectedDurationSeconds);
+  const sampleTimestamps = buildSampleTimestampsInWindow(
+    selectedSegment.startTimeMs / 1000,
+    selectedSegment.endTimeMs / 1000,
+    targetFrameCount,
+  );
   const artifactsDir = getPreprocessDir(taskId);
   clearDir(artifactsDir);
 
@@ -175,10 +345,16 @@ export async function extractFrames(taskId: string, sourcePath: string, metadata
     metadataExtractedAt: now(),
     artifactsDir: path.posix.join('artifacts', 'tasks', taskId, 'preprocess'),
     manifestPath: path.posix.join('artifacts', 'tasks', taskId, 'preprocess', 'manifest.json'),
+    segmentDetectionVersion: scan.segmentDetectionVersion,
+    swingSegments: scan.swingSegments,
+    recommendedSegmentId,
+    segmentSelectionMode,
+    selectedSegmentId: selectedSegment.segmentId,
     framePlan: {
-      strategy: 'uniform-sampling-ffmpeg-v1',
+      strategy: 'segment-aware-uniform-sampling-ffmpeg-v1',
       targetFrameCount,
       sampleTimestamps,
+      sourceWindow: buildSourceWindow(selectedSegment),
     },
     sampledFrames,
   };

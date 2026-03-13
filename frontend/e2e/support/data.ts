@@ -8,7 +8,9 @@ import type {
   HistoryDetailResponse,
   HistoryListResponse,
   PoseAnalysisResult,
+  SegmentScanSummary,
   TaskStatusResponse,
+  UploadTaskResponse,
 } from '../../../shared/contracts'
 
 type SessionSnapshot = {
@@ -43,7 +45,58 @@ function readJson<T>(filename: string) {
 }
 
 export const historyResponse = readJson<HistoryListResponse>('history.json')
-export const historyDetailResponse = readJson<HistoryDetailResponse>('history-detail.json')
+const rawHistoryDetailResponse = readJson<HistoryDetailResponse>('history-detail.json')
+const segmentFields = {
+  swingSegments: [
+    {
+      segmentId: 'segment-01',
+      startTimeMs: 1180,
+      endTimeMs: 2080,
+      startFrame: 10,
+      endFrame: 19,
+      durationMs: 900,
+      motionScore: 0.54,
+      confidence: 0.68,
+      rankingScore: 0.6,
+      coarseQualityFlags: ['too_short'],
+      detectionSource: 'coarse_motion_scan_v1',
+    },
+    {
+      segmentId: 'segment-02',
+      startTimeMs: 6320,
+      endTimeMs: 8120,
+      startFrame: 48,
+      endFrame: 62,
+      durationMs: 1800,
+      motionScore: 0.84,
+      confidence: 0.87,
+      rankingScore: 0.82,
+      coarseQualityFlags: [],
+      detectionSource: 'coarse_motion_scan_v1',
+    },
+  ],
+  recommendedSegmentId: 'segment-02',
+  selectedSegmentId: 'segment-02',
+  segmentDetectionVersion: 'coarse_motion_scan_v1',
+  segmentSelectionMode: 'auto_recommended',
+} as const
+
+const uploadSegmentScan: SegmentScanSummary = {
+  status: 'completed',
+  segmentDetectionVersion: segmentFields.segmentDetectionVersion,
+  recommendedSegmentId: segmentFields.recommendedSegmentId,
+  selectedSegmentId: segmentFields.recommendedSegmentId,
+  segmentSelectionMode: segmentFields.segmentSelectionMode,
+  swingSegments: [...segmentFields.swingSegments],
+}
+
+export const historyDetailResponse: HistoryDetailResponse = {
+  ...rawHistoryDetailResponse,
+  report: {
+    ...rawHistoryDetailResponse.report,
+    ...segmentFields,
+  },
+}
 export const reportResponse = historyDetailResponse.report
 export const comparisonResponse = readJson<ComparisonResponse>('comparison.json')
 
@@ -86,6 +139,7 @@ export const processingLifecycle = {
     createdAt: '2026-03-13T01:20:00.000Z',
     updatedAt: '2026-03-13T01:20:03.000Z',
     startedAt: '2026-03-13T01:20:03.000Z',
+    segmentScan: uploadSegmentScan,
   } satisfies TaskStatusResponse,
   completed: {
     ...reportTaskStatus,
@@ -107,6 +161,12 @@ export const processingLifecycle = {
       occurredAt: '2026-03-13T01:22:10.000Z',
     },
   } satisfies TaskStatusResponse,
+}
+
+export const uploadTaskResponse: UploadTaskResponse = {
+  ...processingLifecycle.uploaded,
+  fileName: 'valid-clear.mp4',
+  segmentScan: uploadSegmentScan,
 }
 
 export const poseResponse: PoseAnalysisResult = {
@@ -221,13 +281,19 @@ export function buildActionScenario(actionType: ActionType) {
       actionType,
     } satisfies TaskStatusResponse,
     uploadTaskResponse: {
-      ...processingLifecycle.uploaded,
+      ...uploadTaskResponse,
       actionType,
       fileName: actionType === 'smash' ? 'valid-smash.mp4' : 'valid-clear.mp4',
+      segmentScan: {
+        ...uploadSegmentScan,
+      },
     },
     startTaskResponse: {
       ...processingLifecycle.processing,
       actionType,
+      segmentScan: {
+        ...uploadSegmentScan,
+      },
     } satisfies TaskStatusResponse,
   }
 }

@@ -19,6 +19,8 @@ export function DebugDrawer({ open, onClose }: { open: boolean; onClose: () => v
     log,
     report,
     poseResult,
+    segmentScan,
+    selectedSegmentId,
     isBusy,
     isPolling,
     refreshStatus,
@@ -46,6 +48,8 @@ export function DebugDrawer({ open, onClose }: { open: boolean; onClose: () => v
           <div className="debug-kv"><span>预处理</span><strong>{preprocessStatus}</strong></div>
           <div className="debug-kv"><span>Pose</span><strong>{poseStatus}</strong></div>
           <div className="debug-kv"><span>对比基线</span><strong>{selectedCompareTaskId || '—'}</strong></div>
+          <div className="debug-kv"><span>推荐片段</span><strong>{report?.recommendedSegmentId || segmentScan?.recommendedSegmentId || '—'}</strong></div>
+          <div className="debug-kv"><span>分析片段</span><strong>{report?.selectedSegmentId || selectedSegmentId || '—'}</strong></div>
         </div>
         {errorState ? (
           <div className="inline-error compact">

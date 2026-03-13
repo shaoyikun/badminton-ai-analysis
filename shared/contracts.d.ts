@@ -162,15 +162,62 @@ export interface PreprocessFrameItem {
   relativePath: string;
 }
 
+export type SwingSegmentQualityFlag =
+  | 'motion_too_weak'
+  | 'too_short'
+  | 'too_long'
+  | 'edge_clipped_start'
+  | 'edge_clipped_end'
+  | 'subject_maybe_small'
+  | 'motion_maybe_occluded';
+
+export interface SwingSegmentCandidate {
+  segmentId: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  startFrame?: number;
+  endFrame?: number;
+  durationMs: number;
+  motionScore: number;
+  confidence: number;
+  rankingScore: number;
+  coarseQualityFlags: SwingSegmentQualityFlag[];
+  detectionSource: 'coarse_motion_scan_v1';
+}
+
+export interface SegmentSelectionWindow {
+  startTimeMs: number;
+  endTimeMs: number;
+  startFrame?: number;
+  endFrame?: number;
+}
+
+export type SegmentSelectionMode = 'auto_recommended' | 'full_video_fallback';
+
+export interface SegmentScanSummary {
+  status: 'completed';
+  segmentDetectionVersion: string;
+  swingSegments: SwingSegmentCandidate[];
+  recommendedSegmentId: string;
+  selectedSegmentId?: string;
+  segmentSelectionMode?: SegmentSelectionMode;
+}
+
 export interface PreprocessArtifacts {
   normalizedFileName: string;
   metadataExtractedAt: string;
   artifactsDir: string;
   manifestPath: string;
+  segmentDetectionVersion?: string;
+  swingSegments?: SwingSegmentCandidate[];
+  recommendedSegmentId?: string;
+  segmentSelectionMode?: SegmentSelectionMode;
+  selectedSegmentId?: string;
   framePlan: {
     strategy: string;
     targetFrameCount: number;
     sampleTimestamps: number[];
+    sourceWindow?: SegmentSelectionWindow;
   };
   sampledFrames: PreprocessFrameItem[];
 }
@@ -182,6 +229,7 @@ export interface PreprocessInfo {
   errorCode?: FlowErrorCode;
   errorMessage?: string;
   metadata?: VideoMetadata;
+  segmentScan?: SegmentScanSummary;
   artifacts?: PreprocessArtifacts;
 }
 
@@ -536,6 +584,11 @@ export interface ReportResult {
   evidenceNotes?: string[];
   createdAt?: string;
   poseBased?: boolean;
+  swingSegments?: SwingSegmentCandidate[];
+  recommendedSegmentId?: string;
+  segmentDetectionVersion?: string;
+  segmentSelectionMode?: SegmentSelectionMode;
+  selectedSegmentId?: string;
   recognitionContext?: RecognitionContext;
   phaseBreakdown?: ReportPhaseAssessment[];
   visualEvidence?: VisualEvidence;
@@ -627,10 +680,15 @@ export interface TaskResource {
   updatedAt: string;
   startedAt?: string;
   completedAt?: string;
+  segmentScan?: SegmentScanSummary;
 }
 
 export interface CreateTaskRequest {
   actionType: ActionType;
+}
+
+export interface StartTaskRequest {
+  selectedSegmentId?: string;
 }
 
 export interface CreateTaskResponse extends TaskResource {}

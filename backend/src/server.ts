@@ -7,7 +7,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import type { CreateTaskRequest, HistoryListQuery, ReportResult } from './types/task';
+import type { CreateTaskRequest, HistoryListQuery, ReportResult, StartTaskRequest } from './types/task';
 import { getTask, getReportRow } from './services/taskRepository';
 import { getMaxFileSizeBytes } from './services/preprocessService';
 import {
@@ -18,9 +18,10 @@ import {
   getRetestComparison,
   listTaskHistory,
   migrateLegacyStoreIfNeeded,
+  prepareUploadedTaskForSelection,
   recoverStaleTasks,
   saveUpload,
-  startAnalysis,
+  startAnalysisWithSelection,
 } from './services/taskService';
 import { buildErrorSnapshot, getErrorStatusCode } from './services/errorCatalog';
 import { getArtifactsDir } from './services/database';
@@ -120,11 +121,13 @@ export async function buildServer() {
     }
 
     try {
-      const updated = saveUpload(params.taskId, file.filename, stagedUploadPath, file.mimetype);
-      if (!updated) {
+      const stored = saveUpload(params.taskId, file.filename, stagedUploadPath, file.mimetype);
+      if (!stored) {
         fs.rmSync(stagedUploadPath, { force: true });
         return sendError(reply, 'task_not_found');
       }
+
+      const updated = await prepareUploadedTaskForSelection(params.taskId);
 
       return {
         ...toTaskResource(updated),
@@ -138,6 +141,7 @@ export async function buildServer() {
 
   app.post('/api/tasks/:taskId/start', async (request, reply) => {
     const params = request.params as { taskId: string };
+    const body = request.body as StartTaskRequest | undefined;
     const task = getTask(params.taskId);
     if (!task) {
       return sendError(reply, 'task_not_found');
@@ -147,7 +151,7 @@ export async function buildServer() {
     }
 
     try {
-      const updated = await startAnalysis(params.taskId);
+      const updated = await startAnalysisWithSelection(params.taskId, body);
       if (!updated) {
         return sendError(reply, 'task_not_found');
       }
