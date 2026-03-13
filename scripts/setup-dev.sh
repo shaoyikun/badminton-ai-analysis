@@ -47,7 +47,7 @@ ensure_cmd() {
   }
 }
 
-echo "[1/4] Checking base tools..."
+echo "[1/5] Checking base tools..."
 echo "Auto-install currently supports Homebrew and apt-get. Other environments require manual setup."
 ensure_cmd node node
 ensure_cmd npm node
@@ -56,11 +56,11 @@ ensure_cmd ffmpeg ffmpeg
 ensure_cmd ffprobe ffmpeg
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
 
-echo "[2/4] Installing backend dependencies..."
+echo "[2/5] Installing backend dependencies..."
 cd "$ROOT_DIR/backend"
 npm install
 
-echo "[3/4] Installing frontend dependencies..."
+echo "[3/5] Installing frontend dependencies..."
 cd "$ROOT_DIR/frontend"
 npm install
 

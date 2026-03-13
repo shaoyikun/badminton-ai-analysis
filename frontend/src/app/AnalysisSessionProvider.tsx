@@ -11,12 +11,7 @@ import {
 import type {
   ActionType,
   ComparisonResponse,
-  CreateTaskRequest,
-  ErrorResponse,
-  FlowActionTarget,
   FlowErrorCode,
-  HistoryDetailResponse,
-  HistoryListResponse,
   PoseAnalysisResult,
   PoseStatus,
   PreprocessStatus,
@@ -28,7 +23,6 @@ import type {
   TaskStage,
   TaskStatus,
   TaskStatusResponse,
-  UploadTaskResponse,
 } from '../../../shared/contracts'
 import {
   getActionLabel,
@@ -36,6 +30,29 @@ import {
   getErrorRouteAction,
   type LocalVideoSummary,
 } from '../features/upload/uploadFlow'
+import {
+  createTaskRequest,
+  fetchDebugPose,
+  fetchHistoryDetail,
+  fetchHistoryList,
+  fetchTaskComparison,
+  fetchTaskResult,
+  fetchTaskStatus,
+  getFallbackErrorCode,
+  startTaskAnalysis,
+  uploadTaskVideo,
+} from './analysis-session/api'
+import {
+  deriveStageStatuses,
+  getSegmentWindowForId,
+  runScanVideoFlow,
+  runStartAnalysisFlow,
+  runStartSelectedSegmentFlow,
+  startPollingTask,
+  stopPollingTask,
+} from './analysis-session/flow'
+import { readSessionSnapshot, writeSessionSnapshot } from './analysis-session/storage'
+import type { ActionTaskStateMap, ErrorState, FlowResult, SessionSnapshot } from './analysis-session/types'
 
 export type {
   ActionType,
@@ -48,8 +65,8 @@ export type {
   TaskStage,
   TaskStatus,
 } from '../../../shared/contracts'
-
-export const API_BASE = import.meta.env.VITE_API_BASE || ''
+export { API_BASE } from './analysis-session/api'
+export type { ErrorState } from './analysis-session/types'
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   created: '待上传',
@@ -74,41 +91,6 @@ export const POSE_LABELS: Record<PoseStatus, string> = {
   failed: '识别失败',
 }
 
-export type ErrorState = {
-  errorCode?: FlowErrorCode | string
-  title: string
-  summary: string
-  explanation: string
-  suggestions: string[]
-  uploadBanner: string
-  primaryAction: FlowActionTarget
-  secondaryAction: FlowActionTarget
-} | null
-
-type ActionTaskStateMap = Partial<Record<ActionType, string>>
-
-type SessionSnapshot = {
-  actionType: ActionType
-  taskId: string
-  latestCompletedTaskIds: ActionTaskStateMap
-  selectedCompareTaskIds: ActionTaskStateMap
-  selectedVideoSummary: LocalVideoSummary | null
-  uploadChecklistConfirmed: boolean
-  segmentScan: SegmentScanSummary | null
-  selectedSegmentId: string
-  selectedSegmentWindow: SegmentSelectionWindow | null
-  errorState: ErrorState
-  debugEnabled: boolean
-}
-
-type LegacySessionSnapshot = Partial<SessionSnapshot> & {
-  latestCompletedTaskId?: string
-  selectedCompareTaskId?: string
-}
-
-type FlowResult =
-  | { ok: true }
-  | { ok: false; reason: 'validation' | 'network' | 'server'; message?: string }
 
 type AnalysisSessionContextValue = {
   actionType: ActionType
@@ -169,150 +151,7 @@ type AnalysisSessionContextValue = {
   appendLog: (text: string) => void
 }
 
-const SESSION_STORAGE_KEY = 'badminton-ai-analysis-session'
-
 const AnalysisSessionContext = createContext<AnalysisSessionContextValue | null>(null)
-
-function readSessionSnapshot(): SessionSnapshot {
-  if (typeof window === 'undefined') {
-    return {
-      actionType: 'clear',
-      taskId: '',
-      latestCompletedTaskIds: {},
-      selectedCompareTaskIds: {},
-      selectedVideoSummary: null,
-      uploadChecklistConfirmed: false,
-      segmentScan: null,
-      selectedSegmentId: '',
-      selectedSegmentWindow: null,
-      errorState: null,
-      debugEnabled: false,
-    }
-  }
-
-  try {
-    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
-    if (!raw) throw new Error('missing session')
-    const parsed = JSON.parse(raw) as LegacySessionSnapshot
-    const latestCompletedTaskIds = parsed.latestCompletedTaskIds ?? (
-      'latestCompletedTaskId' in parsed && typeof parsed.latestCompletedTaskId === 'string' && parsed.latestCompletedTaskId
-        ? { [(parsed.actionType === 'smash' ? 'smash' : 'clear') as ActionType]: parsed.latestCompletedTaskId }
-        : {}
-    )
-    const selectedCompareTaskIds = parsed.selectedCompareTaskIds ?? (
-      'selectedCompareTaskId' in parsed && typeof parsed.selectedCompareTaskId === 'string' && parsed.selectedCompareTaskId
-        ? { [(parsed.actionType === 'smash' ? 'smash' : 'clear') as ActionType]: parsed.selectedCompareTaskId }
-        : {}
-    )
-    return {
-      actionType: parsed.actionType === 'smash' ? 'smash' : 'clear',
-      taskId: parsed.taskId ?? '',
-      latestCompletedTaskIds,
-      selectedCompareTaskIds,
-      selectedVideoSummary: parsed.selectedVideoSummary ?? null,
-      uploadChecklistConfirmed: Boolean(parsed.uploadChecklistConfirmed),
-      segmentScan: parsed.segmentScan ?? null,
-      selectedSegmentId: parsed.selectedSegmentId ?? '',
-      selectedSegmentWindow: parsed.selectedSegmentWindow ?? parsed.segmentScan?.selectedSegmentWindow ?? null,
-      errorState: parsed.errorState ?? null,
-      debugEnabled: Boolean(parsed.debugEnabled),
-    }
-  } catch {
-    return {
-      actionType: 'clear',
-      taskId: '',
-      latestCompletedTaskIds: {},
-      selectedCompareTaskIds: {},
-      selectedVideoSummary: null,
-      uploadChecklistConfirmed: false,
-      segmentScan: null,
-      selectedSegmentId: '',
-      selectedSegmentWindow: null,
-      errorState: null,
-      debugEnabled: false,
-    }
-  }
-}
-
-function parseErrorPayload(data: ErrorResponse | { error?: ErrorResponse['error'] } | { error?: string }) {
-  if (!data || typeof data !== 'object' || !('error' in data) || !data.error) {
-    return undefined
-  }
-  return typeof data.error === 'string' ? undefined : data.error
-}
-
-function summarizeResponseText(rawText: string) {
-  return rawText
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 160)
-}
-
-function buildHttpErrorResponse(response: Response, rawText?: string): ErrorResponse {
-  const summary = rawText ? summarizeResponseText(rawText) : ''
-  return {
-    error: {
-      code: 'internal_error',
-      category: 'internal_recovery',
-      retryable: response.status >= 500,
-      message: summary
-        ? `HTTP ${response.status} ${response.statusText}: ${summary}`
-        : `HTTP ${response.status} ${response.statusText}`,
-      occurredAt: new Date().toISOString(),
-    },
-  }
-}
-
-async function readApiPayload<T>(response: Response): Promise<T | ErrorResponse> {
-  const rawText = await response.text()
-
-  if (!rawText) {
-    if (response.ok) {
-      throw new Error(`empty response body (${response.status})`)
-    }
-    return buildHttpErrorResponse(response)
-  }
-
-  try {
-    return JSON.parse(rawText) as T | ErrorResponse
-  } catch {
-    if (response.ok) {
-      throw new Error(`unexpected response format (${response.status})`)
-    }
-    return buildHttpErrorResponse(response, rawText)
-  }
-}
-
-function getFallbackErrorCode(error: ReturnType<typeof parseErrorPayload>, fallbackCode: FlowErrorCode) {
-  return !error?.code || error.code === 'internal_error' ? fallbackCode : error.code
-}
-
-function deriveStageStatuses(stage: TaskStage | '', status: TaskStatus | '', errorCode?: string): { preprocessStatus: PreprocessStatus; poseStatus: PoseStatus } {
-  if (status === 'created' || stage === 'upload_pending' || !stage) {
-    return { preprocessStatus: 'idle', poseStatus: 'idle' }
-  }
-  if (stage === 'uploaded') {
-    return { preprocessStatus: 'queued', poseStatus: 'idle' }
-  }
-  if (stage === 'validating' || stage === 'extracting_frames') {
-    return { preprocessStatus: 'processing', poseStatus: 'idle' }
-  }
-  if (stage === 'estimating_pose') {
-    return { preprocessStatus: 'completed', poseStatus: 'processing' }
-  }
-  if (stage === 'generating_report' || stage === 'completed') {
-    return { preprocessStatus: 'completed', poseStatus: 'completed' }
-  }
-
-  if (errorCode === 'pose_failed') {
-    return { preprocessStatus: 'completed', poseStatus: 'failed' }
-  }
-  if (errorCode === 'report_generation_failed') {
-    return { preprocessStatus: 'completed', poseStatus: 'completed' }
-  }
-  return { preprocessStatus: 'failed', poseStatus: 'idle' }
-}
 
 export function getErrorRouteActions(errorState: ErrorState) {
   if (!errorState) {
@@ -371,18 +210,6 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
 
   const clearErrorState = useCallback(() => setErrorState(null), [])
 
-  const getSegmentWindowForId = useCallback((scan: SegmentScanSummary | null, segmentId: string) => {
-    if (!scan?.swingSegments?.length || !segmentId) return null
-    const matched = scan.swingSegments.find((segment) => segment.segmentId === segmentId)
-    if (!matched) return null
-    return {
-      startTimeMs: matched.startTimeMs,
-      endTimeMs: matched.endTimeMs,
-      startFrame: matched.startFrame,
-      endFrame: matched.endFrame,
-    } satisfies SegmentSelectionWindow
-  }, [])
-
   const resetUploadDraft = useCallback(() => {
     setFile(null)
     setUploadChecklistConfirmed(false)
@@ -392,11 +219,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      window.clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-    setIsPolling(false)
+    stopPollingTask(pollingRef, setIsPolling)
   }, [])
 
   const prepareFreshUpload = useCallback(() => {
@@ -437,7 +260,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   const updateSelectedSegmentId = useCallback((value: string) => {
     setSelectedSegmentId(value)
     setSelectedSegmentWindow(getSegmentWindowForId(segmentScan, value))
-  }, [getSegmentWindowForId, segmentScan])
+  }, [segmentScan])
 
   const setFriendlyError = useCallback((errorCode?: FlowErrorCode | string, fallback?: string) => {
     lastFailureReasonRef.current = 'server'
@@ -479,14 +302,12 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
 
   const fetchHistory = useCallback(async (nextActionType?: ActionType) => {
     const nextType = nextActionType ?? actionType
-    const response = await fetch(`${API_BASE}/api/history?actionType=${nextType}`)
-    const data = await readApiPayload<HistoryListResponse>(response)
-    if (!response.ok) {
-      const error = parseErrorPayload(data as ErrorResponse)
-      appendLog(`获取历史记录失败：${error?.message ?? '未知错误'}`)
+    const result = await fetchHistoryList(nextType)
+    if (!result.ok) {
+      appendLog(`获取历史记录失败：${result.error?.message ?? '未知错误'}`)
       return []
     }
-    const payload = data as HistoryListResponse
+    const payload = result.data
     setHistory(payload.items ?? [])
     return payload.items ?? []
   }, [actionType, appendLog])
@@ -495,40 +316,32 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
     const currentTaskId = targetTaskId ?? taskId
     if (!currentTaskId) return null
 
-    const response = await fetch(`${API_BASE}/api/debug/tasks/${currentTaskId}/pose`)
-    const data = await readApiPayload<PoseAnalysisResult>(response)
-    if (!response.ok) {
+    const result = await fetchDebugPose(currentTaskId)
+    if (!result.ok) {
       if (!silent && poseStatus === 'failed') {
-        const error = parseErrorPayload(data as ErrorResponse)
-        setFriendlyError(getFallbackErrorCode(error, 'pose_failed'), error?.message)
+        setFriendlyError(getFallbackErrorCode(result.error, 'pose_failed'), result.error?.message)
       }
       return null
     }
 
-    setPoseResult(data as PoseAnalysisResult)
+    setPoseResult(result.data)
     if (!silent) appendLog('已获取姿态摘要结果')
-    return data as PoseAnalysisResult
+    return result.data
   }, [appendLog, poseStatus, setFriendlyError, taskId])
 
   const fetchComparison = useCallback(async (currentTaskId?: string, previousTaskId?: string) => {
     const activeTaskId = currentTaskId ?? report?.taskId ?? latestCompletedTaskId ?? taskId
     if (!activeTaskId) return null
 
-    const url = previousTaskId
-      ? `${API_BASE}/api/tasks/${activeTaskId}/comparison?baselineTaskId=${previousTaskId}`
-      : `${API_BASE}/api/tasks/${activeTaskId}/comparison`
-
-    const response = await fetch(url)
-    const data = await readApiPayload<ComparisonResponse>(response)
-    if (!response.ok) {
+    const result = await fetchTaskComparison(activeTaskId, previousTaskId)
+    if (!result.ok) {
       setComparison(null)
       setComparisonUnavailableReason(null)
-      const error = parseErrorPayload(data as ErrorResponse)
-      if (previousTaskId) appendLog(`自定义对比失败：${error?.message ?? '未知错误'}`)
+      if (previousTaskId) appendLog(`自定义对比失败：${result.error?.message ?? '未知错误'}`)
       return null
     }
 
-    const payload = data as ComparisonResponse
+    const payload = result.data
     setComparison(payload.comparison ?? null)
     setComparisonUnavailableReason(payload.unavailableReason ?? null)
     setSelectedCompareTaskIds((prev) => ({
@@ -545,15 +358,13 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       return null
     }
 
-    const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/result`)
-    const data = await readApiPayload<ReportResult>(response)
-    if (!response.ok) {
-      const error = parseErrorPayload(data as ErrorResponse)
-      setFriendlyError(getFallbackErrorCode(error, 'result_not_ready'), error?.message)
+    const result = await fetchTaskResult(activeTaskId)
+    if (!result.ok) {
+      setFriendlyError(getFallbackErrorCode(result.error, 'result_not_ready'), result.error?.message)
       return null
     }
 
-    const reportPayload = data as ReportResult
+    const reportPayload = result.data
     setTaskId(activeTaskId)
     setStatus('completed')
     setStage('completed')
@@ -578,35 +389,37 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       return null
     }
 
-    const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}`)
-    const data = await readApiPayload<TaskStatusResponse>(response)
-    if (!response.ok) {
-      const error = parseErrorPayload(data)
-      if (!options?.silent) appendLog(`查询状态失败：${error?.message ?? '未知错误'}`)
+    const result = await fetchTaskStatus(activeTaskId)
+    if (!result.ok) {
+      if (!options?.silent) appendLog(`查询状态失败：${result.error?.message ?? '未知错误'}`)
       return null
     }
 
-    applyTaskSnapshot(data as TaskStatusResponse, Boolean(options?.silent))
-    return (data as TaskStatusResponse).status
+    applyTaskSnapshot(result.data, Boolean(options?.silent))
+    return result.data.status
   }, [appendLog, applyTaskSnapshot, taskId])
 
   const startPolling = useCallback((nextTaskId: string) => {
-    stopPolling()
-    setIsPolling(true)
-    appendLog('开始自动轮询任务状态')
-
-    pollingRef.current = window.setInterval(async () => {
-      const nextStatus = await refreshStatus({ silent: true, targetTaskId: nextTaskId })
-      if (nextStatus === 'completed') {
-        stopPolling()
-        appendLog('分析已完成，正在进入报告')
-        await fetchResult(nextTaskId, false)
-      }
-      if (nextStatus === 'failed') {
-        stopPolling()
-      }
-    }, 1500)
+    startPollingTask({
+      pollingRef,
+      setIsPolling,
+      appendLog,
+      stopPolling,
+      onTick: async () => {
+        const nextStatus = await refreshStatus({ silent: true, targetTaskId: nextTaskId })
+        if (nextStatus === 'completed') {
+          stopPolling()
+          appendLog('分析已完成，正在进入报告')
+          await fetchResult(nextTaskId, false)
+        }
+        if (nextStatus === 'failed') {
+          stopPolling()
+        }
+      },
+    })
   }, [appendLog, fetchResult, refreshStatus, stopPolling])
+
+  const getLastFailureReason = useCallback(() => lastFailureReasonRef.current, [])
 
   const createTask = useCallback(async () => {
     try {
@@ -626,24 +439,18 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
         [actionType]: '',
       }))
 
-      const response = await fetch(`${API_BASE}/api/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actionType } satisfies CreateTaskRequest),
-      })
-      const data = await readApiPayload<TaskStatusResponse>(response)
-      if (!response.ok) {
-        const error = parseErrorPayload(data)
+      const result = await createTaskRequest(actionType)
+      if (!result.ok) {
         lastFailureReasonRef.current = 'server'
-        setFriendlyError(getFallbackErrorCode(error, 'internal_error'), error?.message)
-        appendLog(`创建任务失败：${error?.message ?? '未知错误'}`)
+        setFriendlyError(getFallbackErrorCode(result.error, 'internal_error'), result.error?.message)
+        appendLog(`创建任务失败：${result.error?.message ?? '未知错误'}`)
         return null
       }
 
-      applyTaskSnapshot(data as TaskStatusResponse, true)
-      appendLog(`任务已创建：${(data as TaskStatusResponse).taskId}（${selectedActionLabel}）`)
+      applyTaskSnapshot(result.data, true)
+      appendLog(`任务已创建：${result.data.taskId}（${selectedActionLabel}）`)
       await fetchHistory(actionType)
-      return (data as TaskStatusResponse).taskId
+      return result.data.taskId
     } catch (error) {
       lastFailureReasonRef.current = 'network'
       appendLog(`创建任务失败：${error instanceof Error ? error.message : '网络异常'}`)
@@ -661,25 +468,18 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       lastFailureReasonRef.current = null
       setIsBusy(true)
       setErrorState(null)
-      const form = new FormData()
-      form.append('file', file)
-      const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/upload`, {
-        method: 'POST',
-        body: form,
-      })
-      const data = await readApiPayload<UploadTaskResponse>(response)
-      if (!response.ok) {
-        const error = parseErrorPayload(data)
-        setFriendlyError(getFallbackErrorCode(error, 'upload_failed'), error?.message)
+      const result = await uploadTaskVideo(activeTaskId, file)
+      if (!result.ok) {
+        setFriendlyError(getFallbackErrorCode(result.error, 'upload_failed'), result.error?.message)
         return false
       }
 
-      applyTaskSnapshot(data as TaskStatusResponse, true)
-      const uploadedPayload = data as UploadTaskResponse
+      applyTaskSnapshot(result.data, true)
+      const uploadedPayload = result.data
       setSegmentScan(uploadedPayload.segmentScan ?? null)
       setSelectedSegmentId(uploadedPayload.segmentScan?.selectedSegmentId ?? uploadedPayload.segmentScan?.recommendedSegmentId ?? '')
       setSelectedSegmentWindow(uploadedPayload.segmentScan?.selectedSegmentWindow ?? null)
-      appendLog(`上传完成：${(data as UploadTaskResponse).fileName ?? file.name}`)
+      appendLog(`上传完成：${uploadedPayload.fileName ?? file.name}`)
       return true
     } catch (error) {
       lastFailureReasonRef.current = 'network'
@@ -704,25 +504,19 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       setErrorState(null)
       const selectedSegmentIdForRequest = (nextSelectedSegmentId ?? selectedSegmentId) || undefined
       const selectedWindowOverrideForRequest = nextSelectedWindowOverride ?? selectedSegmentWindow
-      const response = await fetch(`${API_BASE}/api/tasks/${activeTaskId}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          selectedSegmentId: selectedSegmentIdForRequest,
-          selectedWindowOverride: selectedWindowOverrideForRequest ?? undefined,
-        }),
+      const result = await startTaskAnalysis(activeTaskId, {
+        selectedSegmentId: selectedSegmentIdForRequest,
+        selectedWindowOverride: selectedWindowOverrideForRequest,
       })
-      const data = await readApiPayload<TaskStatusResponse>(response)
 
-      if (!response.ok) {
-        const error = parseErrorPayload(data)
+      if (!result.ok) {
         setStatus('failed')
         setStage('failed')
-        setFriendlyError(getFallbackErrorCode(error, 'internal_error'), error?.message)
+        setFriendlyError(getFallbackErrorCode(result.error, 'internal_error'), result.error?.message)
         return false
       }
 
-      applyTaskSnapshot(data as TaskStatusResponse, true)
+      applyTaskSnapshot(result.data, true)
       appendLog('已启动分析')
       startPolling(activeTaskId)
       return true
@@ -736,74 +530,40 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   }, [appendLog, applyTaskSnapshot, selectedSegmentId, selectedSegmentWindow, setFriendlyError, startPolling, taskId])
 
   const scanVideoFlow = useCallback(async (): Promise<FlowResult> => {
-    if (!file) {
-      return { ok: false, reason: 'validation', message: '请先选择视频文件。' }
-    }
-
-    const createdTaskId = await createTask()
-    if (!createdTaskId) {
-      return {
-        ok: false,
-        reason: lastFailureReasonRef.current === 'server' ? 'server' : 'network',
-        message: '创建任务失败，请稍后再试。',
-      }
-    }
-
-    const uploaded = await uploadVideo(createdTaskId)
-    if (!uploaded) {
-      return {
-        ok: false,
-        reason: lastFailureReasonRef.current === 'server' ? 'server' : 'network',
-        message: '上传或粗扫失败，请稍后再试。',
-      }
-    }
-
-    return { ok: true }
-  }, [createTask, file, uploadVideo])
+    return runScanVideoFlow({
+      file,
+      createTask,
+      uploadVideo,
+      getLastFailureReason,
+    })
+  }, [createTask, file, getLastFailureReason, uploadVideo])
 
   const startSelectedSegmentFlow = useCallback(async (): Promise<FlowResult> => {
-    if (!taskId) {
-      return { ok: false, reason: 'validation', message: '请先完成视频上传和粗扫。' }
-    }
-
-    if (!segmentScan?.swingSegments?.length) {
-      return { ok: false, reason: 'validation', message: '当前还没有可供选择的挥拍片段。' }
-    }
-
-    if (!selectedSegmentId) {
-      return { ok: false, reason: 'validation', message: '请先选择一个要分析的片段。' }
-    }
-
-    const started = await analyze(taskId, selectedSegmentId, selectedSegmentWindow)
-    if (!started) {
-      return {
-        ok: false,
-        reason: lastFailureReasonRef.current === 'server' ? 'server' : 'network',
-        message: '启动分析失败，请稍后再试。',
-      }
-    }
-
-    return { ok: true }
-  }, [analyze, segmentScan?.swingSegments, selectedSegmentId, selectedSegmentWindow, taskId])
+    return runStartSelectedSegmentFlow({
+      taskId,
+      segmentScan,
+      selectedSegmentId,
+      selectedSegmentWindow,
+      analyze,
+      getLastFailureReason,
+    })
+  }, [analyze, getLastFailureReason, segmentScan, selectedSegmentId, selectedSegmentWindow, taskId])
 
   const startAnalysisFlow = useCallback(async (): Promise<FlowResult> => {
-    const scanResult = await scanVideoFlow()
-    if (!scanResult.ok) {
-      return scanResult
-    }
-    return startSelectedSegmentFlow()
+    return runStartAnalysisFlow({
+      scanVideoFlow,
+      startSelectedSegmentFlow,
+    })
   }, [scanVideoFlow, startSelectedSegmentFlow])
 
   const fetchHistoryReport = useCallback(async (targetTaskId: string) => {
-    const response = await fetch(`${API_BASE}/api/history/${targetTaskId}`)
-    const data = await readApiPayload<HistoryDetailResponse>(response)
-    if (!response.ok) {
-      const error = parseErrorPayload(data as ErrorResponse)
-      appendLog(`历史样本详情获取失败：${error?.message ?? '未知错误'}`)
+    const result = await fetchHistoryDetail(targetTaskId)
+    if (!result.ok) {
+      appendLog(`历史样本详情获取失败：${result.error?.message ?? '未知错误'}`)
       return null
     }
 
-    const payload = data as HistoryDetailResponse
+    const payload = result.data
     setSelectedHistoryReport(payload.report ?? null)
     appendLog('已打开历史样本详情')
     return payload.report
@@ -851,7 +611,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
   }, [history])
 
   useEffect(() => {
-    window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+    writeSessionSnapshot({
       actionType,
       taskId,
       latestCompletedTaskIds,
@@ -863,7 +623,7 @@ export function AnalysisSessionProvider({ children }: { children: ReactNode }) {
       selectedSegmentWindow,
       errorState,
       debugEnabled,
-    } satisfies SessionSnapshot))
+    } satisfies SessionSnapshot)
   }, [
     actionType,
     debugEnabled,

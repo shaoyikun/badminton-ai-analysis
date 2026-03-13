@@ -8,7 +8,7 @@ help:
 	@printf "  make setup         Install local dependencies for frontend, backend, and analysis-service.\n"
 	@printf "  make run           Start the project, preferring Docker Compose and falling back to local dev.\n"
 	@printf "  make dev           Start the local development path directly.\n"
-	@printf "  make test          Run backend and analysis-service automated tests.\n"
+	@printf "  make test          Run backend, frontend Playwright, and analysis-service automated tests.\n"
 	@printf "  make build         Build backend/frontend and compile Python sources.\n"
 	@printf "  make verify        Run the strict handoff gate, including Docker Compose builds.\n"
 	@printf "  make verify-local  Run the local-only gate and skip Docker Compose build verification.\n"

@@ -23,13 +23,30 @@ import {
   saveUpload,
   startAnalysisWithSelection,
 } from './services/taskService';
-import { buildErrorSnapshot, getErrorStatusCode } from './services/errorCatalog';
+import { buildErrorSnapshot, getErrorStatusCode, isErrorSnapshot } from './services/errorCatalog';
 import { getArtifactsDir } from './services/database';
 import { toTaskResource } from './types/task';
 
 function sendError(reply: { status: (code: number) => { send: (payload: unknown) => unknown } }, code: Parameters<typeof buildErrorSnapshot>[0], message?: string) {
   const error = buildErrorSnapshot(code, message);
   return reply.status(getErrorStatusCode(code)).send({ error });
+}
+
+function sendThrownError(
+  reply: { status: (code: number) => { send: (payload: unknown) => unknown } },
+  error: unknown,
+  fallbackCode: Parameters<typeof buildErrorSnapshot>[0] = 'internal_error',
+  fallbackMessage?: string,
+) {
+  if (isErrorSnapshot(error)) {
+    return reply.status(getErrorStatusCode(error.code)).send({ error });
+  }
+
+  return sendError(
+    reply,
+    fallbackCode,
+    error instanceof Error ? error.message : fallbackMessage,
+  );
 }
 
 function readReport(taskId: string) {
@@ -100,7 +117,7 @@ export async function buildServer() {
       if (error instanceof Error && /too large/i.test(error.message)) {
         return sendError(reply, 'upload_failed', 'file exceeds current upload limit');
       }
-      throw error;
+      return sendThrownError(reply, error, 'upload_failed', 'failed to read upload body');
     }
 
     if (!file) {
@@ -117,7 +134,7 @@ export async function buildServer() {
       }
     } catch (error) {
       fs.rmSync(stagedUploadPath, { force: true });
-      return sendError(reply, 'upload_failed', error instanceof Error ? error.message : 'failed to persist upload');
+      return sendThrownError(reply, error, 'upload_failed', 'failed to persist upload');
     }
 
     try {
@@ -135,7 +152,7 @@ export async function buildServer() {
       };
     } catch (error) {
       fs.rmSync(stagedUploadPath, { force: true });
-      return sendError(reply, 'upload_failed', error instanceof Error ? error.message : 'failed to persist upload');
+      return sendThrownError(reply, error, 'upload_failed', 'failed to persist upload');
     }
   });
 
@@ -157,7 +174,7 @@ export async function buildServer() {
       }
       return toTaskResource(updated);
     } catch (error) {
-      return sendError(reply, 'internal_error', error instanceof Error ? error.message : undefined);
+      return sendThrownError(reply, error);
     }
   });
 

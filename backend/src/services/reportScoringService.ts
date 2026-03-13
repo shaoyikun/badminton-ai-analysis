@@ -13,22 +13,31 @@ import type {
   ViewProfile,
   VisualEvidence,
 } from '../types/task';
-
-function now() {
-  return new Date().toISOString();
-}
-
-function clampScore(value: number, min = 0, max = 100) {
-  return Math.max(min, Math.min(max, Math.round(value)));
-}
-
-function clampUnit(value: number, min = 0, max = 1) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function roundDebugValue(value: number, digits = 4) {
-  return Number(value.toFixed(digits));
-}
+import {
+  FRONT_VIEW_PROFILES,
+  buildDimensionEvidenceMap as buildSharedDimensionEvidenceMap,
+  buildEvidenceSentence as buildSharedEvidenceSentence,
+  buildFeatureGroupScore as buildSharedFeatureGroupScore,
+  buildPhaseAssessment as buildSharedPhaseAssessment,
+  buildRecognitionContext as buildSharedRecognitionContext,
+  buildSuggestionDraft as buildSharedSuggestionDraft,
+  buildVisualEvidence as buildSharedVisualEvidence,
+  clampScore,
+  clampUnit,
+  compactEvidenceRefs as compactSharedEvidenceRefs,
+  getAnalysisDisposition as getSharedAnalysisDisposition,
+  getDetectedPhaseScore as getSharedDetectedPhaseScore,
+  getFeatureSummary as getSharedFeatureSummary,
+  getPhaseCandidate as getSharedPhaseCandidate,
+  getRacketSideLabel as getSharedRacketSideLabel,
+  getViewLabel as getSharedViewLabel,
+  getWeakestFeature as getSharedWeakestFeature,
+  now,
+  roundDebugValue,
+  shouldSuggestCaptureAdvice as shouldSharedSuggestCaptureAdvice,
+  toDimensionEvidenceRef as toSharedDimensionEvidenceRef,
+  toFeatureEvidenceRef as toSharedFeatureEvidenceRef,
+} from './scoringShared';
 
 type DimensionKey =
   | 'evidence_quality'
@@ -155,34 +164,6 @@ const CONFIDENCE_WEIGHTS = {
   observability: 0.15,
 };
 
-const VIEW_PROFILE_LABELS: Record<ViewProfile, string> = {
-  rear: '后方',
-  rear_left_oblique: '左后斜',
-  rear_right_oblique: '右后斜',
-  left_side: '左侧面',
-  right_side: '右侧面',
-  front_left_oblique: '左前斜',
-  front_right_oblique: '右前斜',
-  front: '正面',
-  unknown: '未确定',
-};
-
-const RACKET_SIDE_LABELS: Record<DominantRacketSide, string> = {
-  left: '左手挥拍侧',
-  right: '右手挥拍侧',
-  unknown: '挥拍侧未确定',
-};
-
-const HARD_REJECT_REASONS = new Set<FlowErrorCode>([
-  'body_not_detected',
-  'subject_too_small_or_cropped',
-  'poor_lighting_or_occlusion',
-]);
-
-const MIN_SOFT_COVERAGE_FRAME_COUNT = 5;
-const MIN_SOFT_COVERAGE_RATIO = 0.5;
-const MIN_SOFT_COVERAGE_STABILITY = 0.6;
-
 const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
   invalid_action_type: 'actionType is invalid',
   unsupported_action_scope: 'actionType is outside the current public runtime scope',
@@ -207,8 +188,6 @@ const QUALITY_FAILURE_MESSAGES: Record<FlowErrorCode, string> = {
   task_recovery_failed: 'task recovery failed',
   internal_error: 'internal server error',
 };
-
-const FRONT_VIEW_PROFILES = new Set<ViewProfile>(['front', 'front_left_oblique', 'front_right_oblique']);
 
 const FEATURE_LABELS: Record<string, string> = {
   sideOnReadinessScore: '侧身进入',
@@ -265,11 +244,11 @@ const SUGGESTION_RULES: Record<SuggestionRuleKey, { suggestionType: 'capture_fix
 };
 
 function getViewLabel(viewProfile?: ViewProfile) {
-  return VIEW_PROFILE_LABELS[viewProfile ?? 'unknown'] ?? VIEW_PROFILE_LABELS.unknown;
+  return getSharedViewLabel(viewProfile);
 }
 
 function getRacketSideLabel(dominantRacketSide?: DominantRacketSide) {
-  return RACKET_SIDE_LABELS[dominantRacketSide ?? 'unknown'] ?? RACKET_SIDE_LABELS.unknown;
+  return getSharedRacketSideLabel(dominantRacketSide);
 }
 
 function getViewReferenceCue(viewProfile?: ViewProfile) {
@@ -293,186 +272,37 @@ function getViewReferenceCue(viewProfile?: ViewProfile) {
 }
 
 function buildRecognitionContext(summary: PoseAnalysisResult['summary'], engine: string): RecognitionContext {
-  return {
-    viewProfile: summary.viewProfile,
-    viewLabel: getViewLabel(summary.viewProfile),
-    viewConfidence: summary.viewConfidence,
-    dominantRacketSide: summary.dominantRacketSide,
-    dominantRacketSideLabel: getRacketSideLabel(summary.dominantRacketSide),
-    racketSideConfidence: summary.racketSideConfidence,
-    engine,
-  };
+  return buildSharedRecognitionContext(summary, engine);
 }
 
 function buildVisualEvidence(task: AnalysisTaskRecord, poseResult: PoseAnalysisResult): VisualEvidence {
-  const sampledFrames = task.artifacts.preprocess?.artifacts?.sampledFrames ?? [];
-  const frameMap = new Map(poseResult.frames.map((frame) => [frame.frameIndex, frame]));
-  const bestFrameIndex = poseResult.summary.bestFrameIndex ?? sampledFrames[0]?.index ?? null;
-  const bestRawFrame = sampledFrames.find((item) => item.index === bestFrameIndex) ?? sampledFrames[0];
-  const bestPoseFrame = bestFrameIndex !== null && bestFrameIndex !== undefined ? frameMap.get(bestFrameIndex) : undefined;
-
-  return {
-    bestFrameIndex,
-    bestFrameImagePath: bestRawFrame?.relativePath,
-    bestFrameOverlayPath: poseResult.summary.bestFrameOverlayRelativePath ?? bestPoseFrame?.overlayRelativePath,
-    overlayFrames: sampledFrames.map((frame) => {
-      const poseFrame = frameMap.get(frame.index);
-      return {
-        index: frame.index,
-        timestampSeconds: frame.timestampSeconds,
-        rawImagePath: frame.relativePath,
-        overlayImagePath: poseFrame?.overlayRelativePath,
-        status: poseFrame?.status,
-      };
-    }),
-  };
-}
-
-function uniqueReasons(reasons: FlowErrorCode[]) {
-  return [...new Set(reasons)];
-}
-
-function addLowConfidenceReason(
-  reasons: FlowErrorCode[],
-  notes: string[],
-  code: FlowErrorCode,
-  note: string,
-) {
-  reasons.push(code);
-  notes.push(note);
-}
-
-function shouldDowngradeCoverageFailure(summary: PoseAnalysisResult['summary']) {
-  return summary.usableFrameCount >= MIN_SOFT_COVERAGE_FRAME_COUNT
-    && summary.coverageRatio >= MIN_SOFT_COVERAGE_RATIO
-    && summary.medianStabilityScore >= MIN_SOFT_COVERAGE_STABILITY;
-}
-
-function classifyCoverageReason(
-  summary: PoseAnalysisResult['summary'],
-  hardRejectReasons: FlowErrorCode[],
-  lowConfidenceReasons: FlowErrorCode[],
-  confidencePenaltyNotes: string[],
-) {
-  if (shouldDowngradeCoverageFailure(summary)) {
-    addLowConfidenceReason(
-      lowConfidenceReasons,
-      confidencePenaltyNotes,
-      'insufficient_pose_coverage',
-      '当前样本覆盖率接近正式报告门槛，报告可读但建议补一条覆盖更完整的同机位样本。',
-    );
-    return;
-  }
-
-  hardRejectReasons.push('insufficient_pose_coverage');
+  return buildSharedVisualEvidence(task, poseResult);
 }
 
 function getAnalysisDisposition(poseResult: PoseAnalysisResult): AnalysisDisposition {
-  const hardRejectReasons: FlowErrorCode[] = [];
-  const lowConfidenceReasons: FlowErrorCode[] = [];
-  const confidencePenaltyNotes: string[] = [];
-
-  for (const reason of poseResult.summary.rejectionReasons) {
-    if (reason === 'insufficient_pose_coverage') {
-      classifyCoverageReason(poseResult.summary, hardRejectReasons, lowConfidenceReasons, confidencePenaltyNotes);
-      continue;
-    }
-
-    if (HARD_REJECT_REASONS.has(reason)) {
-      hardRejectReasons.push(reason);
-      continue;
-    }
-
-    lowConfidenceReasons.push(reason);
-  }
-
-  const viewProfile = poseResult.summary.viewProfile ?? 'unknown';
-  const unknownViewCount = poseResult.summary.debugCounts?.unknownViewCount ?? 0;
-  const usableFrameCount = Math.max(1, poseResult.summary.usableFrameCount);
-  const unknownViewRatio = unknownViewCount / usableFrameCount;
-  const weakViewConfidence = (poseResult.summary.viewConfidence ?? 0) < 0.62;
-  const frontOrUnknownView = FRONT_VIEW_PROFILES.has(viewProfile) || viewProfile === 'unknown';
-
-  if (frontOrUnknownView || weakViewConfidence || unknownViewRatio >= 0.45) {
-    addLowConfidenceReason(
-      lowConfidenceReasons,
-      confidencePenaltyNotes,
-      'invalid_camera_angle',
-      '当前机位降低了置信度，但不直接代表动作更差。',
-    );
-  }
-
-  if (poseResult.summary.scoreVariance >= 0.03 && poseResult.summary.coverageRatio >= 0.6) {
-    addLowConfidenceReason(
-      lowConfidenceReasons,
-      confidencePenaltyNotes,
-      'insufficient_action_evidence',
-      '当前样本复现证据偏散，建议同机位再录一条确认动作是否稳定。',
-    );
-  }
-
-  return {
-    hardRejectReasons: uniqueReasons(hardRejectReasons),
-    lowConfidenceReasons: uniqueReasons(lowConfidenceReasons),
-    confidencePenaltyNotes: [...new Set(confidencePenaltyNotes)],
-  };
+  return getSharedAnalysisDisposition(poseResult);
 }
 
 function getFeatureSummary(
   summary: PoseAnalysisResult['summary'],
   key: string,
 ): SpecializedSummaryItem | undefined {
-  return summary.specializedFeatureSummary?.[key];
+  return getSharedFeatureSummary(summary, key) as SpecializedSummaryItem | undefined;
 }
 
 function buildFeatureGroupScore(
-  summary: PoseAnalysisResult['summary'],
+  _summary: PoseAnalysisResult['summary'],
   features: WeightedFeature[],
   fallbackScore: number,
   fallbackLabel: string,
   scoreFormula: string,
   fallbackFormula: string,
 ): FeatureGroupScore {
-  const available = features.filter((feature) => typeof feature.value === 'number');
-  if (available.length === 0) {
-    return {
-      score: fallbackScore,
-      normalizedScore: clampUnit((fallbackScore - 20) / 80),
-      observableCoverage: 0,
-      source: `${fallbackLabel}=${roundDebugValue((fallbackScore - 20) / 80)}`,
-      formula: fallbackFormula,
-      inputs: {
-        [fallbackLabel]: roundDebugValue((fallbackScore - 20) / 80),
-      },
-      fallbacks: [`${fallbackLabel}_fallback`],
-      usedFallback: true,
-    };
-  }
-
-  const totalWeight = available.reduce((sum, feature) => sum + feature.weight, 0);
-  const normalizedScore = totalWeight > 0
-    ? available.reduce((sum, feature) => sum + (feature.value ?? 0) * feature.weight, 0) / totalWeight
-    : 0;
-  const observableCoverage = features.length > 0 ? available.length / features.length : 0;
-  const inputs = Object.fromEntries(features.map((feature) => [feature.key, feature.value === null ? null : roundDebugValue(feature.value)]));
-
-  return {
-    score: clampScore(25 + normalizedScore * 75),
-    normalizedScore,
-    observableCoverage,
-    source: available.map((feature) => `${feature.key}=${roundDebugValue(feature.value ?? 0)}`).join(', '),
-    formula: scoreFormula,
-    inputs,
-    fallbacks: [],
-    usedFallback: false,
-  };
+  return buildSharedFeatureGroupScore(features, fallbackScore, fallbackLabel, scoreFormula, fallbackFormula);
 }
 
 function getDetectedPhaseScore(candidate?: NonNullable<PoseAnalysisResult['summary']['phaseCandidates']>[ReportPhaseKey]) {
-  if (!candidate || candidate.detectionStatus !== 'detected' || typeof candidate.score !== 'number') {
-    return null;
-  }
-  return candidate.score;
+  return getSharedDetectedPhaseScore(candidate);
 }
 
 function buildDimensionScores(summary: PoseAnalysisResult['summary'], frameCount: number) {
@@ -820,7 +650,7 @@ function buildEvidenceNotes(
 }
 
 function buildDimensionEvidenceMap(entries: DimensionEvidenceEntry[]) {
-  return new Map(entries.map((entry) => [entry.key, entry]));
+  return buildSharedDimensionEvidenceMap(entries);
 }
 
 function formatEvidenceScore(score?: number | null) {
@@ -829,46 +659,19 @@ function formatEvidenceScore(score?: number | null) {
 }
 
 function toDimensionEvidenceRef(entry?: DimensionEvidenceEntry): EvidenceRef | undefined {
-  if (!entry) return undefined;
-  return {
-    dimensionKey: entry.key,
-    label: entry.label,
-    score: entry.score,
-    confidence: entry.confidence ?? null,
-    reference: entry.source,
-  };
+  return toSharedDimensionEvidenceRef(entry);
 }
 
 function toFeatureEvidenceRef(feature?: FeatureDescriptor): EvidenceRef | undefined {
-  if (!feature) return undefined;
-  return {
-    featureKey: feature.key,
-    label: feature.label,
-    score: feature.value === null ? null : clampScore(feature.value * 100),
-    confidence: feature.observableCoverage ?? null,
-    reference: feature.reference,
-  };
+  return toSharedFeatureEvidenceRef(feature);
 }
 
 function compactEvidenceRefs(...refs: Array<EvidenceRef | undefined>) {
-  return refs.filter((ref): ref is EvidenceRef => Boolean(ref));
+  return compactSharedEvidenceRefs(...refs);
 }
 
 function getPhaseCandidate(summary: PoseAnalysisResult['summary'], phaseKey: ReportPhaseKey) {
-  return summary.phaseCandidates?.[phaseKey];
-}
-
-function getPhaseDetectedFrom(summary: PoseAnalysisResult['summary'], phaseKey: ReportPhaseKey): ReportPhaseAssessment['detectedFrom'] | undefined {
-  const candidate = getPhaseCandidate(summary, phaseKey);
-  if (!candidate) return undefined;
-  return {
-    anchorFrameIndex: candidate.anchorFrameIndex,
-    windowStartFrameIndex: candidate.windowStartFrameIndex,
-    windowEndFrameIndex: candidate.windowEndFrameIndex,
-    sourceMetric: candidate.sourceMetric,
-    detectionStatus: candidate.detectionStatus,
-    missingReason: candidate.missingReason,
-  };
+  return getSharedPhaseCandidate(summary, phaseKey);
 }
 
 function buildPhaseAssessment(
@@ -878,14 +681,7 @@ function buildPhaseAssessment(
   summary: PoseAnalysisResult['summary'],
   evidenceRefs: EvidenceRef[],
 ): ReportPhaseAssessment {
-  return {
-    phaseKey,
-    label: PHASE_LABELS[phaseKey],
-    status,
-    summary: summaryText,
-    evidenceRefs,
-    detectedFrom: getPhaseDetectedFrom(summary, phaseKey),
-  };
+  return buildSharedPhaseAssessment(phaseKey, PHASE_LABELS[phaseKey], status, summaryText, summary, evidenceRefs);
 }
 
 function buildPhaseBreakdown(
@@ -1021,20 +817,11 @@ function getRepeatabilityFocusPhase(phaseBreakdown: ReportPhaseAssessment[]) {
 }
 
 function buildEvidenceSentence(evidenceRefs: EvidenceRef[]) {
-  const refs = evidenceRefs
-    .filter((ref) => ref.label)
-    .slice(0, 2)
-    .map((ref) => `${ref.label} ${formatEvidenceScore(ref.score)}`);
-
-  return refs.length > 0 ? `当前证据更直接落在 ${refs.join('、')}。` : '';
+  return buildSharedEvidenceSentence(evidenceRefs, formatEvidenceScore);
 }
 
 function getWeakestFeature(features: FeatureDescriptor[]) {
-  const available = features.filter((feature) => typeof feature.value === 'number');
-  if (available.length > 0) {
-    return [...available].sort((left, right) => (left.value ?? 1) - (right.value ?? 1))[0];
-  }
-  return features[0];
+  return getSharedWeakestFeature(features);
 }
 
 function shouldSuggestCaptureAdvice(
@@ -1042,9 +829,7 @@ function shouldSuggestCaptureAdvice(
   cameraSuitability: number,
   dimensionConfidence?: number | null,
 ) {
-  return confidenceScore < LOW_CONFIDENCE_THRESHOLD
-    || cameraSuitability < 70
-    || (dimensionConfidence ?? 1) < 0.68;
+  return shouldSharedSuggestCaptureAdvice(confidenceScore, cameraSuitability, dimensionConfidence, LOW_CONFIDENCE_THRESHOLD);
 }
 
 function getCaptureAdvice(recognitionContext: RecognitionContext, emphasis: 'body' | 'arm' | 'repeatability' | 'evidence') {
@@ -1075,11 +860,7 @@ function buildSuggestionDraft(
   ruleKey: SuggestionRuleKey,
   suggestion: Omit<SuggestionDraft, 'ruleKey' | 'suggestionType'>,
 ): SuggestionDraft {
-  return {
-    ...suggestion,
-    ruleKey,
-    suggestionType: SUGGESTION_RULES[ruleKey].suggestionType,
-  };
+  return buildSharedSuggestionDraft(ruleKey, SUGGESTION_RULES[ruleKey].suggestionType, suggestion) as SuggestionDraft;
 }
 
 function buildBodyPreparationIssue(context: IssueBuildContext): RankedIssue | null {

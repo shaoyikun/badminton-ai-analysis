@@ -3,7 +3,9 @@ name: badminton-playwright-mobile-qa
 description: Use when writing or updating mobile-first Playwright coverage for the badminton H5 flow, including home CTA, upload readiness, candidate clip selection, processing progress, report rendering, history, compare, and error recovery.
 ---
 
-# 何时使用这个 skill
+# Badminton Playwright Mobile QA
+
+## 何时使用
 
 当任务涉及前端主流程自动化验证时使用：
 
@@ -11,7 +13,7 @@ description: Use when writing or updating mobile-first Playwright coverage for t
 - 验证首页到上传、候选片段选择、处理中、报告页渲染
 - 调整 mock API、fixture 数据、移动端交互选择器
 
-# 仓库背景与上下文
+## 先读什么
 
 当前 Playwright 已经接入且是移动端优先，不需要从零搭建。先读：
 
@@ -29,7 +31,15 @@ description: Use when writing or updating mobile-first Playwright coverage for t
 - 测试自启 Vite dev server
 - mock 覆盖 `/api` 与 `/artifacts`
 
-# 核心规则
+## 工作顺序/决策顺序
+
+1. 先确认要覆盖的是哪条真实用户路径，再决定补新 spec、补场景 builder，还是只更新 mock/fixture。
+2. 优先让测试围绕可见行为断言，再回头补稳定选择器；不要先盯 DOM 结构和 className。
+3. 如果 spec 文件开始重复 setup、fixture JSON 或多段相似路径，先抽共享 helper / scenario builder 再加场景。
+4. mock 数据要始终贴近真实 contracts；契约变化应先修共享形状，再修断言。
+5. 最终说明要能回答“测的是哪条用户路径”“为什么足够”这两个问题。
+
+## 核心规则
 
 1. 先测真实用户路径，不测实现细节。
 2. selector 优先级：
@@ -48,23 +58,29 @@ description: Use when writing or updating mobile-first Playwright coverage for t
    - `frontend/e2e/support/mockApi.ts`
    - fixtures
    - 断言文案或状态
-6. 不要把 CSS 结构、类名、内部 state 当断言主目标。
+6. 复用优先：优先扩展已有 mock API、fixture builder、共享 helper 和通用断言，不要在 spec 中平行复制 setup。
+7. 模块拆分优先：shared mock、scenario builder、data factory、页面级断言应按职责拆开，不要让单个 spec 同时背负所有数据准备与所有流程。
+8. 文件体量控制：
+   - 单个 spec 文件通常接近 250 行就要考虑按场景拆分
+   - fixture builder、mock helper 超过约 200 行应按页面或流程拆分
+9. 不要把 CSS 结构、类名、内部 state 当断言主目标，也不要把大段内联 JSON 当默认写法。
 
-# 推荐代码组织方式
+## 何时联动其他 skills
 
-- 主流程 spec 按页面或场景组织在 `frontend/e2e/*.spec.ts`
-- 共享 mock 与数据构造继续放 `frontend/e2e/support/`
-- 复杂场景优先新增 scenario builder，而不是在 spec 里内联巨大 JSON
-- 页面断言围绕标题、CTA、状态文案、关键卡片展开
+- `badminton-h5-product-ui`：页面产品化后需要补测试
+- `badminton-analysis-flow`：上传、选片、处理状态变化
+- `shared-contracts-and-adapters`：mock 数据需要跟共享契约同步
+- `repo-delivery-baseline`：需要决定是否补跑整个前端测试路径
 
-# 与其他 skills 的协作边界
+## 何时读取 examples/
 
-- 与 `badminton-h5-product-ui` 联动：当页面产品化后需要补测试
-- 与 `badminton-analysis-flow` 联动：当上传、选片、处理状态变化时
-- 与 `shared-contracts-and-adapters` 联动：当 mock 数据需要跟共享契约同步时
-- 与 `repo-delivery-baseline` 联动：当需要决定是否补跑整个前端测试路径时
+确认要覆盖的用户路径后再读对应 example：
 
-# 任务完成后的输出要求
+- `examples/homepage-to-upload.spec-example.md`：首页到上传准备路径变化时读
+- `examples/candidate-clip-selection.spec-example.md`：候选片段选择或推荐逻辑变化时读
+- `examples/report-page-rendering.spec-example.md`：报告页渲染与核心卡片断言变化时读
+
+## 任务完成后的输出要求
 
 最终交付说明至少要写清：
 

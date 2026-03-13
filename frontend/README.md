@@ -52,13 +52,13 @@ npm run test:e2e:install
 - 测试会自行启动一个 Vite dev server，并用 mock API 覆盖 `/api` 与 `/artifacts`
 - 上传页使用仓库内 fixture，不依赖桌面文件或本地脏数据
 
-本地 `npm run dev` 会通过 `vite.config.ts` 将 `/api`、`/data`、`/health` 代理到 `http://127.0.0.1:8787`。
+本地 `npm run dev` 会通过 `vite.config.ts` 将 `/api`、`/artifacts`、`/health` 代理到 `http://127.0.0.1:8787`。
 
 ## 当前能力
 
 - 基于真实路由的移动端 H5 产品壳层
 - 首页、拍摄指引、上传、分析中、报告、历史、复测对比、错误页
-- 上传页一键串行完成创建任务、上传视频、启动分析
+- 上传页先完成创建任务与整段视频粗扫，再由用户确认候选片段后启动最终分析
 - 自动轮询分析状态并在完成后跳转报告
 - 历史样本查看与设为对比基线
 - 隐藏式联调抽屉，支持 `?debug=1` 开启

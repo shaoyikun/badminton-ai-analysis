@@ -3,7 +3,9 @@ name: badminton-h5-product-ui
 description: Use when productizing or redesigning the mobile H5 experience in frontend/, especially the home, guide, upload, processing, report, history, compare, and error pages for the badminton analysis flow.
 ---
 
-# 何时使用这个 skill
+# Badminton H5 Product UI
+
+## 何时使用
 
 当任务聚焦于移动端 H5 页面体验时使用：
 
@@ -12,12 +14,12 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
 - 移动端信息层级、CTA、空态/加载态/失败态优化
 - 页面拆分、卡片化、底部 CTA、状态组件复用
 
-# 仓库背景与上下文
+## 先读什么
 
 真实页面与路由在 `frontend/src/`：
 
 - 路由：`frontend/src/app/AppRouter.tsx`
-- 页面：`frontend/src/features/home/`、`guide/`、`upload/`、`processing/`、`report/`、`history/`、`compare/`、`error/`
+- 页面：`frontend/src/features/home/`、`frontend/src/features/guide/`、`frontend/src/features/upload/`、`frontend/src/features/processing/`、`frontend/src/features/report/`、`frontend/src/features/history/`、`frontend/src/features/compare/`、`frontend/src/features/error/`
 - 壳层：`frontend/src/app/MobileAppShell.tsx`
 - 共享 UI：`frontend/src/components/ui/`
 
@@ -27,7 +29,15 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
 - 上传页已经是“两步式”：上传并粗扫片段 -> 选择片段 -> 开始分析
 - Playwright 默认按移动端 viewport 跑主流程
 
-# 核心规则
+## 工作顺序/决策顺序
+
+1. 先确认你改的是信息层级、文案、布局、状态覆盖还是页面拆分，不要一上来就重排 JSX。
+2. 先读目标页面与已有 UI 组件，再决定是复用组件、抽 section component，还是补新的 feature helper。
+3. 页面叙事先围绕真实产品能力重写，再映射到已有状态对象；不要让 UI 直接背负后端字段含义。
+4. 如果页面逻辑已经开始吞掉状态推导、文案映射和数据整形，先抽 adapter/helper 再继续加 UI。
+5. 交付时明确主 CTA、信息层级、状态覆盖和组件复用点，而不是只描述“视觉更好了”。
+
+## 核心规则
 
 1. 先读这些文件再改 UI：
    - `frontend/README.md`
@@ -55,27 +65,33 @@ description: Use when productizing or redesigning the mobile H5 experience in fr
    - 支持 `clear | smash`
    - 候选片段粗扫是已有能力
    - 报告是“问题解释 + 复测建议”，不是实时教练系统
-8. 不要为了美化页面绕过当前数据流；需要新视图模型时，先配合 `shared-contracts-and-adapters` 处理映射。
+8. 复用优先：先复用现有 UI 组件、feature helper、adapter 和布局模式，再考虑新增组件。
+9. 模块拆分优先：复杂页面应拆成 section component、文案映射 helper、卡片组件和 adapter，不要让单个页面文件同时承担所有逻辑。
+10. 文件体量控制：
+   - frontend page/provider/component 通常接近 250 行就要考虑拆分
+   - shared adapter/formatter/helper 超过约 200 行应按职责拆分
+11. `UploadPage` 这类大文件是待拆债务，不是模板。新增 UI 逻辑优先向子组件、helper 或 adapter 外抽。
+12. 不要为了美化页面绕过当前数据流；需要新视图模型时，先配合 `shared-contracts-and-adapters` 处理映射。
 
-# 推荐代码组织方式
+## 何时联动其他 skills
 
-- 路由级页面容器继续放在 `frontend/src/features/*Page.tsx`
-- 页面内复杂区块拆到 `frontend/src/components/` 或 feature 子组件
-- 用户可见的文案、标签、状态说明集中在页面/feature 层，不把后端原始字段直接塞进 JSX
-- 需要共享的卡片、徽标、底部操作条，优先补到 `frontend/src/components/ui/`
+- `badminton-analysis-flow`：页面改动涉及上传粗扫、片段选择、处理中状态流转
+- `shared-contracts-and-adapters`：报告、历史、进度需要前端 view model
+- `badminton-playwright-mobile-qa`：产品化改动需要补移动端 E2E
+- `docs-spec-sync`：页面结构和交互层级发生显著变化
 
-# 与其他 skills 的协作边界
+## 何时读取 examples/
 
-- 与 `badminton-analysis-flow` 联动：当页面改动涉及上传粗扫、片段选择、处理中状态流转
-- 与 `shared-contracts-and-adapters` 联动：当报告、历史、进度需要前端 view model
-- 与 `badminton-playwright-mobile-qa` 联动：当产品化改动需要补移动端 E2E
-- 与 `docs-spec-sync` 联动：当页面结构和交互层级发生显著变化时
+在确认页面目标后再读对应 example：
 
-# 任务完成后的输出要求
+- `examples/homepage-productization.md`：首页叙事、CTA、入口层级变化时读
+- `examples/upload-preparation-page.md`：上传准备、提示、候选片段前置说明变化时读
+- `examples/report-page-productization.md`：报告页产品化和模块化展示变化时读
+
+## 任务完成后的输出要求
 
 最终交付说明至少要写清：
 
 - 改的是哪一页、主 CTA 或信息层级怎么变了
 - 是否新增或复用了哪些 UI 组件
 - 对空态、加载态、失败态做了哪些覆盖
-- 跑了哪些前端验证；如果没跑 Playwright，要明确说明

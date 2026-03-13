@@ -3,7 +3,9 @@ name: badminton-analysis-flow
 description: Use when changing the upload-to-analysis task flow, especially candidate clip coarse scan, user segment selection, task state transitions, polling, retry behavior, and frontend/backend coordination for badminton analysis.
 ---
 
-# 何时使用这个 skill
+# Badminton Analysis Flow
+
+## 何时使用
 
 当任务涉及分析主链路的状态流转时使用：
 
@@ -13,7 +15,7 @@ description: Use when changing the upload-to-analysis task flow, especially cand
 - 分析进度、错误恢复、重试策略
 - mock/fallback 和真实接口并存的阶段性实现
 
-# 仓库背景与上下文
+## 先读什么
 
 当前真实链路已经不是最早的“一键上传即分析”，而是：
 
@@ -34,7 +36,15 @@ description: Use when changing the upload-to-analysis task flow, especially cand
 - `frontend/src/features/processing/ProcessingPage.tsx`
 - `backend/src/services/taskService.ts`
 
-# 核心规则
+## 工作顺序/决策顺序
+
+1. 先确认变化落在上传前、粗扫候选片段、用户选片、启动分析、处理中轮询还是错误恢复阶段。
+2. 先保证 `TaskStatusResponse`、`SegmentScanSummary`、`selectedSegmentId` 的语义稳定，再去改页面跳转和 UI 文案。
+3. state mapping、轮询、副作用和页面渲染要按层拆开，不要因为流程复杂就把所有逻辑塞回页面或 provider。
+4. backend 侧先改任务推进和状态来源，再让 frontend provider/adapter 消费新的稳定对象。
+5. 如果流程变化来自契约或 Python 边界，及时联动对应 skill，而不是在页面里硬补兼容逻辑。
+
+## 核心规则
 
 1. 显式建模状态，避免散落 boolean。
 2. 至少区分两层状态：
@@ -57,29 +67,37 @@ description: Use when changing the upload-to-analysis task flow, especially cand
    - `/processing`
    - `/report`
    - `/error`
-8. 若更改了任务阶段、错误码、候选片段对象或启动入参，必须联动 `backend-api-contracts` 和 `shared-contracts-and-adapters`。
+8. 复用优先：优先扩展现有 provider、task service、upload helper、progress mapping 和 mock builder，不要新增第二套状态机。
+9. 模块拆分优先：上传准备、候选片段选择、轮询、状态映射、跳转副作用应拆成聚焦模块，不要让单个页面或 provider 同时承担所有职责。
+10. 文件体量控制：
+   - frontend page/provider/component 通常接近 250 行就要考虑拆分
+   - backend route/service/adapter 通常接近 300 行就要考虑拆分
+   - shared adapter/formatter/helper 超过约 200 行应按职责拆分
+11. `AnalysisSessionProvider` 和 `UploadPage` 已是待拆大文件。新增流程逻辑优先抽成 helper、section component 或 flow module；若未拆分，交付说明必须说明原因。
+12. 若更改了任务阶段、错误码、候选片段对象或启动入参，必须联动 `backend-api-contracts` 和 `shared-contracts-and-adapters`。
 
-# 推荐代码组织方式
+## 何时联动其他 skills
 
-- 前端状态汇总继续收口在 `AnalysisSessionProvider`
-- 页面只消费 provider 或 adapter 后的 UI 状态
-- backend 任务推进继续收口在 `taskService`
-- 候选片段相关的共享结构优先放 `shared/contracts.d.ts`
-- 不要把粗扫逻辑、任务跳转、轮询、副作用同时塞进页面 JSX
+- `backend-api-contracts`：`start` 入参、任务状态、错误结构变化
+- `analysis-service-integration`：粗扫、抽帧、pose 执行边界变化
+- `shared-contracts-and-adapters`：需要新的前端 view model
+- `badminton-playwright-mobile-qa`：主流程交互变化
+- `docs-spec-sync`：上传/处理主流程语义变化
+- `repo-delivery-baseline`：需要决定 build/test/verify/evaluate 跑法
 
-# 与其他 skills 的协作边界
+## 何时读取 examples/
 
-- 与 `backend-api-contracts` 联动：当 `start` 入参、任务状态、错误结构变化时
-- 与 `analysis-service-integration` 联动：当粗扫、抽帧、pose 执行边界变化时
-- 与 `shared-contracts-and-adapters` 联动：当需要新的前端 view model 时
-- 与 `badminton-playwright-mobile-qa` 联动：当主流程交互变化时
-- 与 `docs-spec-sync` 联动：当上传/处理主流程语义变化时
+在确认你改的是哪一段流程之后，再读对应 example：
 
-# 任务完成后的输出要求
+- `examples/candidate-clip-flow.md`：候选片段粗扫与选择变化时读
+- `examples/async-analysis-progress.md`：处理中轮询、进度反馈变化时读
+- `examples/failure-recovery-pattern.md`：错误恢复与重试策略变化时读
+
+## 任务完成后的输出要求
 
 最终交付说明至少要写清：
 
-- 改动后的状态机长什么样
-- 是否变更了候选片段或任务状态对象
-- 成功、失败、重试分别怎么走
-- 跑了哪些联调或 E2E 验证；如果没覆盖异常流，要明确风险
+- 改了哪一段流程，状态如何变化
+- 前后端如何协调，是否新增或调整共享字段
+- 错误恢复、重试或跳转逻辑如何变化
+- 哪些页面、测试、mock 或文档需要同步

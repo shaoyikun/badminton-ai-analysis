@@ -212,6 +212,41 @@ test('create task rejects unknown action type as invalid', async (t) => {
   });
 });
 
+test('upload endpoint preserves structured validation errors from the preparation worker', async (t) => {
+  await withTempWorkspace(async () => {
+    setUploadPreparationWorkerForTests(async () => {
+      throw buildErrorSnapshot('invalid_duration', 'video duration should be between 5 and 15 seconds');
+    });
+
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'clear' },
+    });
+    const created = createResponse.json() as { taskId: string };
+
+    const multipart = buildMultipartPayload('clip.mp4', 'video-content');
+    const uploadResponse = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${created.taskId}/upload`,
+      headers: {
+        'content-type': `multipart/form-data; boundary=${multipart.boundary}`,
+      },
+      payload: multipart.payload,
+    });
+
+    assert.equal(uploadResponse.statusCode, 422);
+    const payload = uploadResponse.json() as { error?: { code?: string; category?: string } };
+    assert.equal(payload.error?.code, 'invalid_duration');
+    assert.equal(payload.error?.category, 'media_validation');
+  });
+});
+
 test('start endpoint triggers worker and task status exposes unified error object', async (t) => {
   await withTempWorkspace(async () => {
     setUploadPreparationWorkerForTests(async (taskId) => {
@@ -307,6 +342,67 @@ test('start endpoint triggers worker and task status exposes unified error objec
     assert.equal(statusPayload.stage, 'failed');
     assert.equal(statusPayload.error?.code, 'invalid_duration');
     assert.equal(statusPayload.error?.category, 'media_validation');
+  });
+});
+
+test('start endpoint preserves domain-state errors from segment selection', async (t) => {
+  await withTempWorkspace(async () => {
+    setUploadPreparationWorkerForTests(async (taskId) => {
+      const task = getTask(taskId)!;
+      const updated = {
+        ...task,
+        artifacts: {
+          ...task.artifacts,
+          preprocess: {
+            status: 'queued' as const,
+            metadata: {
+              ...task.artifacts.upload!,
+              durationSeconds: 8,
+              estimatedFrames: 80,
+              width: 720,
+              height: 1280,
+              frameRate: 10,
+              metadataSource: 'manual' as const,
+            },
+          },
+        },
+      } satisfies typeof task;
+      return saveTask(updated);
+    });
+
+    const app = await buildServer();
+    t.after(async () => {
+      await app.close();
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      payload: { actionType: 'clear' },
+    });
+    const created = createResponse.json() as { taskId: string };
+
+    const multipart = buildMultipartPayload('clip.mp4', 'video-content');
+    const uploadResponse = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${created.taskId}/upload`,
+      headers: {
+        'content-type': `multipart/form-data; boundary=${multipart.boundary}`,
+      },
+      payload: multipart.payload,
+    });
+
+    assert.equal(uploadResponse.statusCode, 200);
+
+    const startResponse = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${created.taskId}/start`,
+    });
+
+    assert.equal(startResponse.statusCode, 409);
+    const payload = startResponse.json() as { error?: { code?: string; category?: string } };
+    assert.equal(payload.error?.code, 'invalid_task_state');
+    assert.equal(payload.error?.category, 'domain_state');
   });
 });
 

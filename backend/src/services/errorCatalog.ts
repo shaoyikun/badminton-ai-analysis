@@ -47,6 +47,16 @@ export function buildErrorSnapshot(code: FlowErrorCode, message?: string): Error
   };
 }
 
+export function isErrorSnapshot(value: unknown): value is ErrorSnapshot {
+  return Boolean(value)
+    && typeof value === 'object'
+    && 'code' in (value as object)
+    && 'category' in (value as object)
+    && 'retryable' in (value as object)
+    && 'message' in (value as object)
+    && 'occurredAt' in (value as object);
+}
+
 export function getErrorStatusCode(code: FlowErrorCode) {
   return getErrorDefinition(code).statusCode;
 }

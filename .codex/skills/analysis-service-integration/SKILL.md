@@ -3,7 +3,9 @@ name: analysis-service-integration
 description: Use when changing how backend preprocesses media, invokes the Python analysis-service, interprets pose outputs, or exposes recoverable failures without leaking Python internals to the frontend.
 ---
 
-# 何时使用这个 skill
+# Analysis Service Integration
+
+## 何时使用
 
 当任务涉及 backend 与 Python `analysis-service` 的集成边界时使用：
 
@@ -12,7 +14,7 @@ description: Use when changing how backend preprocesses media, invokes the Pytho
 - pose 结果读取、失败处理、恢复策略
 - artifact 目录结构和中间产物边界
 
-# 仓库背景与上下文
+## 先读什么
 
 当前 Python 服务不是独立对外产品入口，而是 backend 调用的辅助模块。先读：
 
@@ -23,15 +25,15 @@ description: Use when changing how backend preprocesses media, invokes the Pytho
 - `backend/src/services/poseService.ts`
 - `docs/algorithm-baseline.md`
 
-真实链路包括：
+## 工作顺序/决策顺序
 
-- backend 用 `ffprobe` 读元数据
-- backend 做片段粗扫与抽帧
-- backend 调用 `analysis-service/app.py`
-- Python 输出 pose 结果 JSON
-- backend 基于 pose summary 与评分逻辑生成面向前端的报告与错误
+1. 先确认变更落在预处理、Python 调用、结果读取、错误映射还是产物边界。
+2. 从 backend 调用点 trace 到 Python 输入输出，再反向检查哪些上游消费者依赖这些结果。
+3. 先维持 backend 与 Python 的清晰职责边界，再决定字段、目录或错误语义是否需要调整。
+4. 只有在共享语义或上游协议真的需要变化时，才联动共享契约、评测和文档。
+5. 若任务要继续改已有超大文件，优先把新增职责外抽为 manifest builder、result mapper、error translator 或 Python helper 模块。
 
-# 核心规则
+## 核心规则
 
 1. 不要把 Python 细节泄漏给前端；前端只消费稳定任务协议和报告协议。
 2. backend 与 Python 的边界要清楚：
@@ -52,23 +54,31 @@ description: Use when changing how backend preprocesses media, invokes the Pytho
    - preprocess manifest / sampled frames
    - pose result
    - report 调试副本
-7. 若更改 Python 输出结构、pose summary 字段或 rejection 语义，要同步考虑 `evaluation-and-regression`。
+7. 复用优先：优先扩展 `preprocessService`、`analysisService`、`poseService`、`artifactStore` 等现有边界，不新增平行调用链。
+8. 模块拆分优先：manifest 组装、CLI 调用、结果映射、错误翻译、产物读写应按职责拆开，避免 route 或 orchestration 文件同时承担这些职责。
+9. 文件体量控制：
+   - backend route/service/adapter 通常接近 300 行就要考虑拆分
+   - shared helper、result mapper、error translator 超过约 200 行应按职责拆分
+10. `analysis-service/services/pose_estimator.py` 已是超大文件，视为待拆债务而不是模板。新增姿态逻辑优先抽到独立 Python helper，而不是继续把分支堆进去。
+11. 若更改 Python 输出结构、pose summary 字段或 rejection 语义，要同步考虑 `evaluation-and-regression`。
 
-# 推荐代码组织方式
+## 何时联动其他 skills
 
-- 媒体准备与片段选择继续放在 `preprocessService`
-- Python 调用适配继续收口在 `analysisService` / `poseService`
-- 错误码映射留在 backend，不放进 Python 层
-- 产物读写复用 `artifactStore` 与既有目录布局，不新增平行产物树
+- `badminton-analysis-flow`：状态推进、选片分析边界变化
+- `backend-api-contracts`：上游错误码、状态对象或报告协议变化
+- `evaluation-and-regression`：pose summary、评分输入、baseline 输出变化
+- `docs-spec-sync`：分析能力边界或失败语义变化
+- `repo-delivery-baseline`：需要决定验证等级或补跑 `make evaluate`
 
-# 与其他 skills 的协作边界
+## 何时读取 examples/
 
-- 与 `badminton-analysis-flow` 联动：当状态推进与选片分析边界变化时
-- 与 `backend-api-contracts` 联动：当上游错误码、状态对象或报告协议变化时
-- 与 `evaluation-and-regression` 联动：当 pose summary、评分输入或基线输出变化时
-- 与 `docs-spec-sync` 联动：当分析能力边界或失败语义变化时
+在你已经定位到具体边界之后再读对应 example，不要把 example 当唯一实现方式：
 
-# 任务完成后的输出要求
+- `examples/analysis-job-handshake.md`：backend 与 Python 输入输出握手变化时读
+- `examples/python-service-failure-handling.md`：需要重新设计错误映射、重试或 recoverable failure 时读
+- `examples/artifact-generation-boundary.md`：产物目录、manifest、调试副本边界变化时读
+
+## 任务完成后的输出要求
 
 最终交付说明至少要写清：
 

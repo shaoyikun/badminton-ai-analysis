@@ -45,12 +45,16 @@ Supporting commands:
 
 ## Repo-Local Skills
 
-Use these repo-local skills when their scope matches the task:
+Use the repo-local skills under `.codex/skills/` when their scope matches the task.
+
+Common umbrella skills to start with:
 
 - `repo-maintainer`: repo automation, scripts, docs, AGENTS, onboarding, build/test/verify workflow changes
 - `analysis-pipeline`: upload, preprocess, pose, scoring, report, and frontend result flow changes
 
-The skills live under `.agents/skills/`.
+Additional specialized skills also live alongside them under `.codex/skills/` for API contracts, analysis-flow state transitions, Python integration, H5 product UI, Playwright QA, docs/spec sync, evaluation/regression, delivery baseline, shared contracts/adapters, and skill evolution from new learnings or pitfalls.
+
+Each skill folder uses `SKILL.md` as the source of truth and may include `examples/` for narrow implementation patterns.
 
 ## Working Agreements
 
@@ -59,6 +63,7 @@ The skills live under `.agents/skills/`.
 - When commands or env vars change, keep `README.md`, `.env.example`, `Makefile`, and relevant scripts in sync.
 - Keep `docs/engineering/DELIVERY-BASELINE.md` aligned with the actual run/test/build/verify workflow.
 - When API or workflow changes touch both backend and frontend, document the end-to-end effect in the final handoff.
+- When a change, failure, workaround, or pitfall reveals reusable repo knowledge, review the current repo-local skills and decide whether to update an existing skill or create a new one under `.codex/skills/`.
 - Avoid large refactors unless they are required to restore automation, testability, or build stability.
 
 ## Definition Of Done
@@ -69,5 +74,5 @@ A task is done when all applicable items below are true:
 - `make test` passes
 - `make build` passes
 - `make verify` passes for the touched scope
-- Docs and repo-local skills are updated when commands, workflow, or architecture meaningfully change
+- Docs and repo-local skills are updated when commands, workflow, architecture, or reusable lessons and pitfalls meaningfully change
 - Residual risks, skipped checks, or known follow-up items are called out explicitly
