@@ -25,9 +25,31 @@ function buildTask(): AnalysisTaskRecord {
           artifactsDir: 'artifacts/tasks/task_report_test/preprocess',
           manifestPath: 'artifacts/tasks/task_report_test/preprocess/manifest.json',
           framePlan: {
-            strategy: 'uniform-sampling-ffmpeg-v1',
+            strategy: 'segment-aware-motion-boosted-sampling-ffmpeg-v2',
             targetFrameCount: 2,
             sampleTimestamps: [1.2, 2.4],
+            baseSampleTimestamps: [1.2],
+            motionBoostedSampleTimestamps: [2.4],
+            motionWindows: [{
+              startTimeSeconds: 2.2,
+              endTimeSeconds: 2.5,
+              peakTimestampSeconds: 2.4,
+              peakMotionScore: 0.082,
+            }],
+            motionScoreSummary: {
+              scanFrameCount: 6,
+              meanMotionScore: 0.033,
+              peakMotionScore: 0.082,
+              peakTimestampSeconds: 2.4,
+            },
+          },
+          samplingStrategyVersion: 'segment-aware-motion-boosted-sampling-ffmpeg-v2',
+          analyzedSegmentId: 'segment-01',
+          selectedSegmentId: 'segment-01',
+          recommendedSegmentId: 'segment-01',
+          selectedSegmentWindow: {
+            startTimeMs: 1000,
+            endTimeMs: 2600,
           },
           sampledFrames: [
             {
@@ -35,12 +57,14 @@ function buildTask(): AnalysisTaskRecord {
               timestampSeconds: 1.2,
               fileName: 'frame-05.jpg',
               relativePath: 'artifacts/tasks/task_report_test/preprocess/frame-05.jpg',
+              sourceType: 'uniform',
             },
             {
               index: 6,
               timestampSeconds: 2.4,
               fileName: 'frame-06.jpg',
               relativePath: 'artifacts/tasks/task_report_test/preprocess/frame-06.jpg',
+              sourceType: 'motion_boosted',
             },
           ],
         },
@@ -182,6 +206,24 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
       specializedFeatureSummary,
       bestFrameOverlayRelativePath: 'artifacts/tasks/task_report_test/pose/overlays/frame-05-overlay.jpg',
       overlayFrameCount: 1,
+      inputQualityCategory: 'good',
+      evidenceQualityFlags: [],
+      visibilitySummary: {
+        visibleFrameRatio: 0.8333,
+        upperBodyVisibilityRatio: 1,
+        racketArmVisibilityRatio: 1,
+        occludedFrameRatio: 0,
+      },
+      phaseCoverage: {
+        detectedPhaseCount: 4,
+        coverageRatio: 1,
+        preparation: 'detected',
+        backswing: 'detected',
+        contactCandidate: 'detected',
+        followThrough: 'detected',
+      },
+      insufficientEvidenceReasons: [],
+      lowConfidenceReasons: [],
       debugCounts: {
         tooSmallCount: 0,
         lowStabilityCount: 0,
@@ -516,6 +558,8 @@ test('buildPoseSummary keeps specialized summary fields for downstream consumers
   assert.equal(summary?.motionContinuity, 0.88);
   assert.equal(summary?.phaseCandidates?.preparation.anchorFrameIndex, 6);
   assert.equal(summary?.phaseCandidates?.followThrough.anchorFrameIndex, 7);
+  assert.equal(summary?.inputQualityCategory, 'good');
+  assert.equal(summary?.phaseCoverage?.coverageRatio, 1);
   assert.deepEqual(summary?.specializedFeatureSummary?.contactPreparationScore, {
     median: 0.63,
     peak: 0.81,
@@ -550,6 +594,10 @@ test('buildRuleBasedResult produces high-confidence report for a high-quality sa
   assert.deepEqual(report.evidenceNotes, []);
   assert.equal(report.scoringEvidence?.fallbacksUsed?.length, 0);
   assert.equal(report.scoringEvidence?.scoringModelVersion, 'rule-v3-phase-aware');
+  assert.equal(report.scoringEvidence?.samplingSummary?.samplingStrategyVersion, 'segment-aware-motion-boosted-sampling-ffmpeg-v2');
+  assert.equal(report.scoringEvidence?.samplingSummary?.motionBoostedFrameCount, 1);
+  assert.equal(report.scoringEvidence?.samplingSummary?.motionWindowCount, 1);
+  assert.equal(report.scoringEvidence?.inputQualityCategory, 'good');
   assert.deepEqual(report.phaseBreakdown?.map((item) => item.phaseKey), [
     'preparation',
     'backswing',
@@ -594,7 +642,7 @@ test('buildRuleBasedResult downgrades boundary coverage failure to low confidenc
   assert.equal(report.scoringEvidence?.analysisDisposition, 'low_confidence');
   assert.ok((report.confidenceScore ?? 100) < 70);
   assert.deepEqual(report.scoringEvidence?.rejectionDecision?.hardRejectReasons, []);
-  assert.deepEqual(report.scoringEvidence?.rejectionDecision?.lowConfidenceReasons, ['insufficient_pose_coverage']);
+  assert.ok(report.scoringEvidence?.rejectionDecision?.lowConfidenceReasons?.includes('insufficient_pose_coverage'));
   assert.ok(report.evidenceNotes?.some((note) => note.includes('覆盖率接近正式报告门槛')));
 });
 

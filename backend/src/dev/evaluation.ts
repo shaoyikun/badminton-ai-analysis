@@ -77,6 +77,18 @@ export interface EvaluationBaselineCase {
   temporalConsistency: number | null;
   motionContinuity: number | null;
   fallbacksUsed: string[];
+  recommendedSegmentAvailable: boolean;
+  selectedSegmentAvailable: boolean;
+  analyzedSegmentConsistent: boolean;
+  samplingStrategyVersion: string | null;
+  sampledFrameCount: number;
+  motionBoostedFrameCount: number;
+  sampledFrameDiversity: number | null;
+  motionWindowCount: number;
+  phaseCoverage: number | null;
+  insufficientEvidenceRatio: number | null;
+  inputQualityRejectRatio: number | null;
+  lowConfidenceRatio: number | null;
 }
 
 export interface EvaluationBaselineFile {
@@ -105,6 +117,18 @@ export interface EvaluationCaseResult {
     motionContinuity: number | null;
     fallbacksUsed: string[];
     qualityFailureCode: string | null;
+    recommendedSegmentAvailable: boolean;
+    selectedSegmentAvailable: boolean;
+    analyzedSegmentConsistent: boolean;
+    samplingStrategyVersion: string | null;
+    sampledFrameCount: number;
+    motionBoostedFrameCount: number;
+    sampledFrameDiversity: number | null;
+    motionWindowCount: number;
+    phaseCoverage: number | null;
+    insufficientEvidenceRatio: number | null;
+    inputQualityRejectRatio: number | null;
+    lowConfidenceRatio: number | null;
   };
   expectationCheck: {
     analysisDispositionMatched: boolean;
@@ -173,6 +197,12 @@ export interface EvaluationAggregateReport {
     scoreVariance: NumericSummary;
     temporalConsistency: NumericSummary;
     motionContinuity: NumericSummary;
+    phaseCoverage: NumericSummary;
+    motionBoostedFrameCount: NumericSummary;
+    insufficientEvidenceRatio: NumericSummary;
+    lowConfidenceRatio: NumericSummary;
+    selectedSegmentAvailabilityRate: number;
+    analyzedSegmentConsistencyRate: number;
     baselineComparison: {
       missingBaselineCount: number;
       changedCaseCount: number;
@@ -317,6 +347,23 @@ function classifyCameraQuality(report: Pick<ReportResult, 'scoringEvidence'>) {
   return 'good' as const;
 }
 
+function derivePhaseCoverageRatio(poseResult: PoseAnalysisResult) {
+  const explicit = poseResult.summary.phaseCoverage?.coverageRatio;
+  if (typeof explicit === 'number') {
+    return explicit;
+  }
+
+  const phaseCandidates = poseResult.summary.phaseCandidates;
+  if (!phaseCandidates) {
+    return null;
+  }
+
+  const detectedPhaseCount = (['preparation', 'backswing', 'contactCandidate', 'followThrough'] as const)
+    .filter((phaseKey) => phaseCandidates[phaseKey]?.detectionStatus === 'detected')
+    .length;
+  return Number((detectedPhaseCount / 4).toFixed(4));
+}
+
 function uniqueStrings(values: Array<string | undefined>) {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
@@ -352,6 +399,18 @@ function toBaselineCase(result: EvaluationCaseResult): EvaluationBaselineCase {
     temporalConsistency: result.actual.temporalConsistency,
     motionContinuity: result.actual.motionContinuity,
     fallbacksUsed: [...result.actual.fallbacksUsed].sort(),
+    recommendedSegmentAvailable: result.actual.recommendedSegmentAvailable,
+    selectedSegmentAvailable: result.actual.selectedSegmentAvailable,
+    analyzedSegmentConsistent: result.actual.analyzedSegmentConsistent,
+    samplingStrategyVersion: result.actual.samplingStrategyVersion,
+    sampledFrameCount: result.actual.sampledFrameCount,
+    motionBoostedFrameCount: result.actual.motionBoostedFrameCount,
+    sampledFrameDiversity: result.actual.sampledFrameDiversity,
+    motionWindowCount: result.actual.motionWindowCount,
+    phaseCoverage: result.actual.phaseCoverage,
+    insufficientEvidenceRatio: result.actual.insufficientEvidenceRatio,
+    inputQualityRejectRatio: result.actual.inputQualityRejectRatio,
+    lowConfidenceRatio: result.actual.lowConfidenceRatio,
   };
 }
 
@@ -367,25 +426,79 @@ function compareNumeric(label: string, baseline: number | null, current: number 
   return [`${label}: ${baseline ?? 'null'} -> ${current ?? 'null'}`];
 }
 
+function compareBoolean(label: string, baseline: boolean, current: boolean) {
+  if (baseline === current) return [];
+  return [`${label}: ${baseline ? 'yes' : 'no'} -> ${current ? 'yes' : 'no'}`];
+}
+
+function withDriftExplanation(differences: string[]) {
+  return differences.map((difference) => {
+    if (difference.startsWith('samplingStrategyVersion:')) {
+      return `${difference} (sampling strategy changed)`;
+    }
+    if (difference.startsWith('motionBoostedFrameCount:') || difference.startsWith('motionWindowCount:')) {
+      return `${difference} (motion boosted sampling coverage changed)`;
+    }
+    if (difference.startsWith('phaseCoverage:')) {
+      return `${difference} (phase coverage changed)`;
+    }
+    if (difference.startsWith('insufficientEvidenceRatio:') || difference.startsWith('lowConfidenceReasons:')) {
+      return `${difference} (evidence gating changed)`;
+    }
+    if (difference.startsWith('inputQualityRejectRatio:') || difference.startsWith('rejectionReasons:')) {
+      return `${difference} (input quality gating changed)`;
+    }
+    return difference;
+  });
+}
+
 function compareBaselineCase(baseline: EvaluationBaselineCase | undefined, current: EvaluationBaselineCase) {
   if (!baseline) {
     return ['missing baseline'];
   }
 
-  return [
-    ...(baseline.analysisDisposition === current.analysisDisposition
+  const normalizedBaseline = {
+    ...baseline,
+    recommendedSegmentAvailable: baseline.recommendedSegmentAvailable ?? false,
+    selectedSegmentAvailable: baseline.selectedSegmentAvailable ?? false,
+    analyzedSegmentConsistent: baseline.analyzedSegmentConsistent ?? false,
+    samplingStrategyVersion: baseline.samplingStrategyVersion ?? null,
+    sampledFrameCount: baseline.sampledFrameCount ?? 0,
+    motionBoostedFrameCount: baseline.motionBoostedFrameCount ?? 0,
+    sampledFrameDiversity: baseline.sampledFrameDiversity ?? null,
+    motionWindowCount: baseline.motionWindowCount ?? 0,
+    phaseCoverage: baseline.phaseCoverage ?? null,
+    insufficientEvidenceRatio: baseline.insufficientEvidenceRatio ?? 0,
+    inputQualityRejectRatio: baseline.inputQualityRejectRatio ?? 0,
+    lowConfidenceRatio: baseline.lowConfidenceRatio ?? 0,
+  };
+
+  return withDriftExplanation([
+    ...(normalizedBaseline.analysisDisposition === current.analysisDisposition
       ? []
-      : [`analysisDisposition: ${baseline.analysisDisposition} -> ${current.analysisDisposition}`]),
-    ...compareStringArrays('rejectionReasons', baseline.rejectionReasons, current.rejectionReasons),
-    ...compareStringArrays('lowConfidenceReasons', baseline.lowConfidenceReasons, current.lowConfidenceReasons),
-    ...compareStringArrays('topIssueLabels', baseline.topIssueLabels, current.topIssueLabels),
-    ...compareStringArrays('fallbacksUsed', baseline.fallbacksUsed, current.fallbacksUsed),
-    ...compareNumeric('totalScore', baseline.totalScore, current.totalScore),
-    ...compareNumeric('confidenceScore', baseline.confidenceScore, current.confidenceScore),
-    ...compareNumeric('scoreVariance', baseline.scoreVariance, current.scoreVariance),
-    ...compareNumeric('temporalConsistency', baseline.temporalConsistency, current.temporalConsistency),
-    ...compareNumeric('motionContinuity', baseline.motionContinuity, current.motionContinuity),
-  ];
+      : [`analysisDisposition: ${normalizedBaseline.analysisDisposition} -> ${current.analysisDisposition}`]),
+    ...compareStringArrays('rejectionReasons', normalizedBaseline.rejectionReasons, current.rejectionReasons),
+    ...compareStringArrays('lowConfidenceReasons', normalizedBaseline.lowConfidenceReasons, current.lowConfidenceReasons),
+    ...compareStringArrays('topIssueLabels', normalizedBaseline.topIssueLabels, current.topIssueLabels),
+    ...compareStringArrays('fallbacksUsed', normalizedBaseline.fallbacksUsed, current.fallbacksUsed),
+    ...compareNumeric('totalScore', normalizedBaseline.totalScore, current.totalScore),
+    ...compareNumeric('confidenceScore', normalizedBaseline.confidenceScore, current.confidenceScore),
+    ...compareNumeric('scoreVariance', normalizedBaseline.scoreVariance, current.scoreVariance),
+    ...compareNumeric('temporalConsistency', normalizedBaseline.temporalConsistency, current.temporalConsistency),
+    ...compareNumeric('motionContinuity', normalizedBaseline.motionContinuity, current.motionContinuity),
+    ...compareBoolean('recommendedSegmentAvailable', normalizedBaseline.recommendedSegmentAvailable, current.recommendedSegmentAvailable),
+    ...compareBoolean('selectedSegmentAvailable', normalizedBaseline.selectedSegmentAvailable, current.selectedSegmentAvailable),
+    ...compareBoolean('analyzedSegmentConsistent', normalizedBaseline.analyzedSegmentConsistent, current.analyzedSegmentConsistent),
+    ...compareStringArrays('samplingStrategyVersion', normalizedBaseline.samplingStrategyVersion ? [normalizedBaseline.samplingStrategyVersion] : [], current.samplingStrategyVersion ? [current.samplingStrategyVersion] : []),
+    ...compareNumeric('sampledFrameCount', normalizedBaseline.sampledFrameCount, current.sampledFrameCount),
+    ...compareNumeric('motionBoostedFrameCount', normalizedBaseline.motionBoostedFrameCount, current.motionBoostedFrameCount),
+    ...compareNumeric('sampledFrameDiversity', normalizedBaseline.sampledFrameDiversity, current.sampledFrameDiversity),
+    ...compareNumeric('motionWindowCount', normalizedBaseline.motionWindowCount, current.motionWindowCount),
+    ...compareNumeric('phaseCoverage', normalizedBaseline.phaseCoverage, current.phaseCoverage),
+    ...compareNumeric('insufficientEvidenceRatio', normalizedBaseline.insufficientEvidenceRatio, current.insufficientEvidenceRatio),
+    ...compareNumeric('inputQualityRejectRatio', normalizedBaseline.inputQualityRejectRatio, current.inputQualityRejectRatio),
+    ...compareNumeric('lowConfidenceRatio', normalizedBaseline.lowConfidenceRatio, current.lowConfidenceRatio),
+  ]);
 }
 
 function summarizeNumbers(values: Array<number | null | undefined>): NumericSummary {
@@ -574,13 +687,13 @@ async function executeFixture(
     return { ...execution, inputMode: 'video' };
   }
 
-  if (fixture.input.preprocessDir) {
-    const execution = await executePreprocessFixture(fixture, indexDir, estimatePose);
-    return { ...execution, inputMode: 'preprocess' };
+  if (fixture.input.poseResultPath) {
+    const execution = await executePoseFixture(fixture, indexDir, now);
+    return { ...execution, inputMode: 'pose' };
   }
 
-  const execution = await executePoseFixture(fixture, indexDir, now);
-  return { ...execution, inputMode: 'pose' };
+  const execution = await executePreprocessFixture(fixture, indexDir, estimatePose);
+  return { ...execution, inputMode: 'preprocess' };
 }
 
 export async function evaluateFixtureCase(
@@ -613,6 +726,25 @@ export async function evaluateFixtureCase(
       motionContinuity: execution.poseResult.summary.motionContinuity ?? null,
       fallbacksUsed: report.scoringEvidence?.fallbacksUsed ?? [],
       qualityFailureCode,
+      recommendedSegmentAvailable: Boolean(report.recommendedSegmentId),
+      selectedSegmentAvailable: Boolean(report.selectedSegmentId),
+      analyzedSegmentConsistent: Boolean(
+        report.selectedSegmentId
+        && (report.preprocess?.artifacts?.analyzedSegmentId ?? report.selectedSegmentId) === report.selectedSegmentId,
+      ),
+      samplingStrategyVersion: report.scoringEvidence?.samplingSummary?.samplingStrategyVersion ?? null,
+      sampledFrameCount: report.scoringEvidence?.samplingSummary?.sampledFrameCount ?? 0,
+      motionBoostedFrameCount: report.scoringEvidence?.samplingSummary?.motionBoostedFrameCount ?? 0,
+      sampledFrameDiversity: report.scoringEvidence?.samplingSummary?.sampledFrameDiversity ?? null,
+      motionWindowCount: report.scoringEvidence?.samplingSummary?.motionWindowCount ?? 0,
+      phaseCoverage: report.scoringEvidence?.phaseCoverage?.coverageRatio ?? derivePhaseCoverageRatio(execution.poseResult),
+      insufficientEvidenceRatio: execution.poseResult.summary.insufficientEvidenceReasons?.length
+        ? Number((execution.poseResult.summary.insufficientEvidenceReasons.length / 4).toFixed(4))
+        : 0,
+      inputQualityRejectRatio: qualityFailureCode && ['subject_too_small_or_cropped', 'poor_lighting_or_occlusion', 'body_not_detected'].includes(qualityFailureCode)
+        ? 1
+        : 0,
+      lowConfidenceRatio: lowConfidenceReasons.length > 0 ? Number((Math.min(lowConfidenceReasons.length, 3) / 3).toFixed(4)) : 0,
     };
 
     const matchedIssueLabels = fixture.expected.majorIssueLabels.filter((label) => topIssueLabels.includes(label));
@@ -804,6 +936,12 @@ export async function evaluateFixtureSuite(options: EvaluateSuiteOptions = {}): 
         scoreVariance: summarizeNumbers(results.map((result) => result.actual.scoreVariance)),
         temporalConsistency: summarizeNumbers(results.map((result) => result.actual.temporalConsistency)),
         motionContinuity: summarizeNumbers(results.map((result) => result.actual.motionContinuity)),
+        phaseCoverage: summarizeNumbers(results.map((result) => result.actual.phaseCoverage)),
+        motionBoostedFrameCount: summarizeNumbers(results.map((result) => result.actual.motionBoostedFrameCount)),
+        insufficientEvidenceRatio: summarizeNumbers(results.map((result) => result.actual.insufficientEvidenceRatio)),
+        lowConfidenceRatio: summarizeNumbers(results.map((result) => result.actual.lowConfidenceRatio)),
+        selectedSegmentAvailabilityRate: Number((results.filter((result) => result.actual.selectedSegmentAvailable).length / Math.max(1, results.length)).toFixed(4)),
+        analyzedSegmentConsistencyRate: Number((results.filter((result) => result.actual.analyzedSegmentConsistent).length / Math.max(1, results.length)).toFixed(4)),
         baselineComparison: {
           missingBaselineCount: results.filter((result) => !result.baseline.exists).length,
           changedCaseCount: changedCases.length,
@@ -836,6 +974,12 @@ export function renderEvaluationSummary(report: EvaluationAggregateReport) {
     `- scoreVariance: mean=${report.summary.scoreVariance.mean ?? 'null'}, p50=${report.summary.scoreVariance.p50 ?? 'null'}, min=${report.summary.scoreVariance.min ?? 'null'}, max=${report.summary.scoreVariance.max ?? 'null'}`,
     `- temporalConsistency: mean=${report.summary.temporalConsistency.mean ?? 'null'}, p50=${report.summary.temporalConsistency.p50 ?? 'null'}, min=${report.summary.temporalConsistency.min ?? 'null'}, max=${report.summary.temporalConsistency.max ?? 'null'}`,
     `- motionContinuity: mean=${report.summary.motionContinuity.mean ?? 'null'}, p50=${report.summary.motionContinuity.p50 ?? 'null'}, min=${report.summary.motionContinuity.min ?? 'null'}, max=${report.summary.motionContinuity.max ?? 'null'}`,
+    `- phaseCoverage: mean=${report.summary.phaseCoverage.mean ?? 'null'}, p50=${report.summary.phaseCoverage.p50 ?? 'null'}, min=${report.summary.phaseCoverage.min ?? 'null'}, max=${report.summary.phaseCoverage.max ?? 'null'}`,
+    `- motionBoostedFrameCount: mean=${report.summary.motionBoostedFrameCount.mean ?? 'null'}, p50=${report.summary.motionBoostedFrameCount.p50 ?? 'null'}, min=${report.summary.motionBoostedFrameCount.min ?? 'null'}, max=${report.summary.motionBoostedFrameCount.max ?? 'null'}`,
+    `- insufficientEvidenceRatio: mean=${report.summary.insufficientEvidenceRatio.mean ?? 'null'}, p50=${report.summary.insufficientEvidenceRatio.p50 ?? 'null'}, min=${report.summary.insufficientEvidenceRatio.min ?? 'null'}, max=${report.summary.insufficientEvidenceRatio.max ?? 'null'}`,
+    `- lowConfidenceRatio: mean=${report.summary.lowConfidenceRatio.mean ?? 'null'}, p50=${report.summary.lowConfidenceRatio.p50 ?? 'null'}, min=${report.summary.lowConfidenceRatio.min ?? 'null'}, max=${report.summary.lowConfidenceRatio.max ?? 'null'}`,
+    `- selectedSegmentAvailabilityRate: ${report.summary.selectedSegmentAvailabilityRate}`,
+    `- analyzedSegmentConsistencyRate: ${report.summary.analyzedSegmentConsistencyRate}`,
     `- baselineChangedCases: ${report.summary.baselineComparison.changedCaseCount}`,
   ];
 

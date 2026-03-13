@@ -19,6 +19,7 @@
 
 - 系统现在默认更偏向“完整挥拍”而不是“最短最干净的运动峰”
 - 最终抽帧和报告回显都以用户确认后的 `selectedSegmentWindow` 为准
+- 片段内抽帧现在采用“均匀抽样 + motion boosted 补采样”的两阶段策略，并把抽帧来源写入 manifest / report 调试字段
 - 这一步仍然只分析一个候选片段，不会并行精分析全部候选
 
 ## 当前前端真相
@@ -172,6 +173,7 @@ make dev
 | `FRONTEND_PORT` | `5173` | 本地开发和 Compose 映射的前端端口 |
 | `VITE_API_BASE` | 空 | frontend API 根地址；Compose 推荐留空走同源，本地脚本会自动回退到 `http://127.0.0.1:${BACKEND_PORT}` |
 | `PYTHON_BIN` | `python3` | backend 脚本和本地开发使用的 Python 入口 |
+| `ANALYSIS_SERVICE_MAX_CONCURRENCY` | `2` | backend 内 analysis-service 子进程并发上限 |
 | `POSE_LANDMARKER_MODEL_PATH` | 空 | analysis-service 显式 pose landmarker 模型路径；设置后优先使用该文件 |
 | `POSE_LANDMARKER_MODEL_CACHE_DIR` | 空 | analysis-service pose landmarker 缓存目录；默认使用 `analysis-service/models/` |
 | `UPLOAD_MAX_FILE_SIZE_BYTES` | `209715200` | backend 上传大小限制 |
@@ -246,6 +248,7 @@ make evaluate
 - `./scripts/evaluate.sh --action-type smash` 会单独跑 `smash` 的正式回归基线
 - `make evaluate` 默认会在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTagsByAction` 时返回非零
 - `successRate` 的定义是“非 `rejected` / 全部”；`low_confidence` 仍计入成功完成率
+- baseline diff 会额外解释 sampling strategy、motion boosted 帧、phase coverage、input-quality gating 和 low-confidence 漂移
 - 只有明确接受新行为时，才允许执行 `./scripts/evaluate.sh --update-baseline`
 
 以下改动默认需要补跑离线评测：
@@ -256,6 +259,15 @@ make evaluate
 - 任何会影响 `analysisDisposition`、`issues`、`rejectionReasons`、`lowConfidenceReasons` 的改动
 
 如何新增样本、刷新 baseline、解读 `primaryErrorCode` / disposition 一致性等指标见 [evaluation/README.md](evaluation/README.md)。
+
+### 真实视频 smoke validation
+
+如果本地额外准备少量真实视频，建议每轮只看 3~5 条，并重点确认：
+
+- 上传后 `recommendedSegmentId`、`selectedSegmentId`、`selectedSegmentWindow` 是否合理地落在单次挥拍上
+- preprocess manifest 里的 `samplingStrategyVersion`、`sampledFrames[].sourceType`、`motionWindows` 是否说明 motion boosted 真的补到了动作变化峰值
+- `inputQualityCategory`、`evidenceQualityFlags`、`phaseCoverage`、`insufficientEvidenceReasons` 是否把“输入质量差/证据不足”和“动作问题”分开
+- `make evaluate` 的 drift 是否能由 segment 抽帧、phase coverage 或 input-quality gating 解释，而不是只在 fixture 上看起来变了
 
 ## 验收清单与回归路径
 

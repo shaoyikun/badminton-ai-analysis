@@ -24,8 +24,10 @@
 - recommendedSegmentId（可选，系统默认推荐的候选片段）
 - selectedSegmentId（可选，最终进入精分析的候选片段 id）
 - selectedSegmentWindow（可选，最终实际抽帧与分析的时间窗）
+- analyzedSegmentId（可选，最终实际进入 pose 分析的 segment id）
 - segmentDetectionVersion（可选，当前候选片段检测版本）
 - segmentSelectionMode（可选，自动推荐或整段回退）
+- samplingStrategyVersion（可选，当前片段抽帧策略版本）
 - recognitionContext（可选，识别出的拍摄视角 / 挥拍侧等上下文）
 - phaseBreakdown（可选，正式报告使用的 4 段阶段结果）
 - visualEvidence（可选，最佳帧与全部抽帧骨架叠加图）
@@ -45,8 +47,10 @@
 - `dimensionScores` 当前展示的是 `证据质量 / 身体准备 / 挥拍臂准备 / 挥拍复现稳定性`
 - `issues` 与 `suggestions` 会同时保留旧版 `title / description / impact` 兼容字段，并补充教练式结构化字段
 - `poseSummary.rejectionReasons` / `scoringEvidence.rejectionReasons` 保留 pose 层原始触发信号，不直接等价于任务失败
+- `poseSummary.inputQualityCategory` / `evidenceQualityFlags` / `visibilitySummary` / `phaseCoverage` / `insufficientEvidenceReasons` 用于解释当前样本为什么需要 low-confidence 或 hard reject
 - 最终应以 `analysisDisposition` 与 `scoringEvidence.rejectionDecision` 判断是“硬拒绝”“低置信完成”还是“正常可分析”
 - `selectedSegmentId` 只表达“选中了哪一段候选”；真正进入抽帧与报告的窗口以 `selectedSegmentWindow` 为准
+- `analyzedSegmentId` 默认等于 `selectedSegmentId`；若后续内部发生兼容回退，也用它标记“本次真正分析的是哪一段”
 
 ### phaseBreakdown
 - phaseKey（`preparation` / `backswing` / `contactCandidate` / `followThrough`）
@@ -135,6 +139,7 @@
 - `selectedSegmentWindow` 支持用户在上传页对当前候选做轻量前后微调。
 - 若用户没有微调，它默认等于 `selectedSegmentId` 对应候选的窗口。
 - backend 最终抽帧与报告回显都以 `selectedSegmentWindow` 为准。
+- 当前默认策略是“segment 内均匀抽样 + motion boosted 补采样”，不是整段全局抽帧。
 
 ### start task request
 - selectedSegmentId（可选）
@@ -318,15 +323,22 @@
   - metadataExtractedAt
   - artifactsDir
   - manifestPath
+  - analyzedSegmentId（可选）
+  - samplingStrategyVersion（可选）
   - framePlan
     - strategy
     - targetFrameCount
     - sampleTimestamps
+    - baseSampleTimestamps（可选）
+    - motionBoostedSampleTimestamps（可选）
+    - motionWindows（可选）
+    - motionScoreSummary（可选）
   - sampledFrames
     - index
     - timestampSeconds
     - fileName
     - relativePath
+    - sourceType（可选：`uniform` / `motion_boosted`）
 
 ## 7. 对比模式约束
 - 默认模式：当前样本自动对比“上一条同动作已完成样本”

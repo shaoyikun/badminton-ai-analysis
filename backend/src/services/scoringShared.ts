@@ -128,6 +128,39 @@ export function getAnalysisDisposition(poseResult: PoseAnalysisResult) {
     lowConfidenceReasons.push(reason)
   }
 
+  for (const reason of poseResult.summary.lowConfidenceReasons ?? []) {
+    if (reason === 'invalid_camera_angle') {
+      addLowConfidenceReason(
+        lowConfidenceReasons,
+        confidencePenaltyNotes,
+        'invalid_camera_angle',
+        '当前机位降低了置信度，但不直接代表动作更差。',
+      )
+      continue
+    }
+    if (reason === 'insufficient_action_evidence') {
+      addLowConfidenceReason(
+        lowConfidenceReasons,
+        confidencePenaltyNotes,
+        'insufficient_action_evidence',
+        '当前样本存在阶段缺失、可见性不足或动作证据断裂，更适合先做方向判断。',
+      )
+      continue
+    }
+    if (reason === 'insufficient_pose_coverage' && !hardRejectReasons.includes('insufficient_pose_coverage')) {
+      classifyCoverageReason(poseResult.summary, hardRejectReasons, lowConfidenceReasons, confidencePenaltyNotes)
+    }
+  }
+
+  if ((poseResult.summary.insufficientEvidenceReasons ?? []).length > 0) {
+    addLowConfidenceReason(
+      lowConfidenceReasons,
+      confidencePenaltyNotes,
+      'insufficient_action_evidence',
+      '当前样本的阶段覆盖或关键部位可见性不足，系统会保守下调动作结论强度。',
+    )
+  }
+
   const viewProfile = poseResult.summary.viewProfile ?? 'unknown'
   const unknownViewCount = poseResult.summary.debugCounts?.unknownViewCount ?? 0
   const usableFrameCount = Math.max(1, poseResult.summary.usableFrameCount)
@@ -193,6 +226,29 @@ export function buildVisualEvidence(task: AnalysisTaskRecord, poseResult: PoseAn
         status: poseFrame?.status,
       }
     }),
+  }
+}
+
+export function buildSamplingSummary(task: AnalysisTaskRecord) {
+  const artifacts = task.artifacts.preprocess?.artifacts
+  const sampledFrames = artifacts?.sampledFrames ?? []
+  const motionBoostedFrameCount = sampledFrames.filter((frame) => frame.sourceType === 'motion_boosted').length
+  const selectedWindow = artifacts?.selectedSegmentWindow
+  const sampledFrameDiversity = selectedWindow && sampledFrames.length > 1
+    ? roundDebugValue(
+      Math.max(0, ((sampledFrames[sampledFrames.length - 1]?.timestampSeconds ?? 0) - (sampledFrames[0]?.timestampSeconds ?? 0))
+        / Math.max(0.001, ((selectedWindow.endTimeMs - selectedWindow.startTimeMs) / 1000))),
+    )
+    : null
+
+  return {
+    samplingStrategyVersion: artifacts?.samplingStrategyVersion ?? artifacts?.framePlan.strategy,
+    analyzedSegmentId: artifacts?.analyzedSegmentId ?? artifacts?.selectedSegmentId,
+    sampledFrameCount: sampledFrames.length,
+    motionBoostedFrameCount,
+    motionWindowCount: artifacts?.framePlan.motionWindows?.length ?? 0,
+    sampledFrameDiversity,
+    motionScoreSummary: artifacts?.framePlan.motionScoreSummary,
   }
 }
 

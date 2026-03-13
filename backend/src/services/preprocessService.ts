@@ -14,6 +14,7 @@ import { uploadConstraints } from './uploadFlowConfig';
 import { getPreprocessDir } from './artifactStore';
 import { detectSwingSegmentsForVideo, type SwingSegmentDetectionResult } from './analysisService';
 import { runCommand, runJsonCommand } from './commandRunner';
+import { buildSegmentSamplingPlan } from './segmentSamplingService';
 
 const DEFAULT_FRAME_RATE = 25;
 const FULL_VIDEO_FALLBACK_SEGMENT_VERSION = 'coarse_motion_scan_v2';
@@ -41,22 +42,6 @@ function sanitizeFileName(fileName: string) {
 function clearDir(target: string) {
   if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
   fs.mkdirSync(target, { recursive: true });
-}
-
-function roundSeconds(value: number) {
-  return Number(value.toFixed(3));
-}
-
-function buildSampleTimestampsInWindow(startSeconds: number, endSeconds: number, targetFrameCount: number) {
-  const normalizedStart = Math.max(0, startSeconds);
-  const normalizedEnd = Math.max(normalizedStart, endSeconds);
-  const windowDuration = normalizedEnd - normalizedStart;
-
-  if (windowDuration <= 0 || targetFrameCount <= 0) return [];
-  if (targetFrameCount === 1) return [roundSeconds(normalizedStart + (windowDuration / 2))];
-
-  const step = windowDuration / (targetFrameCount + 1);
-  return Array.from({ length: targetFrameCount }, (_, index) => roundSeconds(normalizedStart + (step * (index + 1))));
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -350,16 +335,16 @@ export async function extractFrames(
   } = resolveSelectedSegmentFromScan(metadata, scan, scan.selectedSegmentId, scan.selectedSegmentWindow);
   const selectedDurationSeconds = Math.max(0.3, (selectedWindow.endTimeMs - selectedWindow.startTimeMs) / 1000);
   const targetFrameCount = getTargetFrameCount(selectedDurationSeconds);
-  const sampleTimestamps = buildSampleTimestampsInWindow(
-    selectedWindow.startTimeMs / 1000,
-    selectedWindow.endTimeMs / 1000,
+  const samplingPlan = await buildSegmentSamplingPlan({
+    sourcePath,
+    selectedWindow,
     targetFrameCount,
-  );
+  });
   const artifactsDir = getPreprocessDir(taskId);
   clearDir(artifactsDir);
 
   const sampledFrames: PreprocessFrameItem[] = [];
-  for (const [index, timestamp] of sampleTimestamps.entries()) {
+  for (const [index, timestamp] of samplingPlan.sampleTimestamps.entries()) {
     const frameFileName = `frame-${String(index + 1).padStart(2, '0')}.jpg`;
     const fullPath = path.join(artifactsDir, frameFileName);
     const relativePath = path.posix.join('artifacts', 'tasks', taskId, 'preprocess', frameFileName);
@@ -385,6 +370,9 @@ export async function extractFrames(
       timestampSeconds: timestamp,
       fileName: frameFileName,
       relativePath,
+      sourceType: samplingPlan.motionBoostedSampleTimestamps.some((candidate) => Math.abs(candidate - timestamp) < 0.0005)
+        ? 'motion_boosted'
+        : 'uniform',
     });
   }
 
@@ -399,10 +387,16 @@ export async function extractFrames(
     segmentSelectionMode,
     selectedSegmentId: selectedSegment.segmentId,
     selectedSegmentWindow: selectedWindow,
+    analyzedSegmentId: selectedSegment.segmentId,
+    samplingStrategyVersion: samplingPlan.strategy,
     framePlan: {
-      strategy: 'segment-aware-uniform-sampling-ffmpeg-v1',
+      strategy: samplingPlan.strategy,
       targetFrameCount,
-      sampleTimestamps,
+      sampleTimestamps: samplingPlan.sampleTimestamps,
+      baseSampleTimestamps: samplingPlan.baseSampleTimestamps,
+      motionBoostedSampleTimestamps: samplingPlan.motionBoostedSampleTimestamps,
+      motionWindows: samplingPlan.motionWindows,
+      motionScoreSummary: samplingPlan.motionScoreSummary,
       sourceWindow: selectedWindow,
     },
     sampledFrames,

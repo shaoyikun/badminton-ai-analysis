@@ -21,6 +21,7 @@ import {
   buildPhaseAssessment as buildSharedPhaseAssessment,
   buildRecognitionContext as buildSharedRecognitionContext,
   buildSuggestionDraft as buildSharedSuggestionDraft,
+  buildSamplingSummary as buildSharedSamplingSummary,
   buildVisualEvidence as buildSharedVisualEvidence,
   clampScore,
   clampUnit,
@@ -277,6 +278,10 @@ function buildRecognitionContext(summary: PoseAnalysisResult['summary'], engine:
 
 function buildVisualEvidence(task: AnalysisTaskRecord, poseResult: PoseAnalysisResult): VisualEvidence {
   return buildSharedVisualEvidence(task, poseResult);
+}
+
+function buildSamplingSummary(task: AnalysisTaskRecord) {
+  return buildSharedSamplingSummary(task);
 }
 
 function getAnalysisDisposition(poseResult: PoseAnalysisResult): AnalysisDisposition {
@@ -1376,6 +1381,7 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
   const evidenceNotes = buildEvidenceNotes(scores, confidenceScore, disposition, computed);
   const recognitionContext = buildRecognitionContext(poseResult.summary, poseResult.engine);
   const visualEvidence = buildVisualEvidence(task, poseResult);
+  const samplingSummary = buildSamplingSummary(task);
   const dimensionEvidence = (Object.keys(DIMENSION_LABELS) as DimensionKey[]).map((key) => (
     buildDimensionEvidence(key, scores, poseResult.summary, poseResult.frameCount, computed)
   ));
@@ -1483,6 +1489,12 @@ export function buildRuleBasedResult(task: AnalysisTaskRecord, poseResult: PoseA
         lowConfidenceReasons: disposition.lowConfidenceReasons,
         confidencePenaltyNotes: evidenceNotes,
       },
+      inputQualityCategory: poseResult.summary.inputQualityCategory,
+      evidenceQualityFlags: poseResult.summary.evidenceQualityFlags,
+      visibilitySummary: poseResult.summary.visibilitySummary,
+      phaseCoverage: poseResult.summary.phaseCoverage,
+      insufficientEvidenceReasons: poseResult.summary.insufficientEvidenceReasons,
+      samplingSummary,
       metricScores: {
         ...publicScores,
         camera_suitability: scores.camera_suitability,

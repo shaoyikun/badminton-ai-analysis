@@ -8,7 +8,7 @@
 2. backend 用 `ffprobe` 读取视频元数据。
 3. backend 先调用 `analysis-service/app.py detect-segments <video-path>` 做一次轻量整段粗扫描，输出多个 `swingSegments` 候选、`recommendedSegmentId` 和基础质量标记。
 4. 前端先展示候选片段，并默认高亮 `recommendedSegmentId`；用户先确认 `selectedSegmentId`，必要时再对起止时间做轻量微调，然后调用最终分析启动接口。
-5. backend 只对最终确认的 `selectedSegmentWindow` 执行 `ffmpeg` 均匀抽帧，并把这次选择写进 preprocess manifest。
+5. backend 只对最终确认的 `selectedSegmentWindow` 执行片段内两阶段抽帧：先均匀抽样，再在同一 segment 内用轻量 motion scan 做少量 motion-boosted 补采样，并把这次选择写进 preprocess manifest。
 6. backend 通过子进程调用 `analysis-service/app.py <preprocess-task-dir>`。
 7. Python `pose_estimator.py` 优先走 MediaPipe Tasks `VIDEO` mode，对选中片段抽帧序列做时序姿态估计与 EMA smoothing，生成 keypoints、per-frame metrics、summary。
 8. backend 读取 pose result，先把 `summary.rejectionReasons` 分成“硬拒绝”与“低置信提示”两类。
@@ -81,6 +81,13 @@
   - `segmentSelectionMode`
   - `selectedSegmentId`
   - `selectedSegmentWindow`
+  - `analyzedSegmentId`
+  - `samplingStrategyVersion`
+  - `sampledFrames[].sourceType`
+  - `framePlan.baseSampleTimestamps`
+  - `framePlan.motionBoostedSampleTimestamps`
+  - `framePlan.motionWindows`
+  - `framePlan.motionScoreSummary`
 - 这意味着用户现在已经能明确知道“系统将要分析哪一段”和“这份报告实际分析了哪一段”。
 - 后续若要支持“结果页直接切换片段并重新分析”，推荐做法仍然是：
   - 先复用已有候选列表和默认推荐标签
@@ -162,6 +169,18 @@
   - 基于 smoothed keypoints 推断；低 `viewConfidence` 或视角频繁跳变的帧在汇总时按 `unknown` 处理。
 - `dominantRacketSide`
   - 基于 smoothed/final 帧证据加权汇总的主挥拍侧。
+- `inputQualityCategory`
+  - 当前样本输入质量粗分类，取值 `good / limited / poor`。
+- `evidenceQualityFlags`
+  - 当前证据质量标记，例如 `camera_angle_limited`、`visibility_limited`、`phase_coverage_incomplete`、`action_evidence_fragmented`。
+- `visibilitySummary`
+  - 汇总上半身/挥拍臂可见性和遮挡风险。
+- `phaseCoverage`
+  - 汇总 4 段 phase 是否被检测到，以及阶段覆盖率。
+- `insufficientEvidenceReasons`
+  - 用于解释“为什么这次要保守解读”，而不是直接写成动作差。
+- `lowConfidenceReasons`
+  - pose 层建议 backend 进入 low-confidence 的触发信号，仍保留 backend 二次判定空间。
 
 ### Report 评分指标
 
@@ -238,6 +257,9 @@
   - 或 `viewConfidence` 偏低
   - 或 `unknownViewCount / usableFrameCount` 偏高
 - `insufficient_action_evidence`
+  - `phaseCoverage` 不完整
+  - 或关键部位可见性不足
+  - 或时序动作证据断裂
   - 覆盖率已过最低门槛，但 `scoreVariance` 仍偏高
   - 当前更像“证据偏散”，不再直接作为硬失败
 - `insufficient_pose_coverage`

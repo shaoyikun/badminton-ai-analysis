@@ -34,6 +34,12 @@ export function buildPoseSummary(result: PoseAnalysisResult): PoseInfo['summary'
     bestFrameOverlayRelativePath: result.summary?.bestFrameOverlayRelativePath,
     overlayFrameCount: result.summary?.overlayFrameCount,
     debugCounts: result.summary?.debugCounts,
+    inputQualityCategory: result.summary?.inputQualityCategory,
+    evidenceQualityFlags: result.summary?.evidenceQualityFlags,
+    visibilitySummary: result.summary?.visibilitySummary,
+    phaseCoverage: result.summary?.phaseCoverage,
+    insufficientEvidenceReasons: result.summary?.insufficientEvidenceReasons,
+    lowConfidenceReasons: result.summary?.lowConfidenceReasons,
   };
 }
 

@@ -1,0 +1,82 @@
+{
+  "normalizedFileName": "clear-boundary-low-confidence.mp4",
+  "metadataExtractedAt": "2026-03-13T10:05:00.000Z",
+  "artifactsDir": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess",
+  "manifestPath": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess/manifest.json",
+  "recommendedSegmentId": "segment-01",
+  "selectedSegmentId": "segment-01",
+  "analyzedSegmentId": "segment-01",
+  "segmentDetectionVersion": "coarse_motion_scan_v2",
+  "segmentSelectionMode": "auto_recommended",
+  "selectedSegmentWindow": {
+    "startTimeMs": 420,
+    "endTimeMs": 2120,
+    "startFrame": 5,
+    "endFrame": 22
+  },
+  "samplingStrategyVersion": "segment-aware-uniform-sampling-ffmpeg-v2",
+  "framePlan": {
+    "strategy": "segment-aware-uniform-sampling-ffmpeg-v2",
+    "targetFrameCount": 6,
+    "sampleTimestamps": [0.63, 0.87, 1.11, 1.35, 1.59, 1.83],
+    "baseSampleTimestamps": [0.63, 0.87, 1.11, 1.35, 1.59, 1.83],
+    "motionBoostedSampleTimestamps": [],
+    "motionWindows": [],
+    "motionScoreSummary": {
+      "scanFrameCount": 9,
+      "meanMotionScore": 0.0148,
+      "peakMotionScore": 0.0211,
+      "peakTimestampSeconds": 1.11
+    },
+    "sourceWindow": {
+      "startTimeMs": 420,
+      "endTimeMs": 2120,
+      "startFrame": 5,
+      "endFrame": 22
+    }
+  },
+  "sampledFrames": [
+    {
+      "index": 1,
+      "timestampSeconds": 0.63,
+      "fileName": "frame-01.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess/frame-01.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 2,
+      "timestampSeconds": 0.87,
+      "fileName": "frame-02.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess/frame-02.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 3,
+      "timestampSeconds": 1.11,
+      "fileName": "frame-03.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess/frame-03.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 4,
+      "timestampSeconds": 1.35,
+      "fileName": "frame-04.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess/frame-04.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 5,
+      "timestampSeconds": 1.59,
+      "fileName": "frame-05.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess/frame-05.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 6,
+      "timestampSeconds": 1.83,
+      "fileName": "frame-06.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_boundary_low_confidence/preprocess/frame-06.jpg",
+      "sourceType": "uniform"
+    }
+  ]
+}

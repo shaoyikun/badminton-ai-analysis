@@ -25,13 +25,13 @@ async function withTempWorkspace(run: (workspace: string) => Promise<void>) {
   }
 }
 
-async function createFixtureVideo(targetPath: string, durationSeconds: number) {
+async function createFixtureVideo(targetPath: string, durationSeconds: number, source = `color=c=black:s=320x240:d=${durationSeconds}`) {
   await execFileAsync('ffmpeg', [
     '-y',
     '-f',
     'lavfi',
     '-i',
-    `color=c=black:s=320x240:d=${durationSeconds}`,
+    source,
     '-pix_fmt',
     'yuv420p',
     targetPath,
@@ -57,7 +57,7 @@ test('extractFrames samples inside the recommended segment window while keeping 
 
   await withTempWorkspace(async (workspace) => {
     const sourcePath = path.join(workspace, 'clip.mp4');
-    await createFixtureVideo(sourcePath, 3);
+    await createFixtureVideo(sourcePath, 3, `testsrc2=size=320x240:rate=25:duration=3`);
     const metadata = await probeVideo(sourcePath, {
       fileName: 'clip.mp4',
       mimeType: 'video/mp4',
@@ -115,10 +115,18 @@ test('extractFrames samples inside the recommended segment window while keeping 
       startFrame: 15,
       endFrame: 27,
     });
+    assert.equal(artifacts.analyzedSegmentId, 'segment-02');
+    assert.match(artifacts.samplingStrategyVersion ?? '', /segment-aware/);
+    assert.deepEqual(artifacts.framePlan.baseSampleTimestamps?.length, artifacts.framePlan.targetFrameCount);
+    assert.ok((artifacts.framePlan.motionBoostedSampleTimestamps?.length ?? 0) >= 1);
+    assert.ok((artifacts.framePlan.motionWindows?.length ?? 0) >= 1);
+    assert.ok((artifacts.framePlan.motionScoreSummary?.peakMotionScore ?? 0) > 0);
     assert.equal(artifacts.swingSegments?.length, 2);
     assert.ok((artifacts.sampledFrames[0]?.timestampSeconds ?? 0) > 1.38);
     assert.ok((artifacts.sampledFrames[artifacts.sampledFrames.length - 1]?.timestampSeconds ?? 0) < 2.46);
     assert.ok(artifacts.sampledFrames.every((frame) => frame.timestampSeconds > 1));
+    assert.ok(artifacts.sampledFrames.some((frame) => frame.sourceType === 'motion_boosted'));
+    assert.ok(artifacts.sampledFrames.some((frame) => frame.sourceType === 'uniform'));
   });
 });
 
@@ -168,6 +176,7 @@ test('extractFrames respects selected segment window override from the scan summ
       endFrame: 17,
     });
     assert.deepEqual(artifacts.framePlan.sourceWindow, artifacts.selectedSegmentWindow);
+    assert.equal(artifacts.analyzedSegmentId, 'segment-01');
     assert.ok((artifacts.sampledFrames[0]?.timestampSeconds ?? 0) > 0.2);
     assert.ok((artifacts.sampledFrames[artifacts.sampledFrames.length - 1]?.timestampSeconds ?? 0) < 2.9);
   });
@@ -197,8 +206,10 @@ test('extractFrames falls back to full video selection when detector fails', asy
     assert.equal(artifacts.selectedSegmentId, 'segment-01');
     assert.equal(artifacts.recommendedSegmentId, 'segment-01');
     assert.equal(artifacts.swingSegments?.length, 1);
+    assert.equal(artifacts.samplingStrategyVersion, 'segment-aware-uniform-sampling-ffmpeg-v2');
     assert.equal(artifacts.framePlan.sourceWindow?.startTimeMs, 0);
     assert.ok((artifacts.framePlan.sourceWindow?.endTimeMs ?? 0) >= 1900);
     assert.ok(artifacts.sampledFrames.length >= 6);
+    assert.ok(artifacts.sampledFrames.every((frame) => frame.sourceType === 'uniform'));
   });
 });

@@ -173,6 +173,7 @@ curl http://127.0.0.1:8787/api/tasks/<taskId>/result
 - `make evaluate` 默认在 baseline drift、缺 baseline case 或缺少 `requiredCoverageTags` 时返回非零
 - `successRate` 定义为“非 `rejected` case / 全部 case”；`low_confidence` 仍视为任务完成
 - disposition match rate、top issue hit rate、`primaryErrorCode` 分布和 coverage tags 都应一起看
+- 额外看 `samplingStrategyVersion`、`motionBoostedFrameCount`、`phaseCoverage`、`inputQualityRejectRatio`、`lowConfidenceRatio`
 - 只有在明确接受新行为时才允许执行 `./scripts/evaluate.sh --update-baseline`
 
 ## 环境变量口径
@@ -185,6 +186,7 @@ curl http://127.0.0.1:8787/api/tasks/<taskId>/result
 | `FRONTEND_PORT` | `5173` | 本地开发与 Compose 端口映射 |
 | `VITE_API_BASE` | 空 | Compose 推荐留空走同源；本地脚本会自动回退到后端地址 |
 | `PYTHON_BIN` | `python3` | 本地开发和脚本调用的 Python 入口 |
+| `ANALYSIS_SERVICE_MAX_CONCURRENCY` | `2` | backend 内 analysis-service 子进程并发上限 |
 | `POSE_LANDMARKER_MODEL_PATH` | 空 | analysis-service 显式 pose landmarker 模型路径；设置后优先使用该文件 |
 | `POSE_LANDMARKER_MODEL_CACHE_DIR` | 空 | analysis-service pose landmarker 缓存目录；默认使用 `analysis-service/models/` |
 | `UPLOAD_MAX_FILE_SIZE_BYTES` | `209715200` | 上传限制 |

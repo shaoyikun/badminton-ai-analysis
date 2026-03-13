@@ -124,6 +124,18 @@ evaluation/
 - `temporalConsistency`
 - `motionContinuity`
 - `fallbacksUsed`
+- `recommendedSegmentAvailable`
+- `selectedSegmentAvailable`
+- `analyzedSegmentConsistent`
+- `samplingStrategyVersion`
+- `sampledFrameCount`
+- `motionBoostedFrameCount`
+- `sampledFrameDiversity`
+- `motionWindowCount`
+- `phaseCoverage`
+- `insufficientEvidenceRatio`
+- `inputQualityRejectRatio`
+- `lowConfidenceRatio`
 
 默认运行会把 current 与 baseline 对比并输出摘要；只有显式加 `--update-baseline` 才会刷新文件。
 
@@ -176,6 +188,7 @@ make evaluate
 - `requiredCoverageTagsByAction` 的 required / present / missing 状态
 - 按动作分组的 fixture 数、disposition 分布、issue hit 和 baseline drift
 - `scoreVariance` / `temporalConsistency` / `motionContinuity` 聚合统计
+- `phaseCoverage` / `motionBoostedFrameCount` / `insufficientEvidenceRatio` / `lowConfidenceRatio` 聚合统计
 - baseline vs current 差异摘要
 
 口径说明：
@@ -199,6 +212,15 @@ make evaluate
 - `primaryErrorCode` 分布出现未解释变化
 
 如果只是预期内行为变化，也不要直接忽略；应先确认变化原因，再决定是否执行 `--update-baseline`。
+
+## 真实视频 smoke validation
+
+如果本地额外准备少量真实视频，建议每轮只看 3~5 条，并重点确认：
+
+1. `recommendedSegmentId` 和最终 `selectedSegmentWindow` 是否合理地落在单次挥拍上。
+2. manifest 里的 `samplingStrategyVersion`、`sampledFrames[].sourceType`、`motionWindows` 是否显示 motion boosted 帧确实补到了动作变化峰值。
+3. `inputQualityCategory`、`evidenceQualityFlags`、`phaseCoverage`、`insufficientEvidenceReasons` 是否把“输入质量差 / 证据不足”从“动作问题”里分离出来。
+4. `make evaluate` 的 drift 是否能由 segment 抽帧、phase coverage 或 input-quality gating 解释，而不是只在某个 fixture 上看起来更好。
 
 ## 新增样本
 

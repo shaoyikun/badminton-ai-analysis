@@ -1151,6 +1151,121 @@ def _collect_triggered_rejection_reasons(details: List[Dict[str, Any]]) -> List[
     return triggered_codes
 
 
+def _build_visibility_summary(detected_frames: List[Dict[str, Any]], frame_count: int) -> Dict[str, float]:
+    upper_body_visible_count = 0
+    racket_arm_visible_count = 0
+
+    for frame in detected_frames:
+        visibilities = (((frame.get('finalMetrics') or {}).get('debug') or {}).get('visibilities') or {})
+        upper_body_visibility = _safe_mean([
+            float(visibilities.get('leftShoulder') or 0.0),
+            float(visibilities.get('rightShoulder') or 0.0),
+            float(visibilities.get('leftHip') or 0.0),
+            float(visibilities.get('rightHip') or 0.0),
+            float(visibilities.get('nose') or 0.0),
+        ])
+        racket_arm_visibility = max(
+            float(visibilities.get('leftWrist') or 0.0),
+            float(visibilities.get('rightWrist') or 0.0),
+        )
+        if upper_body_visibility >= SPECIALIZED_VISIBILITY_THRESHOLD:
+            upper_body_visible_count += 1
+        if racket_arm_visibility >= SPECIALIZED_VISIBILITY_THRESHOLD:
+            racket_arm_visible_count += 1
+
+    detected_frame_count = max(1, len(detected_frames))
+    return {
+        'visibleFrameRatio': _round(len(detected_frames) / max(1, frame_count)),
+        'upperBodyVisibilityRatio': _round(upper_body_visible_count / detected_frame_count),
+        'racketArmVisibilityRatio': _round(racket_arm_visible_count / detected_frame_count),
+        'occludedFrameRatio': _round(max(0, len(detected_frames) - upper_body_visible_count) / detected_frame_count),
+    }
+
+
+def _build_phase_coverage_summary(phase_candidates: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    detected_phase_count = sum(
+        1 for phase in ('preparation', 'backswing', 'contactCandidate', 'followThrough')
+        if phase_candidates.get(phase, {}).get('detectionStatus') == 'detected'
+    )
+    return {
+        'detectedPhaseCount': detected_phase_count,
+        'coverageRatio': _round(detected_phase_count / 4),
+        'preparation': phase_candidates.get('preparation', {}).get('detectionStatus', 'missing'),
+        'backswing': phase_candidates.get('backswing', {}).get('detectionStatus', 'missing'),
+        'contactCandidate': phase_candidates.get('contactCandidate', {}).get('detectionStatus', 'missing'),
+        'followThrough': phase_candidates.get('followThrough', {}).get('detectionStatus', 'missing'),
+    }
+
+
+def _build_evidence_quality_summary(
+    *,
+    frame_count: int,
+    detected_frames: List[Dict[str, Any]],
+    usable_frame_count: int,
+    coverage_ratio: float,
+    view_profile: str,
+    view_confidence: float,
+    unknown_view_count: int,
+    rejection_reasons: List[str],
+    visibility_summary: Dict[str, float],
+    phase_coverage: Dict[str, Any],
+    temporal_consistency: float,
+    motion_continuity: float,
+) -> Tuple[str, List[str], List[str], List[str]]:
+    evidence_quality_flags: List[str] = []
+    insufficient_evidence_reasons: List[str] = []
+    low_confidence_reasons: List[str] = []
+
+    if 'subject_too_small_or_cropped' in rejection_reasons:
+        evidence_quality_flags.append('subject_too_small')
+    if 'poor_lighting_or_occlusion' in rejection_reasons or visibility_summary['occludedFrameRatio'] >= 0.4:
+        evidence_quality_flags.append('occlusion_risk')
+    if visibility_summary['upperBodyVisibilityRatio'] < 0.65:
+        evidence_quality_flags.append('visibility_limited')
+        insufficient_evidence_reasons.append('upper_body_visibility_limited')
+    if visibility_summary['racketArmVisibilityRatio'] < 0.55:
+        evidence_quality_flags.append('racket_arm_visibility_limited')
+        insufficient_evidence_reasons.append('racket_arm_visibility_limited')
+    if float(phase_coverage.get('coverageRatio') or 0.0) < 0.75:
+        evidence_quality_flags.append('phase_coverage_incomplete')
+        insufficient_evidence_reasons.append('phase_coverage_incomplete')
+    if view_profile in {'front', 'front_left_oblique', 'front_right_oblique', 'unknown'} or view_confidence < 0.62:
+        evidence_quality_flags.append('camera_angle_limited')
+        low_confidence_reasons.append('invalid_camera_angle')
+    if (
+        'insufficient_action_evidence' in rejection_reasons
+        or temporal_consistency < 0.62
+        or motion_continuity < MOTION_CONTINUITY_REJECTION_THRESHOLD
+    ):
+        evidence_quality_flags.append('action_evidence_fragmented')
+        insufficient_evidence_reasons.append('action_evidence_fragmented')
+        low_confidence_reasons.append('insufficient_action_evidence')
+    if coverage_ratio < MIN_COVERAGE_RATIO or usable_frame_count < MIN_USABLE_FRAME_COUNT:
+        insufficient_evidence_reasons.append('pose_coverage_limited')
+        low_confidence_reasons.append('insufficient_pose_coverage')
+    if insufficient_evidence_reasons:
+        low_confidence_reasons.append('insufficient_action_evidence')
+    if unknown_view_count >= max(4, usable_frame_count - 1):
+        low_confidence_reasons.append('invalid_camera_angle')
+
+    if (
+        'subject_too_small_or_cropped' in rejection_reasons
+        or 'poor_lighting_or_occlusion' in rejection_reasons
+    ):
+        input_quality_category = 'poor'
+    elif evidence_quality_flags or (len(detected_frames) / max(1, frame_count)) < 0.8:
+        input_quality_category = 'limited'
+    else:
+        input_quality_category = 'good'
+
+    return (
+        input_quality_category,
+        list(dict.fromkeys(evidence_quality_flags)),
+        list(dict.fromkeys(insufficient_evidence_reasons)),
+        list(dict.fromkeys(low_confidence_reasons)),
+    )
+
+
 def _summarize_view_profile(profiles: List[str]) -> Tuple[str, float]:
     if not profiles:
         return 'unknown', 0.0
@@ -1573,6 +1688,24 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
                 'viewTransitionCount': 0,
                 'largeMotionJumpCount': 0,
             },
+            'inputQualityCategory': 'poor',
+            'evidenceQualityFlags': ['body_not_detected'],
+            'visibilitySummary': {
+                'visibleFrameRatio': 0.0,
+                'upperBodyVisibilityRatio': 0.0,
+                'racketArmVisibilityRatio': 0.0,
+                'occludedFrameRatio': 1.0,
+            },
+            'phaseCoverage': {
+                'detectedPhaseCount': 0,
+                'coverageRatio': 0.0,
+                'preparation': 'missing',
+                'backswing': 'missing',
+                'contactCandidate': 'missing',
+                'followThrough': 'missing',
+            },
+            'insufficientEvidenceReasons': ['body_not_detected'],
+            'lowConfidenceReasons': [],
         }
 
     usable_frames = [frame for frame in detected_frames if frame['status'] == 'usable']
@@ -1623,6 +1756,22 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
     best_frame_candidates = usable_frames or detected_frames
     best_frame = max(best_frame_candidates, key=lambda frame: frame['finalMetrics']['compositeScore'])
     phase_candidates = _build_phase_candidates(usable_frames, best_frame['frameIndex'] if best_frame else None)
+    visibility_summary = _build_visibility_summary(detected_frames, len(frames))
+    phase_coverage = _build_phase_coverage_summary(phase_candidates)
+    input_quality_category, evidence_quality_flags, insufficient_evidence_reasons, low_confidence_reasons = _build_evidence_quality_summary(
+        frame_count=len(frames),
+        detected_frames=detected_frames,
+        usable_frame_count=usable_frame_count,
+        coverage_ratio=coverage_ratio,
+        view_profile=view_profile,
+        view_confidence=view_confidence,
+        unknown_view_count=unknown_view_count,
+        rejection_reasons=rejection_reasons,
+        visibility_summary=visibility_summary,
+        phase_coverage=phase_coverage,
+        temporal_consistency=temporal_consistency,
+        motion_continuity=motion_continuity,
+    )
     best_preparation_frame_index = phase_candidates['preparation']['anchorFrameIndex']
     overlay_frame_count = sum(1 for frame in frames if frame.get('overlayRelativePath'))
 
@@ -1668,6 +1817,12 @@ def _build_overall_summary(frames: List[Dict[str, Any]], detected_count: int) ->
             'viewTransitionCount': view_transition_count,
             'largeMotionJumpCount': large_motion_jump_count,
         },
+        'inputQualityCategory': input_quality_category,
+        'evidenceQualityFlags': evidence_quality_flags,
+        'visibilitySummary': visibility_summary,
+        'phaseCoverage': phase_coverage,
+        'insufficientEvidenceReasons': insufficient_evidence_reasons,
+        'lowConfidenceReasons': low_confidence_reasons,
     }
 
 

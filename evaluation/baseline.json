@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-03-13T07:40:24.786Z",
+  "generatedAt": "2026-03-13T15:42:18.747Z",
   "fixtures": {
     "clear-normal": {
       "analysisDisposition": "analyzable",
@@ -16,7 +16,19 @@
       "motionContinuity": 0.93,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": true,
+      "selectedSegmentAvailable": true,
+      "analyzedSegmentConsistent": true,
+      "samplingStrategyVersion": "segment-aware-motion-boosted-sampling-ffmpeg-v2",
+      "sampledFrameCount": 7,
+      "motionBoostedFrameCount": 1,
+      "sampledFrameDiversity": 0.7797,
+      "motionWindowCount": 1,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "clear-under-rotation": {
       "analysisDisposition": "analyzable",
@@ -33,7 +45,19 @@
       "motionContinuity": 0.91,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "clear-racket-arm-prep-gap": {
       "analysisDisposition": "analyzable",
@@ -50,7 +74,19 @@
       "motionContinuity": 0.89,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "clear-bad-camera": {
       "analysisDisposition": "low_confidence",
@@ -73,7 +109,19 @@
       "motionContinuity": 0.42,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0.6667
     },
     "clear-subject-too-small": {
       "analysisDisposition": "rejected",
@@ -89,7 +137,19 @@
       "motionContinuity": 0.74,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 1,
+      "lowConfidenceRatio": 0
     },
     "clear-poor-lighting-or-occlusion": {
       "analysisDisposition": "rejected",
@@ -105,7 +165,19 @@
       "motionContinuity": 0.41,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 1,
+      "lowConfidenceRatio": 0
     },
     "clear-boundary-analyzable": {
       "analysisDisposition": "analyzable",
@@ -123,7 +195,19 @@
       "motionContinuity": 0.62,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "clear-boundary-low-confidence": {
       "analysisDisposition": "low_confidence",
@@ -145,7 +229,19 @@
       "motionContinuity": 0.5,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": true,
+      "selectedSegmentAvailable": true,
+      "analyzedSegmentConsistent": true,
+      "samplingStrategyVersion": "segment-aware-uniform-sampling-ffmpeg-v2",
+      "sampledFrameCount": 6,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": 0.7059,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0.3333
     },
     "clear-boundary-rejected": {
       "analysisDisposition": "rejected",
@@ -161,7 +257,19 @@
       "motionContinuity": 0.41,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "clear-temporal-noise-low-confidence": {
       "analysisDisposition": "low_confidence",
@@ -183,7 +291,19 @@
       "motionContinuity": 0.44,
       "fallbacksUsed": [
         "phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": 0.75,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0.3333
     },
     "smash-normal": {
       "analysisDisposition": "analyzable",
@@ -199,7 +319,19 @@
       "motionContinuity": 0.94,
       "fallbacksUsed": [
         "smash_phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "smash-weak-loading": {
       "analysisDisposition": "analyzable",
@@ -215,7 +347,19 @@
       "motionContinuity": 0.91,
       "fallbacksUsed": [
         "smash_phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "smash-arm-prep-gap": {
       "analysisDisposition": "analyzable",
@@ -231,7 +375,19 @@
       "motionContinuity": 0.9,
       "fallbacksUsed": [
         "smash_phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0
     },
     "smash-bad-camera": {
       "analysisDisposition": "low_confidence",
@@ -254,7 +410,19 @@
       "motionContinuity": 0.44,
       "fallbacksUsed": [
         "smash_phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 0,
+      "lowConfidenceRatio": 0.6667
     },
     "smash-subject-too-small": {
       "analysisDisposition": "rejected",
@@ -270,7 +438,19 @@
       "motionContinuity": 0.68,
       "fallbacksUsed": [
         "smash_phase_repeatability_fallback"
-      ]
+      ],
+      "recommendedSegmentAvailable": false,
+      "selectedSegmentAvailable": false,
+      "analyzedSegmentConsistent": false,
+      "samplingStrategyVersion": null,
+      "sampledFrameCount": 0,
+      "motionBoostedFrameCount": 0,
+      "sampledFrameDiversity": null,
+      "motionWindowCount": 0,
+      "phaseCoverage": null,
+      "insufficientEvidenceRatio": 0,
+      "inputQualityRejectRatio": 1,
+      "lowConfidenceRatio": 0
     }
   }
 }

@@ -12,6 +12,8 @@ export type {
   HistoryListQuery,
   HistoryListResponse,
   IssueItem,
+  MotionScoreSummary,
+  MotionWindowSummary,
   PoseAnalysisResult,
   PosePhaseCandidate,
   PosePhaseCandidates,

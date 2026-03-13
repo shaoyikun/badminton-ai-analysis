@@ -1,13 +1,15 @@
 ---
 name: badminton-vision-engineering
-description: Use when the task is about image/video recognition engineering for this badminton project, especially multi-swing segment detection, recommended clip selection, single-segment sampling optimization, pose and phase recognition, evidence-quality gating, explainable rule scoring, evaluation/baseline/fixture/regression changes, or when external public references should inform implementation choices.
+description: Use when the task is about image/video recognition engineering for this badminton project, especially segment detection, recommended clip selection, selected-segment sampling, pose/phase recognition, evidence-quality gating, explainable scoring, or evaluation/baseline/regression for recognition precision and stability. Also use it when these topics are framed as backend or pipeline work, not only when explicit CV research is requested.
 ---
 
 # Badminton Vision Engineering
 
 ## 何时使用
 
-当任务聚焦在这个仓库里的视觉/视频识别工程能力，而不是单纯页面流程或协议搬运时使用：
+当任务聚焦在这个仓库里的视觉/视频识别工程能力，而不是单纯页面流程或协议搬运时使用。
+
+以下情况命中任一条，就应优先触发这个 skill：
 
 - 多挥拍视频的候选片段检测、排序、推荐片段选择
 - 单片段抽帧优化、关键帧价值提升、相位覆盖增强
@@ -16,6 +18,20 @@ description: Use when the task is about image/video recognition engineering for 
 - 动作纠正、规则评分、可解释反馈、evidence notes
 - evaluation / baseline / fixture / regression 设计与结果解读
 - 当前仓库没有现成实现模式，需要主动参考官方文档、论文、高质量开源实现后再落地
+
+尤其要注意下面这些“看起来像后端或评测任务，但本质上也应触发”的场景：
+
+- 用户提到“精度”“稳定性”“关键帧覆盖”“phase coverage”“证据不足”“误判”“输入质量差”
+- 任务落点在 `selectedSegmentWindow` 之后、report 之前的任一环节
+- 任务虽然写成 preprocess / analysis-service / report / evaluation 改造，但核心问题是“视频里该分析什么、抽哪些帧、哪些证据才够”
+- 需要判断某个 drift 到底是视觉识别能力变化，还是单纯工程错误
+
+如果任务同时涉及以下任意组合，也默认联动这个 skill，而不是只用 pipeline/integration 类 skill：
+
+- `segment scan + sampling`
+- `sampling + evidence gating`
+- `pose summary + disposition`
+- `report scoring + evaluation`
 
 这个 skill 关注“如何把视觉识别问题在当前仓库里做对”。主链路编排、共享协议、前端页面联动、Python 调用边界仍应交给对应 specialized skill 协同完成。
 
@@ -47,6 +63,17 @@ description: Use when the task is about image/video recognition engineering for 
 1. 当前问题落在整段粗扫、单片段抽帧、pose summary、评分解释，还是评测护栏。
 2. 现有链路里已经有哪些字段、阈值、fallback 和错误分层。
 3. 这次变化是否会影响 `segmentScan`、preprocess manifest、pose result、report、evaluation baseline。
+
+如果第 1 个问题的答案包含以下任意关键词，也应判定“这个 skill 应该已经触发”：
+
+- `segment`
+- `sampling`
+- `phase`
+- `coverage`
+- `evidence`
+- `low_confidence`
+- `rejection`
+- `baseline drift`
 
 ## 工作顺序/决策顺序
 
@@ -88,6 +115,7 @@ description: Use when the task is about image/video recognition engineering for 
 10. Deliver implementation, not only advice：除非用户明确要求只做分析，否则默认目标是产出代码、测试、文档和可验证改动。
 11. 复用优先：优先扩展 `preprocessService`、segment scan、pose summary、评分 evidence、evaluation 脚本和现有 artifacts，不要新造平行链路。
 12. 模块拆分优先：新增逻辑优先拆到聚焦 helper 或服务模块，不要继续把大分支堆进 `pose_estimator.py`、评分服务或主流程大文件。
+13. 不要等到“需要查外部资料”才触发这个 skill。只要问题核心是视觉识别质量，而不是纯接口/页面/编排，就应该先用它。
 
 ## 精度优化偏好
 

@@ -160,7 +160,12 @@ async function executePreprocessStage(task: AnalysisTaskRecord) {
     throw buildErrorSnapshot('preprocess_failed', 'segment scan not found before preprocess');
   }
 
-  const artifacts = await extractFrames(task.taskId, sourcePath, metadata, segmentScan);
+  let artifacts: Awaited<ReturnType<typeof extractFrames>>;
+  try {
+    artifacts = await extractFrames(task.taskId, sourcePath, metadata, segmentScan);
+  } catch (error) {
+    throw buildErrorSnapshot('preprocess_failed', error instanceof Error ? error.message : 'preprocess failed');
+  }
   const manifest = writePreprocessManifest(task.taskId, artifacts);
   return mergeArtifacts(task, {
     preprocessManifestPath: manifest.absolutePath,
@@ -190,7 +195,12 @@ async function executePoseStage(task: AnalysisTaskRecord) {
     return task;
   }
 
-  const result = await runPoseAnalysis(preprocess.artifactsDir);
+  let result: PoseAnalysisResult;
+  try {
+    result = await runPoseAnalysis(preprocess.artifactsDir);
+  } catch (error) {
+    throw buildErrorSnapshot('pose_failed', error instanceof Error ? error.message : 'pose estimation failed');
+  }
   const stored = writePoseResult(task.taskId, result);
   return mergeArtifacts(task, {
     poseResultPath: stored.absolutePath,

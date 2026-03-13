@@ -1,0 +1,96 @@
+{
+  "normalizedFileName": "clear-normal.mp4",
+  "metadataExtractedAt": "2026-03-13T10:00:00.000Z",
+  "artifactsDir": "artifacts/tasks/evaluation_clear_normal/preprocess",
+  "manifestPath": "artifacts/tasks/evaluation_clear_normal/preprocess/manifest.json",
+  "recommendedSegmentId": "segment-02",
+  "selectedSegmentId": "segment-02",
+  "analyzedSegmentId": "segment-02",
+  "segmentDetectionVersion": "coarse_motion_scan_v2",
+  "segmentSelectionMode": "auto_recommended",
+  "selectedSegmentWindow": {
+    "startTimeMs": 1260,
+    "endTimeMs": 2440,
+    "startFrame": 14,
+    "endFrame": 26
+  },
+  "samplingStrategyVersion": "segment-aware-motion-boosted-sampling-ffmpeg-v2",
+  "framePlan": {
+    "strategy": "segment-aware-motion-boosted-sampling-ffmpeg-v2",
+    "targetFrameCount": 6,
+    "sampleTimestamps": [1.39, 1.56, 1.73, 1.88, 2.01, 2.18, 2.31],
+    "baseSampleTimestamps": [1.39, 1.56, 1.73, 1.9, 2.07, 2.24],
+    "motionBoostedSampleTimestamps": [1.88],
+    "motionWindows": [
+      {
+        "startTimeSeconds": 1.79,
+        "endTimeSeconds": 1.97,
+        "peakTimestampSeconds": 1.88,
+        "peakMotionScore": 0.0842
+      }
+    ],
+    "motionScoreSummary": {
+      "scanFrameCount": 10,
+      "meanMotionScore": 0.0314,
+      "peakMotionScore": 0.0842,
+      "peakTimestampSeconds": 1.88
+    },
+    "sourceWindow": {
+      "startTimeMs": 1260,
+      "endTimeMs": 2440,
+      "startFrame": 14,
+      "endFrame": 26
+    }
+  },
+  "sampledFrames": [
+    {
+      "index": 1,
+      "timestampSeconds": 1.39,
+      "fileName": "frame-01.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_normal/preprocess/frame-01.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 2,
+      "timestampSeconds": 1.56,
+      "fileName": "frame-02.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_normal/preprocess/frame-02.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 3,
+      "timestampSeconds": 1.73,
+      "fileName": "frame-03.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_normal/preprocess/frame-03.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 4,
+      "timestampSeconds": 1.88,
+      "fileName": "frame-04.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_normal/preprocess/frame-04.jpg",
+      "sourceType": "motion_boosted"
+    },
+    {
+      "index": 5,
+      "timestampSeconds": 2.01,
+      "fileName": "frame-05.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_normal/preprocess/frame-05.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 6,
+      "timestampSeconds": 2.18,
+      "fileName": "frame-06.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_normal/preprocess/frame-06.jpg",
+      "sourceType": "uniform"
+    },
+    {
+      "index": 7,
+      "timestampSeconds": 2.31,
+      "fileName": "frame-07.jpg",
+      "relativePath": "artifacts/tasks/evaluation_clear_normal/preprocess/frame-07.jpg",
+      "sourceType": "uniform"
+    }
+  ]
+}

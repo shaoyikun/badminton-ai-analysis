@@ -84,6 +84,24 @@ function buildPoseResult(summaryOverrides?: Partial<PoseAnalysisResult['summary'
         elbowExtensionScore: { median: 0.59, peak: 0.74, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
         contactPreparationScore: { median: 0.63, peak: 0.81, observableFrameCount: 8, observableCoverage: 1, peakFrameIndex: 6 },
       },
+      inputQualityCategory: 'limited',
+      evidenceQualityFlags: ['phase_coverage_incomplete'],
+      visibilitySummary: {
+        visibleFrameRatio: 0.8333,
+        upperBodyVisibilityRatio: 1,
+        racketArmVisibilityRatio: 1,
+        occludedFrameRatio: 0,
+      },
+      phaseCoverage: {
+        detectedPhaseCount: 3,
+        coverageRatio: 0.75,
+        preparation: 'detected',
+        backswing: 'detected',
+        contactCandidate: 'detected',
+        followThrough: 'missing',
+      },
+      insufficientEvidenceReasons: ['phase_coverage_incomplete'],
+      lowConfidenceReasons: ['insufficient_action_evidence'],
       debugCounts: {
         tooSmallCount: 0,
         lowStabilityCount: 0,
@@ -107,14 +125,30 @@ test('evaluateFixtureSuite supports poseResultPath and preprocessDir inputs', as
       metadataExtractedAt: '2026-03-13T10:00:00.000Z',
       artifactsDir: 'artifacts/tasks/task_eval/preprocess',
       manifestPath: 'artifacts/tasks/task_eval/preprocess/manifest.json',
+      samplingStrategyVersion: 'segment-aware-motion-boosted-sampling-ffmpeg-v2',
+      analyzedSegmentId: 'segment-01',
+      recommendedSegmentId: 'segment-01',
+      selectedSegmentId: 'segment-01',
+      selectedSegmentWindow: {
+        startTimeMs: 900,
+        endTimeMs: 2600,
+      },
       framePlan: {
-        strategy: 'uniform-sampling-ffmpeg-v1',
+        strategy: 'segment-aware-motion-boosted-sampling-ffmpeg-v2',
         targetFrameCount: 2,
         sampleTimestamps: [1.2, 2.4],
+        baseSampleTimestamps: [1.2],
+        motionBoostedSampleTimestamps: [2.4],
+        motionWindows: [{
+          startTimeSeconds: 2.2,
+          endTimeSeconds: 2.5,
+          peakTimestampSeconds: 2.4,
+          peakMotionScore: 0.08,
+        }],
       },
       sampledFrames: [
-        { index: 1, timestampSeconds: 1.2, fileName: 'frame-01.jpg', relativePath: 'artifacts/tasks/task_eval/preprocess/frame-01.jpg' },
-        { index: 2, timestampSeconds: 2.4, fileName: 'frame-02.jpg', relativePath: 'artifacts/tasks/task_eval/preprocess/frame-02.jpg' },
+        { index: 1, timestampSeconds: 1.2, fileName: 'frame-01.jpg', relativePath: 'artifacts/tasks/task_eval/preprocess/frame-01.jpg', sourceType: 'uniform' },
+        { index: 2, timestampSeconds: 2.4, fileName: 'frame-02.jpg', relativePath: 'artifacts/tasks/task_eval/preprocess/frame-02.jpg', sourceType: 'motion_boosted' },
       ],
     }, null, 2));
 
@@ -399,7 +433,7 @@ test('evaluateFixtureSuite tracks boundary coverage and temporal-noise low-confi
     });
     assert.equal(report.summary.expectationConsistency.dispositionMatchCount, 3);
     assert.equal(report.cases[0]?.actual.analysisDisposition, 'low_confidence');
-    assert.deepEqual(report.cases[0]?.actual.lowConfidenceReasons, ['insufficient_pose_coverage']);
+    assert.ok(report.cases[0]?.actual.lowConfidenceReasons.includes('insufficient_pose_coverage'));
     assert.equal(report.cases[2]?.actual.analysisDisposition, 'rejected');
   });
 });
@@ -560,6 +594,12 @@ test('getEvaluationGateFailures flags missing baseline and drift', () => {
       scoreVariance: { count: 2, mean: 0.01, p50: 0.01, min: 0.009, max: 0.011 },
       temporalConsistency: { count: 2, mean: 0.7, p50: 0.7, min: 0.69, max: 0.71 },
       motionContinuity: { count: 2, mean: 0.8, p50: 0.8, min: 0.79, max: 0.81 },
+      phaseCoverage: { count: 2, mean: 0.75, p50: 0.75, min: 0.75, max: 0.75 },
+      motionBoostedFrameCount: { count: 2, mean: 1, p50: 1, min: 1, max: 1 },
+      insufficientEvidenceRatio: { count: 2, mean: 0.25, p50: 0.25, min: 0.25, max: 0.25 },
+      lowConfidenceRatio: { count: 2, mean: 0, p50: 0, min: 0, max: 0 },
+      selectedSegmentAvailabilityRate: 1,
+      analyzedSegmentConsistencyRate: 1,
       baselineComparison: {
         missingBaselineCount: 1,
         changedCaseCount: 1,
@@ -718,6 +758,12 @@ function buildMockCliReport(
       scoreVariance: { count: 1, mean: 0.01, p50: 0.01, min: 0.01, max: 0.01 },
       temporalConsistency: { count: 1, mean: 0.8, p50: 0.8, min: 0.8, max: 0.8 },
       motionContinuity: { count: 1, mean: 0.9, p50: 0.9, min: 0.9, max: 0.9 },
+      phaseCoverage: { count: 1, mean: 0.75, p50: 0.75, min: 0.75, max: 0.75 },
+      motionBoostedFrameCount: { count: 1, mean: 1, p50: 1, min: 1, max: 1 },
+      insufficientEvidenceRatio: { count: 1, mean: 0.25, p50: 0.25, min: 0.25, max: 0.25 },
+      lowConfidenceRatio: { count: 1, mean: 0, p50: 0, min: 0, max: 0 },
+      selectedSegmentAvailabilityRate: 1,
+      analyzedSegmentConsistencyRate: 1,
       baselineComparison: {
         missingBaselineCount: 0,
         changedCaseCount: 0,

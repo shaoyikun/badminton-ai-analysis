@@ -140,6 +140,7 @@ def make_summary_frame(
     view_profile: str = "rear_left_oblique",
     view_confidence: float = 0.88,
     specialized_overrides: Optional[dict] = None,
+    visibility_overrides: Optional[dict] = None,
 ):
     specialized = {
         "shoulderHipRotationScore": 0.52,
@@ -182,6 +183,16 @@ def make_summary_frame(
                         "normalized": specialized["contactPreparationScore"],
                     },
                 },
+            },
+            "visibilities": {
+                "leftShoulder": 0.92,
+                "rightShoulder": 0.92,
+                "leftHip": 0.9,
+                "rightHip": 0.9,
+                "leftWrist": 0.9,
+                "rightWrist": 0.9,
+                "nose": 0.88,
+                **(visibility_overrides or {}),
             },
             "statusReasons": ["synthetic-test-frame"],
         },
@@ -258,10 +269,62 @@ class PoseEstimatorTests(unittest.TestCase):
         summary = _build_overall_summary([first, second], detected_count=2)
 
         self.assertEqual(summary["bestFrameIndex"], 1)
+
+    def test_overall_summary_includes_evidence_quality_fields(self) -> None:
+        frames = [
+            make_summary_frame(1, view_profile="front", view_confidence=0.4),
+            make_summary_frame(2, view_profile="front", view_confidence=0.45, status="detected"),
+            make_summary_frame(3, status="detected", stability_score=0.4),
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=3)
+
+        self.assertEqual(summary["inputQualityCategory"], "limited")
+        self.assertIn("camera_angle_limited", summary["evidenceQualityFlags"])
+        self.assertIn("invalid_camera_angle", summary["lowConfidenceReasons"])
+        self.assertAlmostEqual(summary["visibilitySummary"]["upperBodyVisibilityRatio"], 1.0, places=4)
+        self.assertLess(summary["phaseCoverage"]["coverageRatio"], 1.0)
+
+    def test_overall_summary_marks_visibility_limited_when_key_regions_are_occluded(self) -> None:
+        frames = [
+            make_summary_frame(
+                1,
+                visibility_overrides={
+                    "leftShoulder": 0.1,
+                    "rightShoulder": 0.1,
+                    "leftHip": 0.1,
+                    "rightHip": 0.1,
+                    "leftWrist": 0.1,
+                    "rightWrist": 0.1,
+                    "nose": 0.1,
+                },
+                stability_score=0.5,
+            ),
+            make_summary_frame(
+                2,
+                visibility_overrides={
+                    "leftShoulder": 0.2,
+                    "rightShoulder": 0.2,
+                    "leftHip": 0.2,
+                    "rightHip": 0.2,
+                    "leftWrist": 0.2,
+                    "rightWrist": 0.2,
+                    "nose": 0.2,
+                },
+                stability_score=0.48,
+            ),
+            make_summary_frame(3),
+        ]
+
+        summary = _build_overall_summary(frames, detected_count=3)
+
+        self.assertIn("visibility_limited", summary["evidenceQualityFlags"])
+        self.assertIn("upper_body_visibility_limited", summary["insufficientEvidenceReasons"])
+        self.assertLess(summary["visibilitySummary"]["upperBodyVisibilityRatio"], 0.65)
         self.assertEqual(summary["viewProfile"], "rear_left_oblique")
         self.assertEqual(summary["dominantRacketSide"], "right")
         self.assertTrue(summary["bestFrameOverlayRelativePath"].endswith("frame-01-overlay.jpg"))
-        self.assertEqual(summary["overlayFrameCount"], 2)
+        self.assertEqual(summary["overlayFrameCount"], 3)
 
     def test_frame_payload_exposes_raw_smoothed_and_final_metrics(self) -> None:
         payload = _build_frame_payload(self.preprocess_dir, self.preprocess_dir / "frame-debug.jpg", 3, None, make_keypoints(), make_keypoints())

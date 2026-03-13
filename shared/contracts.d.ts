@@ -160,6 +160,21 @@ export interface PreprocessFrameItem {
   timestampSeconds: number;
   fileName: string;
   relativePath: string;
+  sourceType?: 'uniform' | 'motion_boosted';
+}
+
+export interface MotionWindowSummary {
+  startTimeSeconds: number;
+  endTimeSeconds: number;
+  peakTimestampSeconds: number;
+  peakMotionScore: number;
+}
+
+export interface MotionScoreSummary {
+  scanFrameCount: number;
+  meanMotionScore: number;
+  peakMotionScore: number;
+  peakTimestampSeconds: number | null;
 }
 
 export type SwingSegmentQualityFlag =
@@ -219,10 +234,16 @@ export interface PreprocessArtifacts {
   segmentSelectionMode?: SegmentSelectionMode;
   selectedSegmentId?: string;
   selectedSegmentWindow?: SegmentSelectionWindow;
+  analyzedSegmentId?: string;
+  samplingStrategyVersion?: string;
   framePlan: {
     strategy: string;
     targetFrameCount: number;
     sampleTimestamps: number[];
+    baseSampleTimestamps?: number[];
+    motionBoostedSampleTimestamps?: number[];
+    motionWindows?: MotionWindowSummary[];
+    motionScoreSummary?: MotionScoreSummary;
     sourceWindow?: SegmentSelectionWindow;
   };
   sampledFrames: PreprocessFrameItem[];
@@ -402,6 +423,24 @@ export interface PoseOverallSummary {
     usableFrameCount?: number;
     detectedFrameCount?: number;
   };
+  inputQualityCategory?: 'good' | 'limited' | 'poor';
+  evidenceQualityFlags?: string[];
+  visibilitySummary?: {
+    visibleFrameRatio?: number;
+    upperBodyVisibilityRatio?: number;
+    racketArmVisibilityRatio?: number;
+    occludedFrameRatio?: number;
+  };
+  phaseCoverage?: {
+    detectedPhaseCount?: number;
+    coverageRatio?: number;
+    preparation?: PosePhaseDetectionStatus;
+    backswing?: PosePhaseDetectionStatus;
+    contactCandidate?: PosePhaseDetectionStatus;
+    followThrough?: PosePhaseDetectionStatus;
+  };
+  insufficientEvidenceReasons?: string[];
+  lowConfidenceReasons?: FlowErrorCode[];
 }
 
 export interface PoseAnalysisResult {
@@ -452,6 +491,24 @@ export interface PoseInfo {
       usableFrameCount?: number;
       detectedFrameCount?: number;
     };
+    inputQualityCategory?: 'good' | 'limited' | 'poor';
+    evidenceQualityFlags?: string[];
+    visibilitySummary?: {
+      visibleFrameRatio?: number;
+      upperBodyVisibilityRatio?: number;
+      racketArmVisibilityRatio?: number;
+      occludedFrameRatio?: number;
+    };
+    phaseCoverage?: {
+      detectedPhaseCount?: number;
+      coverageRatio?: number;
+      preparation?: PosePhaseDetectionStatus;
+      backswing?: PosePhaseDetectionStatus;
+      contactCandidate?: PosePhaseDetectionStatus;
+      followThrough?: PosePhaseDetectionStatus;
+    };
+    insufficientEvidenceReasons?: string[];
+    lowConfidenceReasons?: FlowErrorCode[];
   };
 }
 
@@ -642,6 +699,32 @@ export interface ReportResult {
       hardRejectReasons?: FlowErrorCode[];
       lowConfidenceReasons?: FlowErrorCode[];
       confidencePenaltyNotes?: string[];
+    };
+    inputQualityCategory?: 'good' | 'limited' | 'poor';
+    evidenceQualityFlags?: string[];
+    visibilitySummary?: {
+      visibleFrameRatio?: number;
+      upperBodyVisibilityRatio?: number;
+      racketArmVisibilityRatio?: number;
+      occludedFrameRatio?: number;
+    };
+    phaseCoverage?: {
+      detectedPhaseCount?: number;
+      coverageRatio?: number;
+      preparation?: PosePhaseDetectionStatus;
+      backswing?: PosePhaseDetectionStatus;
+      contactCandidate?: PosePhaseDetectionStatus;
+      followThrough?: PosePhaseDetectionStatus;
+    };
+    insufficientEvidenceReasons?: string[];
+    samplingSummary?: {
+      samplingStrategyVersion?: string;
+      analyzedSegmentId?: string;
+      sampledFrameCount?: number;
+      motionBoostedFrameCount?: number;
+      motionWindowCount?: number;
+      sampledFrameDiversity?: number | null;
+      motionScoreSummary?: MotionScoreSummary;
     };
     metricScores?: Record<string, number>;
     totalScoreBreakdown?: {

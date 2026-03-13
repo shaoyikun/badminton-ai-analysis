@@ -38,6 +38,7 @@ export class CommandExecutionError extends Error {
   readonly exitCode?: string | number;
   readonly signal?: NodeJS.Signals;
   readonly timedOut: boolean;
+  readonly failureKind: 'timeout' | 'invalid_json' | 'non_zero_exit' | 'spawn_error';
 
   constructor(params: {
     command: string;
@@ -48,6 +49,7 @@ export class CommandExecutionError extends Error {
     exitCode?: string | number;
     signal?: NodeJS.Signals;
     timedOut?: boolean;
+    failureKind?: 'timeout' | 'invalid_json' | 'non_zero_exit' | 'spawn_error';
     message?: string;
   }) {
     const summary = summarizeOutput(params.stderr) || summarizeOutput(params.stdout) || 'no diagnostic output';
@@ -64,6 +66,7 @@ export class CommandExecutionError extends Error {
     this.exitCode = params.exitCode;
     this.signal = params.signal;
     this.timedOut = Boolean(params.timedOut);
+    this.failureKind = params.failureKind ?? (params.timedOut ? 'timeout' : params.exitCode !== undefined ? 'non_zero_exit' : 'spawn_error');
   }
 }
 
@@ -92,6 +95,7 @@ export async function runCommand(command: string, args: string[], options: Comma
       exitCode: execError.code,
       signal: execError.signal,
       timedOut: execError.killed,
+      failureKind: execError.killed ? 'timeout' : execError.code !== undefined ? 'non_zero_exit' : 'spawn_error',
       message: execError.killed
         ? `${options.stage ?? 'command'} timed out for "${describeCommand(command, args)}": ${summarizeOutput(execError.stderr) || 'process exceeded timeout'}`
         : undefined,
@@ -111,6 +115,7 @@ export async function runJsonCommand<T>(command: string, args: string[], options
       stage: options.stage,
       stdout,
       stderr,
+      failureKind: 'invalid_json',
       message: `${options.stage ?? 'command'} returned invalid JSON: ${error instanceof Error ? error.message : 'failed to parse output'}`,
     });
   }

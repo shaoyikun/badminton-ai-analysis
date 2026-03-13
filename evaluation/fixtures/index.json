@@ -19,7 +19,8 @@
       "id": "clear-normal",
       "actionType": "clear",
       "input": {
-        "poseResultPath": "./pose/clear-normal.pose.json"
+        "poseResultPath": "./pose/clear-normal.pose.json",
+        "preprocessDir": "./preprocess/clear-normal"
       },
       "expected": {
         "cameraQuality": "good",
@@ -124,7 +125,8 @@
       "id": "clear-boundary-low-confidence",
       "actionType": "clear",
       "input": {
-        "poseResultPath": "./pose/clear-boundary-low-confidence.pose.json"
+        "poseResultPath": "./pose/clear-boundary-low-confidence.pose.json",
+        "preprocessDir": "./preprocess/clear-boundary-low-confidence"
       },
       "expected": {
         "cameraQuality": "good",
